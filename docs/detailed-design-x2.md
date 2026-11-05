@@ -123,6 +123,7 @@ B2-2 の手順 1〜6 を関数に分ける。入力は戻した後の `Location`
 | `file://localhost/C:/Music/A%20B/%E6%9B%B2%231.mp3` | 場所あり：`C:\Music\A B\曲#1.mp3` |
 | `file:///C:/Music/a%25b.mp3` | 場所あり：`C:\Music\a%b.mp3` |
 | `file://localhost/C:/Music/a+b.mp3` | 場所あり：`C:\Music\a+b.mp3`（`+` はそのまま） |
+| `file://localhost/E:/Music/%5Ba%5D%60%7D%5E/&'()!@~=$,.mp3` | 場所あり：``E:\Music\[a]`}^\&'()!@~=$,.mp3``（実物で出た記号の形。2026-11-06 の実物の確認） |
 | `file://nas.example.invalid/share/a.mp3` | 場所あり：`\\nas.example.invalid\share\a.mp3`（iTunes がこの形を書くかは未確認） |
 | `file://localhost/Users/x/a.mp3` | 復号不能：ドライブ文字なし |
 | `file://localhost/C:/Music/%E3%81.mp3` | 復号不能：不正な符号 |
@@ -256,7 +257,7 @@ B2-3 の動作を、M3 の部品に分ける。M2 を呼ぶのも M3。
 
 ### X2-5 テストの観点
 
-試料は、すべて匿名の合成 XML。実物の曲名・パス・ID を使わない。試料は M2 のテストの資源に置き、次の 6 種を作る。
+試料は、すべて匿名の合成 XML。実物の曲名・パス・ID を使わない。試料は M2 のテストの資源に置き、次の 7 種を作る。
 
 | 試料 | 中身 | 見る点 |
 |---|---|---|
@@ -266,6 +267,7 @@ B2-3 の動作を、M3 の部品に分ける。M2 を呼ぶのも M3。
 | スマート | `Smart Info`、`Smart Criteria`、展開済みの `Playlist Items` | 条件を読まず、並びだけ使う |
 | 参照の欠け | `Tracks` に無い `Track ID`、重複した `Persistent ID`、同じ曲を 2 回含む並び | 落とす・残す件数が診断と一致 |
 | 順序 | `Playlists` が `Tracks` より前の文書 | 結果が標準と同じ |
+| 実物の形 | iTunes 12.13 の実物の形を写した合成（2026-11-06 の実物の確認）。BOM なし、`DOCTYPE` あり、CRLF、`&#38;` の文字参照、`Library Persistent ID`、`Protected` の無いトラック、`Location` の無いトラック、NFD の名前のパス、組み込みの一覧（`Master` の「ライブラリ」、`Distinguished Kind` 4・2・3・10・5・65・66・67・26、`Smart Info` と `Smart Criteria`、`Visible` 偽、`Playlist Items` の無いもの）と、空の普通の一覧 | 選択の一覧に残るのが普通の一覧だけ。`library_id` に `Library Persistent ID` が入る。NFD のパスを変えずに返す |
 
 境界の値（1 つずつ単体のテストにする。基準は「期待する結果」の列）：
 
@@ -284,7 +286,7 @@ B2-3 の動作を、M3 の部品に分ける。M2 を呼ぶのも M3。
 
 - 読み直し（M3）のテストは、実際の待ちを使わず、時刻と待ちを差し替える。確かめる点：安定待ちの途中で変化したら待ち直す、再読の印で 1 回多く読む、V6 の回数で諦める、諦めた後も最後の結果が残る、要求の時の更新日時の差で再読する
 - `WatchService` そのものは実ファイルの一時フォルダで確かめる薄いテスト。作成のみ、変更のみ、置き換え（一時ファイルへ書いて改名）の 3 つの書き方で、通知が最低 1 回来ること。Windows の重複の数は固定しない
-- 実機（C-1〜C-9 の表）で確かめるもの：iTunes が XML をどう書き換えるか、実物のキーと値（「確かめた事実」の未確認の項目）
+- iTunes が XML をどう書き換えるかと、実物のキーと値は、2026-11-06 に実物で確かめた（B2 の「実物の確認」）。一時ファイルへ書いて改名で置き換える書き方なので、上の置き換えの書き方のテストが実物に当たる。残りは B2 の「未確認」の一覧
 
 ### X2 の決定（未付番）
 
@@ -335,16 +337,17 @@ B2-3 の動作を、M3 の部品に分ける。M2 を呼ぶのも M3。
 
 | # | 事実 | 出典の名 |
 |---|---|---|
-| 1a | `Library Persistent ID` は libpytunes の Library.py に出ない（見つからず）。実物で確かめる（pending-checks の T12）。設計は代わりの乱数で成り立つ | libpytunes ソース（Library.py） |
+| 1a | `Library Persistent ID` は libpytunes の Library.py に出ない（見つからず）。実物にはあり、16 桁の大文字の 16 進（2026-11-06 の実物の確認）。無いときの代わりの乱数は残す | libpytunes ソース（Library.py） |
 | 1b | `Track ID`、`Persistent ID` は libpytunes が読む。`Track ID` は整数に変換し、プレイリスト項目の参照に使う | libpytunes ソース |
-| 1c | `Track Type` のキーは libpytunes が読む。値 File／URL／Remote の列挙は資料に無い（一部） | libpytunes ソース |
-| 1d | libpytunes は urlparse でパスだけ取り出し URL デコードする。`file://localhost` の文字列そのものはソースに出ない（一部） | libpytunes ソース |
+| 1c | `Track Type` のキーは libpytunes が読む。値 File／URL／Remote の列挙は資料に無い（一部）。実物では全件 `File`（2026-11-06 の実物の確認） | libpytunes ソース |
+| 1d | libpytunes は urlparse でパスだけ取り出し URL デコードする。`file://localhost` の文字列そのものはソースに出ない（一部）。実物では全件 `file://localhost/X:/` の形（2026-11-06 の実物の確認） | libpytunes ソース |
 | 1e | `Protected`、`Kind`、`Album Artist`、`Disc Number` は libpytunes が読む。`Protected` はキーの有無で判定、`Disc Number` は整数に変換 | libpytunes ソース |
 | 1f | `Playlist Persistent ID`、`Distinguished Kind`、`Folder`、`Parent Persistent ID`、`Playlist Items` は libpytunes が読む。`Folder` の既定は False。`Playlist Items` が無い空のプレイリストがあり得るので、キーの有無を確かめて読む | libpytunes ソース |
-| 1g | `Master` は libpytunes に出ない（見つからず）。設計は `Distinguished Kind` で成り立つ。実物で確かめる（T12） | libpytunes ソース |
+| 1g | `Master` は libpytunes に出ない（見つからず）。設計は `Distinguished Kind` で成り立つ。実物では「ライブラリ」1 件に付いた（2026-11-06 の実物の確認） | libpytunes ソース |
 | 1h | `Smart Info` は値の有無だけでスマートプレイリストと判定され、値は解釈されない（一部） | libpytunes ソース |
 | 1i | XML の既定の場所は Apple の文書に無い（見つからず）。iTunes Media フォルダーの初期の場所は「Music\iTunes」で、XML の場所ではない | Apple サポート「iTunes for Windows の詳細設定」 |
 | 1j | 設定名は「Share iTunes Library XML with other applications」（Edit > Preferences > Advanced）。既定の状態は Apple の文書に無い | Apple サポート「Change Advanced preferences in iTunes on PC」 |
 | 2 | `WatchService` は実装依存で、1 回の変更が 1 件にも複数件にもなる。取りこぼしは OVERFLOW で返り、状態の再確認の契機にする。ローカル以外の記憶域での検知は実装依存。ネイティブの機構が無いときは定期確認で代替する（一部。Windows 固有の記述は無い） | Java SE 21 API「WatchService」 |
 
-- 未確認のまま持ち越し：`Distinguished Kind` の値、`Location` の書式（`localhost` の有無、ネットワーク上のドライブの形、記号の percent-encoding の範囲）、XML の書き換えの方法（一時ファイルの置き換えか、直接か）、Java の標準の XML の読み取りで DTD と外部実体を読まない設定が使えること（B1-4 の選定に従う）
+- 2026-11-06 の実物の確認（B2 の「実物の確認」）で、`Distinguished Kind` の値、`Location` の書式（ネットワーク上のドライブの形を除く）、XML の書き換えの方法（一時ファイルへ書いて改名で置き換える）が分かった
+- 未確認のまま持ち越し：ネットワーク上のドライブの `Location` の形、Java の WatchService で改名がどう見えるか、Java の標準の XML の読み取りで DTD と外部実体を読まない設定が使えること（B1-4 の選定に従う）

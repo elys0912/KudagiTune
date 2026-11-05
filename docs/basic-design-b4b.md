@@ -90,7 +90,7 @@ PC のアプリはトレイに常駐し、画面は 2 枚（メインの窓と�
 
 | 項目 | 既定 | 備考 |
 |---|---|---|
-| XML の場所 | `%USERPROFILE%\Music\iTunes\iTunes Music Library.xml`（iTunes 12.x の既定。未確認：版と OS による差） | 「参照」ボタンで変更。変更時に読めるかを確かめ、結果を横に表示（E4 の判定と同じ） |
+| XML の場所 | `%USERPROFILE%\Music\iTunes\iTunes Music Library.xml`（iTunes 12.x の既定。iTunes 12.13.7.1 と Windows 11 で確認済み（2026-11-06 の実物の確認）。ほかの版と OS による差は未確認） | 「参照」ボタンで変更。変更時に読めるかを確かめ、結果を横に表示（E4 の判定と同じ） |
 | 古いと警告する日数 | V5 | 0 で警告しない |
 | ログイン時に起動 | 有効 | W1 の注 |
 | サーバーのポート | V16 で固定 | 使用中なら起動時に警告し、利用者が数値で変える。自動では変えない（端末が保存した Tailscale と USB の宛先のポートが外れ、自動起動が届かなくなるため。決定（未付番））。変更後は、広告と W4 の表示が更新される（B4a の B4-1） |
@@ -269,4 +269,4 @@ PC のアプリはトレイに常駐し、画面は 2 枚（メインの窓と�
   - 8a：Gradle-License-Report README。id は `com.github.jk1.dependency-license-report`、3.x が保守中。出力は text・html・xml・csv。構成キャッシュは正しく扱えない。JSON の描画器は取得した範囲に無い（一部）
   - 8b：Licensee README。id は `app.cash.licensee`。`artifacts.json` と `validation.txt` を出力し、SPDX で許可を指定する。Android の変種とアセットへの同梱（`bundleAndroidAsset`）に対応（確認済み）。B4-7 は Licensee を採る
   - 7c（C-11 の根拠）：Ktor クライアントの Android での固定は公式文書で確かめられていない
-- この稿では Web を取得していない。次は「（未確認）」と添えた：iTunes の XML の既定の場所と組み込みプレイリストの判別のキー、SmartScreen の挙動、CI の Secrets の扱い
+- この稿では Web を取得していない。次は「（未確認）」と添えた：iTunes の XML の既定の場所と組み込みプレイリストの判別のキー、SmartScreen の挙動、CI の Secrets の扱い。うち XML の既定の場所と組み込みプレイリストの判別のキーは、2026-11-06 に実物で確かめた（B2 の「実物の確認」）
