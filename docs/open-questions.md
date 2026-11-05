@@ -154,7 +154,7 @@
 - 案：
   - サイズ＋更新日時：ファイルの属性だけで足りる。高速
   - ハッシュ：内容で確実に判定できる。全曲の読み込みが要り、初回が遅い
-  - iTunes の Date Modified：XML から取れる。ファイルを触らない。タグだけの変更にも反応する可能性がある（未確認）
+  - iTunes の Date Modified：XML から取れる。ファイルを触らない。タグだけの変更にも反応する（コメントの変更で変わり、元に戻しても元の値に戻らない。2026-11-06 の実物の確認）
 - 比較：
 
 | | サイズ＋更新日時 | ハッシュ | Date Modified |
@@ -203,3 +203,4 @@
 | 2 | Android 11 以降のメディアスキャンが、アプリが置いた m3u8 を（拡張子 m3u と m3u8 の両方で）MediaStore のプレイリストにするか | Q4 | **ソースで確認（実機は未確認）**。MediaProvider の `MimeUtils.isPlaylistMimeType` は `audio/x-mpegurl`、`application/vnd.apple.mpegurl` などを MEDIA_TYPE_PLAYLIST にし、`ModernMediaScanner.resolvePlaylists` が `MediaStore.resolvePlaylistMembers` で中身を展開する。`PlaylistPersister` はこの 2 つの MIME を M3U の読み手に割り当てる。Android の MIME 表（frameworks/base の android.mime.types）は m3u を `audio/x-mpegurl`、m3u8 を `application/vnd.apple.mpegurl` にする。両拡張子とも索引の対象。相対パスの解釈と、各プレイヤーの表示は実機で確かめる（基本設計の途中でよい） |
 | ~~3~~ | ~~adb を同梱して配布してよいか~~ 不要になった（D7） | Q2 | — |
 | 4 | Tailscale の MagicDNS 名が Android 側から引けるか | Q5 | **引ける**（2026-11-05 先生。Tailscale の中では名前で届く） |
+| 5 | iTunes 12.x の XML のキー、`Location` の書式、書き換え方 | Q10 | **確かめた**（2026-11-06。B2 の「実物の確認」）。設計の変更は無し |
