@@ -157,15 +157,18 @@ GitHub Actions で動かす。細部は変わりうる。
 
 ## 7. 設計書の場所と番号の読み方
 
-設計書は `notes/ideas/playlist-sync-fox/` にある（repo の作成後の置き場は未定）。
+設計書は repo の `docs/` にある。レビューの記録と公式文書の確認の結果は repo に置かない。
 
 | 文書 | 内容 |
 |---|---|
-| `README.md` | 決定（D）と用語 |
+| `design-overview.md` | 決定（D）と用語 |
 | `requirements.md` | 要件（F、N） |
+| `open-questions.md` | 論点（Q） |
 | `basic-design*.md` | 基本設計（B） |
 | `detailed-design*.md` | 詳細設計（X） |
-| `reviews/` | レビューの決定（J）、公式文書の確認の結果（`facts-android-*.md`、`facts-jvm-*.md`） |
+| `manual/` | 説明書（PC 版、Android 版、開発者向け） |
+
+- レビューの決定（J）は、取り込んだ先の設計書の節に書いてある
 
 番号の読み方は次のとおり。
 

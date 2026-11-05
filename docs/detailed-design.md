@@ -3,7 +3,7 @@
 - 起票：2026-11-05
 - 状態：第 2 稿（2026-11-05。review-05 を反映）。節ごとの稿は X1-2
 - 前提：基本設計 5 本（[basic-design.md](basic-design.md)、[basic-design-b2.md](basic-design-b2.md)、[basic-design-b3.md](basic-design-b3.md)、[basic-design-b4a.md](basic-design-b4a.md)、[basic-design-b4b.md](basic-design-b4b.md)。第 2 稿）と概要設計 3 本（[design-overview.md](design-overview.md)、[requirements.md](requirements.md)、[open-questions.md](open-questions.md)）に従う。review-03 の J7〜J15 は推奨 a で取り込む
-- 置き場：portfolio の `notes/ideas/playlist-sync-fox/`。repo を作るときに `docs/` へ移す（D5）
+- 置き場：この repo の `docs/`（2026-11-05 に portfolio の `notes/ideas/playlist-sync-fox/` から移した。D5）
 
 ## X1 構成
 

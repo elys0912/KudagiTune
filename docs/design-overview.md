@@ -2,9 +2,9 @@
 
 - 起票：2026-11-05
 - 状態：概要設計 第 2 稿で区切り（2026-11-05。review-02 まで。実物の確認 1 の結果で D1 を直した）。基本設計 第 2 稿で区切り（2026-11-05。review-04 まで。J7〜J15 は決定済み）。詳細設計 第 2 稿で区切り（2026-11-05。review-06 まで。J16〜J21 は決定済み）。基本設計は詳細設計の差し戻し 19 件を当てて第 3 稿（2026-11-05。requirements の N1-4 も直した）。説明書 3 本（`manual/`）と overview.html を review-08 で区切り（2026-11-05）。設計の 4 段階は完了、次は実装
-- 置き場：portfolio の `notes/ideas/playlist-sync-fox/`。repo を作るときに `docs/` へ移す
+- 置き場：この repo の `docs/`（2026-11-05 に portfolio の `notes/ideas/playlist-sync-fox/` から移した）
 - 仮名：playlist-sync-fox（屋号のような名。正式名は未決、Q1）
-- レビューの記録：`reviews/`（概要設計は review-01・02、基本設計は review-03・04、詳細設計は review-05・06。公式文書の確認の結果は facts-android・facts-jvm）
+- レビューの記録：`reviews/`（概要設計は review-01・02、基本設計は review-03・04、詳細設計は review-05・06。公式文書の確認の結果は facts-android・facts-jvm。この repo には置かない）
 
 ## 動機
 
