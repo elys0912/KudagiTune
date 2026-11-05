@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v6
+      - name: 全モジュールのコンパイルとテスト、android のデバッグビルド
+        run: ./gradlew build :android:assembleDebug
+      - name: 依存の向きの検査
+        run: |
+          check() {
+            module="$1"; required="$2"; shift 2
+            output="$(./gradlew -q ":$module:dependencies")"
+            if [ "$required" != "-" ] && ! grep -q "project ':$required'" <<< "$output"; then
+              echo "$module の $required への依存が見つからない（検査の出力の形が変わった可能性）"
+              exit 1
+            fi
+            for forbidden in "$@"; do
+              if grep -q "project ':$forbidden'" <<< "$output"; then
+                echo "$module が $forbidden に依存している"
+                exit 1
+              fi
+            done
+          }
+          check shared - itunes desktop android
+          check itunes shared desktop android
+          check android shared itunes desktop
+          check desktop itunes android
