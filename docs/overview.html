@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>playlist-sync-fox 設計の視覚資料</title>
+<style>
+  body { font-family: "Yu Gothic", "Meiryo", sans-serif; color: #222; line-height: 1.6; margin: 0; padding: 16px; }
+  main { max-width: 1100px; margin: 0 auto; }
+  h1 { color: #1f4e8c; font-size: 26px; margin: 0 0 4px; }
+  h2 { color: #1f4e8c; font-size: 19px; border-bottom: 2px solid #1f4e8c; padding-bottom: 3px; margin: 28px 0 10px; }
+  h3 { color: #1f4e8c; font-size: 15px; margin: 16px 0 6px; }
+  p { margin: 4px 0; }
+  .meta { color: #666; font-size: 14px; }
+  .lead { font-size: 17px; margin-top: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border: 1px solid #aaa; padding: 4px 8px; text-align: left; vertical-align: top; }
+  th { background: #e8eef7; color: #1f4e8c; }
+  .diagram { display: flex; align-items: stretch; gap: 8px; }
+  .side { flex: 1; border: 2px solid #888; border-radius: 6px; padding: 8px; background: #fafafa; }
+  .side h3 { margin: 0 0 6px; text-align: center; }
+  .box { border: 1px solid #888; background: #fff; border-radius: 4px; padding: 5px 8px; margin: 6px 0; text-align: center; font-size: 14px; }
+  .down { text-align: center; color: #1f4e8c; line-height: 1; }
+  .mid { width: 150px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: #1f4e8c; font-size: 13px; }
+  .arrow { font-size: 26px; line-height: 1; }
+  .band { margin-top: 8px; border: 2px solid #1f4e8c; border-radius: 6px; background: #e8eef7; padding: 6px 10px; text-align: center; font-size: 14px; }
+  .flow { display: flex; align-items: stretch; gap: 4px; }
+  .step { flex: 1; border: 1px solid #888; border-radius: 6px; background: #fafafa; padding: 6px; font-size: 13px; text-align: center; }
+  .step b { display: block; color: #1f4e8c; margin-bottom: 2px; }
+  .sep { align-self: center; color: #1f4e8c; font-size: 20px; }
+  .s-decided { background: #d9efd9; color: #1d5a1d; }
+  .s-temp { background: #fbefb5; color: #6b5600; }
+  .s-open { background: #e3e3e3; color: #444; }
+  .legend span { display: inline-block; padding: 1px 8px; border: 1px solid #aaa; border-radius: 3px; margin-right: 6px; font-size: 13px; }
+  pre { background: #fafafa; border: 1px solid #aaa; border-radius: 4px; padding: 6px 10px; font-size: 13px; line-height: 1.4; overflow-x: auto; }
+  code { font-size: 13px; }
+  .num { white-space: nowrap; }
+  @media print { body { padding: 0; } h2 { break-after: avoid; } table, .diagram, .flow { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<main>
+
+<h1>playlist-sync-fox 設計の視覚資料</h1>
+<p class="meta">概要・基本（第 3 稿）・詳細設計（第 2 稿）まで区切り（2026-11-05）</p>
+<p class="lead">iTunes（12.x）のプレイリストを曲ごと Android へ。PC → 端末の一方向。</p>
+
+<h2>1. 構成図</h2>
+<div class="diagram">
+  <div class="side">
+    <h3>Windows（JVM、Kotlin）</h3>
+    <div class="box"><b>M3 desktop</b><br>Ktor/Netty の HTTPS サーバー、JmDNS、WatchService<br>DPAPI の secrets.bin、トレイの GUI（Compose Multiplatform）</div>
+    <div class="down">▼ 依存</div>
+    <div class="box"><b>M2 itunes</b><br>iTunes Music Library.xml の読み取り</div>
+  </div>
+  <div class="mid">
+    <div class="arrow">⇆</div>
+    <div>HTTPS<br>端末が pull<br>（PC がサーバー、端末が取りに行く）</div>
+  </div>
+  <div class="side">
+    <h3>Android（Kotlin）</h3>
+    <div class="box"><b>M4 android</b><br>Room（同期状態）、MediaStore.Files<br>WorkManager、NSD、Keystore、Jetpack Compose</div>
+  </div>
+</div>
+<div class="band"><b>M1 shared</b>（Kotlin Multiplatform、OS に触れない）：マニフェスト、差分、パス、m3u8、ペアリングと署名の手順</div>
+<p class="meta">依存の向き（矢印は「依存する」）。M1 は誰にも依存しない。M2 と M4 は互いを知らない。M3 から M4 への依存は禁止。</p>
+<pre>
+desktop ──▶ itunes ──▶ shared ◀── android
+   └────────────────────▲
+</pre>
+
+<h2>2. 接続 3 方式</h2>
+<table>
+  <tr><th>方式</th><th>端末がつなぐ先</th><th>発見の仕方</th><th>備考</th></tr>
+  <tr><td>同一 LAN の Wi-Fi</td><td>PC の host:port</td><td>mDNS（PC が広告）／NSD（端末が発見）。自動で見つかる</td><td>3 方式とも 1 つの TCP に揃える</td></tr>
+  <tr><td>Tailscale</td><td>PC の host:port</td><td>MagicDNS 名を端末に手入力（PC の画面に表示される）</td><td>外出先からの同期に使う。名前が引けることは確認済み（2026-11-05）</td></tr>
+  <tr><td>USB テザリング</td><td>PC の host:port</td><td>mDNS で見つかる。見つからなければ PC の画面の IP（例：192.0.2.10）を手入力</td><td>LAN と同じ経路。adb は使わない</td></tr>
+</table>
+
+<h2>3. ペアリングの流れ</h2>
+<p>PC の画面に 6 桁のコードを出し、端末に入力する。コードは通信に流さない。SPAKE2 で両側が同じ署名用の鍵 K を導く。</p>
+<div class="flow">
+  <div class="step"><b>0 コード表示</b>PC が 6 桁を表示。端末で入力</div>
+  <div class="sep">▶</div>
+  <div class="step"><b>1 P5 開始</b>端末 → PC：端末 ID、表示名、SPAKE2 の値 X</div>
+  <div class="sep">▶</div>
+  <div class="step"><b>2 P5 応答</b>PC → 端末：PC の ID、値 Y（コード非表示中は拒否）</div>
+  <div class="sep">▶</div>
+  <div class="step"><b>3 P6 確認</b>端末 → PC：端末の確認の印</div>
+  <div class="sep">▶</div>
+  <div class="step"><b>4 P6 応答</b>PC → 端末：PC の確認の印</div>
+  <div class="sep">▶</div>
+  <div class="step"><b>5 鍵を導く</b>両方の印が合えば成功。共有の秘密から K</div>
+</div>
+<ul>
+  <li>PC と端末の画面に「指紋」（PC の公開鍵のハッシュ）が出る。見比べて確かめられる。</li>
+  <li>P6 の印が合わない試行だけ数える。上限を超えたらコードを作り直す。</li>
+  <li>端末を入れ直したら、PC 側で「ペアリングを解除」してから再ペアリングする。</li>
+</ul>
+
+<h2>4. 同期の流れ</h2>
+<div class="flow">
+  <div class="step"><b>1 到達確認（P3）</b>PC に届くか。差分なしの判定にも使う</div>
+  <div class="sep">▶</div>
+  <div class="step"><b>2 マニフェスト（P1）</b>選んだプレイリストの曲の集合と定義</div>
+  <div class="sep">▶</div>
+  <div class="step"><b>3 差分</b>足す・置き換える・消す</div>
+  <div class="sep">▶</div>
+  <div class="step"><b>4 容量</b>足りなければ始めない（不足分を表示）</div>
+</div>
+<div class="down">▼</div>
+<div class="flow">
+  <div class="step"><b>5 1 曲ずつ取得（P2）</b>Range で再開</div>
+  <div class="sep">▶</div>
+  <div class="step"><b>6 m3u8 を書く</b>端末の索引で MediaStore へ</div>
+  <div class="sep">▶</div>
+  <div class="step"><b>7 消す</b>自分が置いた曲だけ。多いときは確認あり</div>
+  <div class="sep">▶</div>
+  <div class="step"><b>8 結果の報告（P4）</b>PC の画面に表示</div>
+</div>
+<p class="meta">同期全体の失敗（E1・E2・E3・E4・E6・E7）の後では「消す」を実行しない。自動の同期では消さず、通知で知らせる。</p>
+
+<h2>5. API と失敗の種類</h2>
+<p>共通：HTTPS、パスの先頭に <code>/v1</code>。P1〜P4 は署名が要る。</p>
+<table>
+  <tr><th>P</th><th>名前</th><th>メソッドとパス</th><th>署名</th></tr>
+  <tr><td class="num">P1</td><td>マニフェストの取得</td><td><code>GET /v1/manifest</code></td><td>要</td></tr>
+  <tr><td class="num">P2</td><td>曲の取得（Range 対応）</td><td><code>GET /v1/tracks/{persistent_id}</code></td><td>要</td></tr>
+  <tr><td class="num">P3</td><td>到達確認</td><td><code>GET /v1/digest</code></td><td>要</td></tr>
+  <tr><td class="num">P4</td><td>結果の報告</td><td><code>POST /v1/reports</code></td><td>要</td></tr>
+  <tr><td class="num">P5</td><td>ペアリングの開始</td><td><code>POST /v1/pairing/start</code></td><td>不要</td></tr>
+  <tr><td class="num">P6</td><td>ペアリングの確認</td><td><code>POST /v1/pairing/confirm</code></td><td>不要</td></tr>
+</table>
+<h3>失敗の種類 E1〜E9</h3>
+<table>
+  <tr><th>E</th><th>名</th><th>範囲</th></tr>
+  <tr><td class="num">E1</td><td>接続不可</td><td>同期全体</td></tr>
+  <tr><td class="num">E2</td><td>鍵不一致</td><td>同期全体</td></tr>
+  <tr><td class="num">E3</td><td>容量不足</td><td>同期全体</td></tr>
+  <tr><td class="num">E4</td><td>XML 不可</td><td>同期全体</td></tr>
+  <tr><td class="num">E5</td><td>ファイル無し</td><td>曲単位</td></tr>
+  <tr><td class="num">E6</td><td>途中切断</td><td>同期全体</td></tr>
+  <tr><td class="num">E7</td><td>時間上限</td><td>同期全体</td></tr>
+  <tr><td class="num">E8</td><td>マニフェストが古い</td><td>曲単位</td></tr>
+  <tr><td class="num">E9</td><td>端末の書き込み失敗</td><td>曲単位</td></tr>
+</table>
+
+<h2>6. 端末の置き場</h2>
+<pre>
+Music/
+└─ playlist-sync-fox/
+   ├─ &lt;プレイリスト名&gt;.m3u8        ← m3u8 は直下に、プレイリストごと
+   └─ &lt;アーティスト&gt;/
+      └─ &lt;アルバム&gt;/
+         └─ 曲のファイル
+</pre>
+<div class="band">消すのは、このアプリが置いた曲だけ。利用者が別に入れた曲には触れない。入れ直した後は、以前の曲を「自分が置いた」と扱わない。</div>
+
+<h2>7. 決めたこと D1〜D14</h2>
+<table>
+  <tr><th>ID</th><th>項目</th><th>決めたこと</th></tr>
+  <tr><td class="num">D1</td><td>対応するライブラリ</td><td>最初の版は iTunes 12.x だけ。入口は <code>iTunes Music Library.xml</code> で、COM は使わない。Apple Music アプリ（Windows）は書き出しの機能が無い見込みのため保留（Q11）</td></tr>
+  <tr><td class="num">D2</td><td>同期の向き</td><td>PC から端末への一方向のみ。再生回数と評価の書き戻しはしない</td></tr>
+  <tr><td class="num">D3</td><td>端末側の反映</td><td>m3u8 を正とし、MediaStore へは端末の索引で反映する</td></tr>
+  <tr><td class="num">D4</td><td>言語</td><td>Kotlin。共有部分は Kotlin Multiplatform</td></tr>
+  <tr><td class="num">D5</td><td>名前と置き場</td><td>仮名は playlist-sync-fox。設計は portfolio の notes、repo 作成時に docs/ へ移す</td></tr>
+  <tr><td class="num">D6</td><td>役割</td><td>PC がサーバー、端末がクライアント（pull）。同期するときだけ接続する</td></tr>
+  <tr><td class="num">D7</td><td>接続方式</td><td>LAN の Wi-Fi、Tailscale、USB の 3 方式を 1 つのサーバーへの TCP に揃える。USB は USB テザリング。adb は同梱しない</td></tr>
+  <tr><td class="num">D8</td><td>認証</td><td>初回に PC が出すペアリングコードを端末へ入力。鍵と PC の証明書を端末が保存（trust on first use）。LAN の中でも鍵なしでは配信しない</td></tr>
+  <tr><td class="num">D9</td><td>端末側の削除</td><td>自分が置いた曲だけを消す。利用者が別に入れた曲には触れない</td></tr>
+  <tr><td class="num">D10</td><td>形式の変換</td><td>最初の版では行わない。変換を PC 側に置く余地だけ残す</td></tr>
+  <tr><td class="num">D11</td><td>端末の数</td><td>最初の版は 1 台。端末の識別子の列を持たせ、後で増やせる形にする</td></tr>
+  <tr><td class="num">D12</td><td>配布</td><td>最初は GitHub で公開（repo は最初 private、公開前に public）。配布物は Releases。Play ストアは将来</td></tr>
+  <tr><td class="num">D13</td><td>自動起動</td><td>従量制でないネットワークにつながったときに起動。ペアリング済みの PC に届かなければ何もしない。SSID は見ない</td></tr>
+  <tr><td class="num">D14</td><td>入れ直しの後</td><td>以前に置いた曲を「自分が置いた」と扱わない。消すときだけ利用者の同意の画面を出す</td></tr>
+</table>
+
+<h2>8. 残る論点</h2>
+<p class="legend"><span class="s-decided">決定</span><span class="s-temp">暫定採用</span><span class="s-open">未決・保留</span></p>
+<table>
+  <tr><th>Q</th><th>題</th><th>状態</th><th>結論（決まった段階）</th></tr>
+  <tr><td class="num">Q1</td><td>正式名</td><td class="s-open">未決</td><td>未決のまま</td></tr>
+  <tr><td class="num">Q2</td><td>USB の方式</td><td class="s-decided">決定（D7）</td><td>USB テザリング（概要設計）</td></tr>
+  <tr><td class="num">Q3</td><td>形式の変換</td><td class="s-decided">決定（D10）</td><td>変換なし（概要設計）</td></tr>
+  <tr><td class="num">Q4</td><td>MediaStore への反映の仕方</td><td class="s-temp">暫定採用</td><td>m3u8 を <code>MediaStore.Files</code> に置き、索引に任せる（基本設計）。実機は C-2</td></tr>
+  <tr><td class="num">Q5</td><td>TLS と鍵の保管</td><td class="s-decided">決定</td><td>自己署名 TLS と SPKI 固定。SPAKE2（Bouncy Castle の点演算）。PC の鍵は DPAPI の <code>secrets.bin</code>、端末は Keystore（基本設計・詳細設計）</td></tr>
+  <tr><td class="num">Q6</td><td>同期の自動起動の条件</td><td class="s-decided">決定（D13）</td><td>概要設計</td></tr>
+  <tr><td class="num">Q7</td><td>端末側の保存先</td><td class="s-decided">決定</td><td><code>Music/&lt;アプリ名&gt;/&lt;アーティスト&gt;/&lt;アルバム&gt;/</code> と名前の規則（基本設計 B3-1）</td></tr>
+  <tr><td class="num">Q8</td><td>複数の端末</td><td class="s-decided">決定（D11）</td><td>概要設計</td></tr>
+  <tr><td class="num">Q9</td><td>複数の PC</td><td class="s-open">未決</td><td>未決のまま。library_id の確認で備える</td></tr>
+  <tr><td class="num">Q10</td><td>変更の検知</td><td class="s-decided">決定</td><td>サイズと更新日時（実ファイルの値）。ハッシュは使わない（基本設計）</td></tr>
+  <tr><td class="num">Q11</td><td>Apple Music アプリの XML の書き出しの運用</td><td class="s-open">保留</td><td>保留のまま（D1、T11）</td></tr>
+  <tr><td class="num">Q12</td><td>配布の形</td><td class="s-decided">決定</td><td>jpackage の zip と署名つき APK を Releases に置く。公開は手動（基本設計）</td></tr>
+</table>
+<p class="meta">実機の確認は basic-design-b4b.md の C-1〜C-12（実装の後）。</p>
+
+</main>
+</body>
+</html>

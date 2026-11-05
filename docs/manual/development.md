@@ -1,0 +1,213 @@
+# playlist-sync-fox 開発者向け説明書
+
+対象の版：最初の版（2026-11-05 の設計）
+この説明書は設計を元に書いた。実機での確認は未。
+
+repo を作るときは `docs/` へ移す。設計の版が進んだら、ここも合わせて直す。
+
+## 1. repo の構成
+
+1 つの repo を Gradle のマルチプロジェクトで構成する。モジュールは 4 つで、増やさない。
+
+| モジュール | 種類 | 依存 | 役割 |
+|---|---|---|---|
+| `shared` | Kotlin Multiplatform（JVM と Android） | なし | マニフェストと API の型、差分の計算、m3u8 の生成、保存先のパス、ペアリングと署名の手順、エラーの種類 |
+| `itunes` | JVM | shared | iTunes の XML（plist）の読み取り、`file://` の復号、プレイリストの展開 |
+| `desktop` | JVM（Compose Multiplatform） | shared、itunes | HTTP サーバー、mDNS の広告、鍵の保管、トレイと画面、設定とログ |
+| `android` | Android（Jetpack Compose） | shared | HTTP クライアント、Room、MediaStore への書き込み、同期の実行、画面、権限 |
+
+依存の向きは次のとおり。
+
+```
+desktop ──▶ itunes ──▶ shared ◀── android
+   └────────────────────▲
+```
+
+- shared は誰にも依存しない。itunes と android は互いを知らない。desktop は android を知らない
+- 循環と、desktop から android への依存は禁止する。Gradle の依存の宣言で保ち、CI で確かめる
+- 判断（差分、m3u8、署名の手順、除外の規則）は shared と itunes に置く。desktop と android は薄く保つ
+- shared は OS の API、ファイルと通信の入出力、時計と乱数の直接の利用を持たない。時刻と乱数は引数で受ける
+
+### パッケージの概要
+
+ルートのパッケージ名は `playlistsyncfox`（正式名は未決の暫定）。下は、その下の相対名。
+
+| モジュール | パッケージ | 責務 |
+|---|---|---|
+| shared | `shared.manifest` | マニフェストと応答の型 |
+| shared | `shared.diff` | 差分の計算（足す、置き換える、消す） |
+| shared | `shared.path` | 保存先のパスの組み立て、使えない文字の置き換え |
+| shared | `shared.m3u8` | m3u8 の生成 |
+| shared | `shared.result` | エラーの種類と同期の結果の型 |
+| shared | `shared.auth` | ペアリングの手順、署名、再送防止 |
+| shared | `shared.crypto` | `CryptoProvider` の定義、指紋の表示形式 |
+| shared | `shared.api` | API の要求と応答の型 |
+| itunes | `itunes.plist` | plist XML の読み手 |
+| itunes | `itunes.location` | `file://` の復号 |
+| itunes | `itunes.library` | トラックとプレイリストの型、展開 |
+| desktop | `desktop.server` | Ktor のルート、要求の検査、Range |
+| desktop | `desktop.secrets` | DPAPI による鍵の保管、証明書 |
+| desktop | `desktop.discovery` | mDNS の広告（JmDNS） |
+| desktop | `desktop.settings` | 設定とログ |
+| desktop | `desktop.ui` | トレイと画面 |
+| desktop | `desktop.watch` | XML の監視と読み直し |
+| desktop | `desktop.crypto` | `CryptoProvider` の PC 側の実体 |
+| android | `android.db` | Room の定義と移行 |
+| android | `android.storage` | MediaStore の書き込みと削除 |
+| android | `android.sync` | 同期の実行、前面サービス、WorkManager |
+| android | `android.net` | Ktor のクライアント、証明書の固定 |
+| android | `android.keystore` | Keystore による鍵の保管、`CryptoProvider` の端末側の実体 |
+| android | `android.discovery` | NSD の発見、手入力の検査 |
+| android | `android.ui` | 画面 S1〜S5、権限の要求 |
+| android | `android.notify` | 通知 |
+| android | `android.log` | ログの書き込み、閲覧、共有 |
+
+## 2. 必要なもの
+
+| もの | 内容 |
+|---|---|
+| JDK | 定義ファイルで版を固定する（版は repo の定義が正。ここには書かない） |
+| Android SDK | 同上。android モジュールのビルドに要る |
+| Gradle | repo の wrapper（`gradlew`）を使う。手元に Gradle を入れない |
+| Windows | desktop の配布物（zip）は Windows の実行環境で作る。実行も Windows |
+| 実機 | Android 11 以降の端末。実機の確認の表を埋めるのに要る |
+
+- Kotlin、Ktor、Compose の版は version catalog の 1 か所で持つ
+- iOS など、他の対象は足さない
+
+## 3. ビルドと実行
+
+コマンドはプロジェクト名を指定して実行する（実機で未確認）。
+
+1. desktop を実行する：`./gradlew :desktop:run`
+2. android のデバッグビルドを作る：`./gradlew :android:assembleDebug`
+3. 作った APK を端末に入れる。入れ方は手元の方法でよい（この repo は adb を使う手順を持たない。第 9 節）
+4. 全モジュールのコンパイルを確かめる：`./gradlew build`
+
+- 変更した層のテストだけを手元で回す。全層は CI で回す
+- desktop の起動には、iTunes の XML の共有を有効にした iTunes が要る（PC 版の説明書を参照）
+
+## 4. テスト
+
+### 層ごとの方針
+
+| 層 | 方針 |
+|---|---|
+| shared | 純粋関数の単体テストが中心。差分、マニフェストの直列化、m3u8、署名、鍵の導出、再送防止、ペアリングの状態遷移 |
+| itunes | 純粋関数の単体テスト。日本語名や記号を含む `file://` の復号、XML の欠損、入れ子のプレイリスト。試料は小さな合成の XML |
+| desktop | 薄く保つ。サーバーの結線（鍵なしの拒否など）を少数のテストで確かめる。画面の見た目のテストは持たない |
+| android | 薄く保つ。端末なしで動く範囲（Room のテスト）だけ試す |
+
+- 試料の XML に、個人の曲名とパスを含めない
+- 時刻と乱数は引数で渡し、テストで固定する
+- 公開のテストベクトルがある暗号の方式は、それで検算する
+- 実機が要るもの（端末の実行環境が要るテスト）は CI の対象外とし、確認の表に残す
+
+### 実機の確認の表
+
+- 実機でしか確かめられない項目は、C-1〜C-12 の表にまとめる
+- 表は repo の `docs/` に別ファイルとして置く。各項目に結果と日付を記録する
+- 項目の概要は次のとおり。状態はいずれも設計の時点のもの
+
+| 番号 | 確かめること |
+|---|---|
+| C-1 | mDNS で端末が PC を見つけるか |
+| C-2 | `MediaStore.Files` への insert と索引の実機確認（m3u8 の拡張子で）：`Music/<V22>/` の相対パス、MIME `audio/x-mpegurl` で insert し、MediaStore のプレイリストとして索引されるか。相対パスが解かれるか |
+| C-3 | 各プレイヤーでプレイリストが見え、順に再生できるか |
+| C-4 | Tailscale の MagicDNS 名で届くか（名前を引けることは確認済み） |
+| C-5 | USB テザリングで届くか |
+| C-6 | Android 15 以降の 6 時間の上限で止まり、続きから再開できるか |
+| C-7 | 入れ直し後の「以前の曲の整理」で同意の画面が出るか |
+| C-8 | 従量制でないネットワークでの自動の起動 |
+| C-9 | 再生できない形式が結果に出るか |
+| C-10 | Android 16 以降の長い処理の割り当て時間 |
+| C-11 | Ktor の OkHttp エンジンで固定した証明書だけを信頼できるか |
+| C-12 | 既存の m3u8 の書き換えと、Keystore での HMAC |
+
+## 5. CI
+
+GitHub Actions で動かす。細部は変わりうる。
+
+| 契機 | 内容 |
+|---|---|
+| プルリクエストと main への push | 全モジュールのコンパイル、shared と itunes と desktop のテスト、依存の向きの検査、android のデバッグビルド |
+| タグの push | android のリリースビルド（署名つき APK）、desktop の zip、下書きの Release の作成と配布物の添付 |
+
+- APK の署名の鍵と資格情報は GitHub の Secrets に置き、環境変数で渡す。ログに出さない
+- Secrets の名前は未定
+- repo が private の間も、同じ流れが動く
+
+## 6. Release の手順
+
+1. 版のタグを打つ（手動）
+2. CI が desktop の zip と APK を作る。APK は署名の鍵が CI にあるときだけ署名する
+3. CI が下書きの Release を作り、配布物とチェックサム（SHA-256 の一覧）を付ける
+4. APK を実機に入れ、確認の表の該当項目を確かめる（手動）
+5. repo が public であることを確かめる
+6. 下書きを公開する（手動）。CI からは公開しない
+
+- repo は最初 private。公開の前に public にする。手順は次のとおり
+  1. 履歴と設定に、鍵、認証情報、個人の曲名・パス、実 IP、実ドメインが無いことを確かめる
+  2. ライセンスの一覧が配布物に入っていることを確かめる
+  3. GitHub の設定で可視性を public に変える
+- Release の本文には、変更の要点、PC の導入手順、「提供元不明のアプリ」の許可の手順を書く。アプリ内で更新を確認しないため、案内は本文が担う
+- チェックサムは取り違えの確認用で、署名の代わりではない
+- PC の配布物はコード署名なし。SmartScreen の警告が出ることを本文に書く
+- APK の署名の鍵は repo に入れない。失うと更新できないため、別の場所にバックアップを 1 つ持つ
+
+## 7. 設計書の場所と番号の読み方
+
+設計書は `notes/ideas/playlist-sync-fox/` にある（repo の作成後の置き場は未定）。
+
+| 文書 | 内容 |
+|---|---|
+| `README.md` | 決定（D）と用語 |
+| `requirements.md` | 要件（F、N） |
+| `basic-design*.md` | 基本設計（B） |
+| `detailed-design*.md` | 詳細設計（X） |
+| `reviews/` | レビューの決定（J）、公式文書の確認の結果（`facts-android-*.md`、`facts-jvm-*.md`） |
+
+番号の読み方は次のとおり。
+
+| 記号 | 意味 |
+|---|---|
+| D | 決定（概要設計で決めた方針。覆さない） |
+| F | 機能要件 |
+| N | 非機能要件 |
+| Q | 未決の問い |
+| B | 基本設計の節。B1-3 は「基本設計の B1 節の 3 項」 |
+| X | 詳細設計の節。X1 は索引とパッケージ、X2〜X7 は各モジュール |
+| V | 値の表。ペアリングコードの桁数、ログの上限などの暫定の値 |
+| E | エラーの種類（E1〜E9） |
+| T | 端末の同期状態の表（Room） |
+| S | Android の画面 |
+| W | PC の画面 |
+| K | 鍵と保管場所 |
+| P | API のルート（P1〜P6） |
+| C | 実機の確認の表（C-1〜C-12） |
+
+- 値は V の番号で参照し、本文に直書きしない（設計書の規則）
+- 確かめていないことには「（未確認）」と添えてある
+
+## 8. ライセンス一覧の生成
+
+- Gradle のプラグイン Licensee（`app.cash.licensee`）で、使う OSS の一覧をビルド時に生成する
+- Licensee は `artifacts.json` を出力する。Android ではアセットに同梱する
+- 一覧に含めるもの：Kotlin、Ktor、Room、Compose、JmDNS など、同梱する JVM（OpenJDK のビルド）
+- 表示の場所：PC は画面の「ライセンス」ボタン、Android は設定の画面
+- 内容は名前、版、ライセンスの種類、全文
+- JSON の項目の一覧は未確認。実装時に確かめる
+- 依存を足したときは、一覧に入ることをビルドで確かめる
+
+## 9. やらないこと
+
+| やらないこと | 理由 |
+|---|---|
+| iTunes の COM の利用 | XML の読み取りだけで足りる。iTunes の操作を持たない |
+| 曲の形式の変換 | 変換せずに転送する。再生できない形式は結果に出す |
+| iTunes への書き戻し | 読み取り専用。ライブラリを変えない |
+| adb の利用と同梱 | 端末は PC に取りに来る方式。adb は使わず、同梱もしない |
+| アプリ内の更新の確認 | 新しい版は Releases で案内する |
+| M1 への永続化の追加 | Room は android だけに置く |
+| iOS など他の対象 | shared の対象は JVM と Android だけ |
+| Apple Music アプリの対応 | 最初の版は Windows の iTunes 12.x だけ |

@@ -1,0 +1,162 @@
+# playlist-sync-fox：iTunes のプレイリストを Android へ同期するツール（概要設計）
+
+- 起票：2026-11-05
+- 状態：概要設計 第 2 稿で区切り（2026-11-05。review-02 まで。実物の確認 1 の結果で D1 を直した）。基本設計 第 2 稿で区切り（2026-11-05。review-04 まで。J7〜J15 は決定済み）。詳細設計 第 2 稿で区切り（2026-11-05。review-06 まで。J16〜J21 は決定済み）。基本設計は詳細設計の差し戻し 19 件を当てて第 3 稿（2026-11-05。requirements の N1-4 も直した）。説明書 3 本（`manual/`）と overview.html を review-08 で区切り（2026-11-05）。設計の 4 段階は完了、次は実装
+- 置き場：portfolio の `notes/ideas/playlist-sync-fox/`。repo を作るときに `docs/` へ移す
+- 仮名：playlist-sync-fox（屋号のような名。正式名は未決、Q1）
+- レビューの記録：`reviews/`（概要設計は review-01・02、基本設計は review-03・04、詳細設計は review-05・06。公式文書の確認の結果は facts-android・facts-jvm）
+
+## 動機
+
+Windows の iTunes（12.x）のプレイリストを、曲ごと Android へ運びたい。新しい Apple Music アプリにも対応したいが、ライブラリを書き出す手段が無い見込みで保留（Q11）。
+近い既存製品に iSyncr がある。双方向の同期を持つが、ここでは PC から端末への一方向に絞る。
+
+主目的は自分の不便の解消。ポートフォリオの作品にするのは従。
+
+## 構成の概要
+
+元の案は [architecture-draft-2026-11-05.md](architecture-draft-2026-11-05.md)。全体の形は次のとおり。
+
+```
+Windows（JVM、Kotlin）                          Android（Kotlin）
+┌──────────────────────────┐                  ┌──────────────────────────┐
+│ ライブラリ読み取り         │                  │ 同期クライアント            │
+│  iTunes Music Library.xml  │   HTTPS/TCP      │  マニフェストの差分         │
+│ マニフェスト生成           │ ───────────────▶ │  ファイルの取得             │
+│ 配信サーバー（HTTP）       │ ◀─────────────── │  m3u8 の書き出し            │
+│ 検出（mDNS）／USB テザリング │   取得要求        │  同期状態の DB（Room）      │
+│ トレイ常駐の小さな GUI     │                  │  発見（NSD）／手入力        │
+└──────────────────────────┘                  └──────────────────────────┘
+           ▲ 共有モジュール（Kotlin Multiplatform）：マニフェストの型、差分、m3u8、ペアリング
+```
+
+- PC がサーバー、端末がクライアント（pull）。端末は同期するときだけ接続して取りに行く（D6）
+- 同一 LAN の Wi-Fi、Tailscale、USB（USB テザリング）の 3 つの接続を、端末が host:port へつなぐ 1 つの TCP に揃える（D7）
+- プロトコルの型、差分の計算、m3u8 の生成、ペアリングは共有モジュール（Kotlin Multiplatform）に置き、PC と端末の両方から使う（D4）
+
+## 範囲
+
+### やること（最初の版）
+
+- Windows の iTunes 12.x のライブラリの読み取り。入口は `iTunes Music Library.xml`（F1）
+- 同一 LAN の Wi-Fi、Tailscale、USB での接続と、初回のペアリング（F2）
+- 選んだプレイリストの曲を、差分だけ端末へ取得（中断からの再開を含む）（F3）
+- 端末側での曲の配置と、プレイリストごとの m3u8 の書き出し。MediaStore のプレイリストにも反映（F4）
+- PC 側のトレイ常駐と小さな画面。端末側の手動の同期と、条件による自動起動（F5、F3）
+- 同期の記録、エラーの表示、更新（F6）
+
+### やらないこと
+
+- Android から PC への書き戻し（再生回数、評価）。一方向に絞る（D2）
+- 形式の変換（ALAC から AAC など）。最初の版はファイルをそのまま送る（D10、Q3）
+- COM の利用。XML だけを入口にする（D1）
+- iTunes 以外のライブラリ。Apple Music アプリ（Windows）は、ライブラリを読む手段が見つかるまで保留（D1、Q11）
+- 複数の PC からの同期（暫定、Q9）
+- 複数の端末への同期（最初の版。D11）
+
+## 決定事項
+
+日数、容量、版番号などの値は requirements.md に一本化し、ここには項目と対応する要件だけを書く。
+
+| ID | 項目 | 決めたこと | 対応する F/N/Q | 経緯 |
+|---|---|---|---|---|
+| D1 | 対応するライブラリ | 最初の版は iTunes 12.x だけ。入口は `iTunes Music Library.xml` で、COM は使わない。Apple Music アプリ（Windows）は書き出しの機能が無い見込みのため保留（Q11） | F1、N3、Q11 | 2026-11-05 先生。同日に Apple Music を保留へ（実物の確認 1） |
+| D2 | 同期の向き | PC から端末への一方向のみ。再生回数と評価の書き戻しはしない | F3 | 2026-11-05 先生 |
+| D3 | 端末側の反映 | m3u8 を正とし、MediaStore へは端末の索引で反映する。索引されない端末での扱いは Q4 | F4、Q4、Q7 | 2026-11-05 先生（review-01 の J6） |
+| D4 | 言語 | Kotlin（Java 系）。共有部分は Kotlin Multiplatform で書く | N5 | 2026-11-05 先生 |
+| D5 | 名前と置き場 | 仮名は playlist-sync-fox。設計は portfolio の notes に置き、repo を作るときに docs/ へ移す | Q1 | 2026-11-05 先生 |
+| D6 | 役割 | PC がサーバー、端末がクライアント（pull）。端末は同期するときだけ接続する | F2、F3 | 2026-11-05 先生（計画の承認） |
+| D7 | 接続方式 | 同一 LAN の Wi-Fi、Tailscale、USB の 3 方式を、1 つのサーバーへの TCP に揃える。方式ごとの違いは、つなぐ先の決め方だけ。USB は USB テザリング（端末が PC に IP を配る）で同じサーバーへつなぐ。adb の同梱はしない | F2、Q2 | 2026-11-05 先生（計画の承認）。USB の方式は review-01 の J3 |
+| D8 | 認証 | 初回に PC が表示するペアリングコードを端末へ入力し、鍵と PC の証明書を端末が保存する（trust on first use）。LAN の中でも鍵なしでは配信しない | F2、N1、Q5 | 2026-11-05 先生（計画の承認） |
+| D9 | 端末側の削除 | 端末は自分が置いた曲だけを消す。利用者が別に入れた曲には触れない | F4 | 2026-11-05 先生 |
+| D10 | 形式の変換 | 最初の版では行わない。変換を PC 側に置く余地だけ残す | F3、Q3 | 2026-11-05 先生（計画の承認） |
+| D11 | 端末の数 | 最初の版は端末 1 台。同期状態と PC 側の設定に端末の識別子の列を持たせ、後で増やせる形にする | F2、F5、Q8 | 2026-11-05 先生（review-01 の J1） |
+| D12 | 配布 | 最初は GitHub で公開する。repo は最初 private にし、公開の前に public にする。配布物（APK と PC の実行物）は Releases に置く。Play ストアは将来の対応 | N4、Q12 | 2026-11-05 先生（review-01 の J4） |
+| D13 | 自動起動 | 従量制でないネットワークにつながったときに起動し、ペアリング済みの PC に届かなければ何もせず終わる。SSID は見ない（位置情報の権限を要するため） | F3、Q6 | 2026-11-05 先生（review-01 の J2） |
+| D14 | 入れ直しの後 | アプリを入れ直した後は、以前に置いた曲を「自分が置いた」と扱わない。消すときだけ利用者の同意の画面を出す | F3、F4、Q7 | 2026-11-05 先生（review-01 の J5） |
+
+## 用語
+
+### 主な語
+
+| 語 | 意味 |
+|---|---|
+| playlist-sync-fox | このツール（仮名）。文書中の自称はこの名に統一する |
+| 先生 | このツールの決定者（作者）。決定事項の経緯の欄に書く |
+| ライブラリ | iTunes または Apple Music アプリが持つ曲とプレイリストの全体。入口は XML |
+| トラック | ライブラリの曲 1 件。ID、ファイルの場所、サイズ、更新日時、曲名などを持つ |
+| プレイリスト | 名前と、順序付きのトラックの並び。スマートプレイリストは展開済みの結果を使う |
+| マニフェスト | PC が XML から作る、同期の対象の一覧。選んだプレイリストの曲の集合と、プレイリストの定義を持つ |
+| 同期 | マニフェストと端末の状態の差分を、端末へ反映する一連の処理 |
+| 同期の単位 | 差分を適用する最小の単位。曲 1 本（取得）と、プレイリスト 1 つ（m3u8 の書き出し） |
+| 同期状態 | 端末が持つ、自分が置いた曲とプレイリストの記録。差分と削除の対象の判定に使う（D9） |
+| ペアリング | 初回に PC と端末が互いを登録する手順。コードの入力と鍵の保存を含む（D8） |
+| ペアリングコード | PC が初回に表示する 6 桁の数字 |
+| 接続方式 | 端末が PC へつながる経路。同一 LAN の Wi-Fi、Tailscale、USB の 3 つ（D7） |
+| サーバー | PC 側で動き、マニフェストと曲を配る部分（D6） |
+| クライアント | 端末側で動き、差分を取りに行く部分（D6） |
+| 共有モジュール | PC と端末の両方から使う、型と計算の部分（D4） |
+
+### 略語と技術語
+
+| 語 | 意味 |
+|---|---|
+| iTunes Music Library.xml | iTunes が書き出すライブラリの XML。plist 形式 |
+| plist | Apple の設定やデータを書く XML の形式 |
+| Persistent ID | iTunes がトラックに振る、変わらない ID。曲の同一の判定に使う |
+| `file://` URL | XML に入る曲のファイルの場所。復号して Windows のパスにする |
+| COM | Windows のプログラム間の呼び出しの仕組み。iTunes を直接操作できるが、使わない（D1） |
+| WatchService | Java のファイルの変更の監視の仕組み |
+| mDNS | 同一 LAN の中で名前から機器を見つける仕組み |
+| JmDNS | Java で mDNS を扱うライブラリ |
+| NSD | Android の、LAN の中のサービスを見つける仕組み |
+| USB テザリング | 端末が PC に IP を配り、USB で LAN と同じ経路を作る機能。USB 接続の正の方式（D7） |
+| Tailscale | 機器同士を安全につなぐ VPN の製品。外出先からの同期に使う |
+| MagicDNS | Tailscale が機器に付ける名前を引く仕組み |
+| TLS | 通信を暗号化する仕組み。PC 側は自己署名の証明書を使う |
+| trust on first use | 初回に受け取った鍵や証明書を、以後の信頼の基準にする方式 |
+| Range | HTTP で曲の一部だけを取得する指定。中断からの再開に使う |
+| MediaStore | Android が端末内のメディアを索引する仕組み。プレイリストも持つ（D3） |
+| SAF | Android のファイルへのアクセスの仕組み（Storage Access Framework） |
+| m3u8 | プレイリストを書く文字ファイル。ここでは相対パス、UTF-8 |
+| KMP | Kotlin Multiplatform。1 つのコードを複数の実行環境で使う仕組み（D4） |
+| Compose Multiplatform | Kotlin の画面の部品の集まり。PC のトレイ常駐の画面に使う |
+| Ktor | Kotlin の HTTP のサーバーとクライアントのライブラリ |
+| Room | Android の端末内のデータベースを扱うライブラリ。同期状態を置く |
+| WorkManager | Android の、条件を付けて処理を起動する仕組み。自動の同期に使う |
+| JVM | Java の実行環境。PC 側はこの上で動く |
+| ALAC、AAC | 音声の形式。Apple の可逆圧縮と、非可逆圧縮 |
+| ffmpeg | 音声や映像の形式を変換する道具。変換を足すときの候補（Q3） |
+| iSyncr | 既存の同期製品。双方向（動機） |
+
+## ファイル
+
+| ファイル | 内容 |
+|---|---|
+| [design-overview.md](design-overview.md) | このファイル。動機、範囲、決定事項、用語 |
+| [requirements.md](requirements.md) | 機能要件（F1〜F6）と非機能要件（N1〜N5） |
+| [open-questions.md](open-questions.md) | 論点（Q1〜Q12。Q2・Q6・Q8 は決定） |
+| [architecture-draft-2026-11-05.md](architecture-draft-2026-11-05.md) | アーキテクチャのたたき台。概要設計の元。区切り後は参照用に残す |
+| [basic-design.md](basic-design.md) | 基本設計 B1（索引、モジュール M、技術、ビルド、値の表 V、決定（未付番）） |
+| [basic-design-b2.md](basic-design-b2.md) | 基本設計 B2（ライブラリの読み取りと同期。エラーの種類 E） |
+| [basic-design-b3.md](basic-design-b3.md) | 基本設計 B3（端末側。表 T、画面 S、権限） |
+| [basic-design-b4a.md](basic-design-b4a.md) | 基本設計 B4 前半（発見、ペアリング、鍵 K、API P） |
+| [basic-design-b4b.md](basic-design-b4b.md) | 基本設計 B4 後半（PC の画面 W、設定とログ、配布、テストと確認の表 C） |
+| [detailed-design.md](detailed-design.md) | 詳細設計 X1（索引、パッケージ、置いた値の候補 A、決定（未付番）X-n） |
+| [detailed-design-x2.md](detailed-design-x2.md) | 詳細設計 X2（itunes：plist の読み手、`file://` の復号、監視） |
+| [detailed-design-x3.md](detailed-design-x3.md) | 詳細設計 X3（shared：マニフェスト、差分、パス、m3u8、E と結果） |
+| [detailed-design-x4.md](detailed-design-x4.md) | 詳細設計 X4（shared：暗号の部品、ペアリング、署名） |
+| [detailed-design-x5.md](detailed-design-x5.md) | 詳細設計 X5（desktop：サーバー、鍵、mDNS、設定、画面 W、起動） |
+| [detailed-design-x6.md](detailed-design-x6.md) | 詳細設計 X6（android：Room、MediaStore、同期、WorkManager、HTTP、鍵） |
+| [detailed-design-x7.md](detailed-design-x7.md) | 詳細設計 X7（android：画面 S、発見、通知、権限、ログ、ライセンス） |
+| [manual/manual-pc.md](manual/manual-pc.md) | 説明書 PC 版（利用者向け） |
+| [manual/manual-android.md](manual/manual-android.md) | 説明書 Android 版（利用者向け） |
+| [manual/development.md](manual/development.md) | 開発者向け説明書（repo 構成、ビルド、CI、Release、番号の読み方） |
+| [overview.html](overview.html) | 設計の視覚資料（単体の HTML） |
+| `reviews/` | レビューの記録（review-01〜08、facts-android、facts-jvm） |
+
+## 参考
+
+- iSyncr（既存の同期製品。製品名のみ）
+- Apple の iTunes ライブラリ XML
+- Android の NSD、MediaStore、WorkManager の公式文書
