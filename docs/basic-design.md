@@ -3,7 +3,7 @@
 - 起票：2026-11-05
 - 状態：第 3 稿（2026-11-05。詳細設計 review-05 の差し戻しを反映）。節ごとのファイルは B1-2
 - 前提：概要設計 3 本（[design-overview.md](design-overview.md)、[requirements.md](requirements.md)、[open-questions.md](open-questions.md)）に従う。概要設計の決定は D1〜D14。要件は F/N 番号、論点は Q 番号で参照する
-- 置き場：portfolio の `notes/ideas/playlist-sync-fox/`。repo を作るときに `docs/` へ移す（D5）
+- 置き場：この repo の `docs/`（2026-11-05 に portfolio の `notes/ideas/playlist-sync-fox/` から移した。D5）
 
 ## B1 構成
 
