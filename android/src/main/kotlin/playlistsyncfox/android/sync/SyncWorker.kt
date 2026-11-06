@@ -2,6 +2,7 @@ package playlistsyncfox.android.sync
 
 import android.content.Context
 import android.content.pm.ServiceInfo
+import android.os.Build
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkInfo
@@ -60,8 +61,11 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val hooks = WorkerHooks(
             promote = ::promote,
             stopCause = {
-                // 時間切れ（ジョブ、前面サービス）か、アプリからの取り消しか
-                if (stopReason == WorkInfo.STOP_REASON_TIMEOUT || stopReason == WorkInfo.STOP_REASON_FOREGROUND_SERVICE_TIMEOUT) {
+                // 時間切れ（ジョブ、前面サービス）か、アプリからの取り消しか。
+                // Android 11 は理由を取れないので中断として扱う。どちらも「消す」をせず、次の同期で続きから進むので害が無い
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                    (stopReason == WorkInfo.STOP_REASON_TIMEOUT || stopReason == WorkInfo.STOP_REASON_FOREGROUND_SERVICE_TIMEOUT)
+                ) {
                     StopCause.Timeout
                 } else {
                     StopCause.UserCancel
