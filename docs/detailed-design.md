@@ -2,7 +2,7 @@
 
 - 起票：2026-11-05
 - 状態：第 3 稿（2026-11-06。review-09 を反映）。節ごとの稿は X1-2
-- 前提：基本設計 5 本（[basic-design.md](basic-design.md)、[basic-design-b2.md](basic-design-b2.md)、[basic-design-b3.md](basic-design-b3.md)、[basic-design-b4a.md](basic-design-b4a.md)、[basic-design-b4b.md](basic-design-b4b.md)。第 2 稿）と概要設計 3 本（[design-overview.md](design-overview.md)、[requirements.md](requirements.md)、[open-questions.md](open-questions.md)）に従う。review-03 の J7〜J15 は推奨 a で取り込む
+- 前提：基本設計 5 本（[basic-design.md](basic-design.md)、[basic-design-b2.md](basic-design-b2.md)、[basic-design-b3.md](basic-design-b3.md)、[basic-design-b4a.md](basic-design-b4a.md)、[basic-design-b4b.md](basic-design-b4b.md)。第 3 稿）と概要設計 3 本（[design-overview.md](design-overview.md)、[requirements.md](requirements.md)、[open-questions.md](open-questions.md)）に従う。review-03 の J7〜J15 は推奨 a で取り込む
 - 置き場：この repo の `docs/`（2026-11-05 に portfolio の `notes/ideas/playlist-sync-fox/` から移した。D5）
 
 ## X1 構成
@@ -51,7 +51,7 @@
 
 ### X1-2 節の対応表
 
-項の見出しは、X2〜X7 の稿の実際の見出し（第 2 稿）。
+項の見出しは、X2〜X7 の稿の実際の見出し（X4 は第 2 稿、ほかは第 3 稿）。
 
 | 節 | ファイル | 題 | 引き受ける B の項 | 項の見出し |
 |---|---|---|---|---|
@@ -203,7 +203,7 @@ version catalog の項目名（版は書かない。B1-6。項目名は候補で
 |---|---|---|
 | 第 1 稿 | 2026-11-05 | X1 を書いた（X1-1〜X1-6）。X2〜X7 は同時に別の執筆者が書く |
 | 第 2 稿 | 2026-11-05 | review-05 を反映。パッケージ `desktop.keystore` を `desktop.secrets` に改名、version catalog の暗号と保管の項目を `bouncycastle`・`jna`・`jna-platform` に、`licensee` を足した（指摘 2、3、12）。X1-2 の項の見出しを確定、X1-4 に A3〜A19、X1-6 に X-3〜X-24 を集めた（指摘 24）。依存の向きの検査の方法を X1-3 に足した（指摘 33）。節末を `###` にした（指摘 35）。署名失敗の閾値を A10（10 回）にした（指摘 17） |
-| 第 3 稿 | 2026-11-06 | X2・X3・X5〜X7 を第 3 稿に。実物の確認と土台の反映。review-09 |
+| 第 3 稿 | 2026-11-06 | X2・X3・X5〜X7 を第 3 稿に。実物の確認と土台の反映。X1-3 の version catalog の候補の項目名を土台に合わせて差し替えた（A1 の規則は変えない）。review-09 |
 
 ### X1-6 決定（未付番）の一覧
 
