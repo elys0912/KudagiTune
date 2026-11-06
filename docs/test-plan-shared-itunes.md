@@ -16,7 +16,7 @@
 
 ## 2 テストケースの一覧
 
-- 件数：束 1 が 80 件（TS-01〜TS-14、TS-16〜TS-23、TS-25〜TS-33、TS-35〜TS-36、TS-38、TS-40〜TS-51、TS-53〜TS-54、TS-56〜TS-65、TS-67〜TS-78、TS-131〜TS-134、TS-143、TS-145、TS-147、TS-149〜TS-150、TS-153）、束 2 が 20 件（TS-80〜TS-87、TS-91〜TS-93、TS-95〜TS-99、TS-101〜TS-102、TS-135〜TS-136）、束 3 が 35 件（TS-103〜TS-116、TS-118〜TS-128、TS-130、TS-137〜TS-142、TS-152、TS-154〜TS-155）。計 135 件。追加分（review-11、review-12、review-13）は既存の番号を保つため末尾に付けた
+- 件数：束 1 が 80 件（TS-01〜TS-14、TS-16〜TS-23、TS-25〜TS-33、TS-35〜TS-36、TS-38、TS-40〜TS-51、TS-53〜TS-54、TS-56〜TS-65、TS-67〜TS-78、TS-131〜TS-134、TS-143、TS-145、TS-147、TS-149〜TS-150、TS-153）、束 2 が 20 件（TS-80〜TS-87、TS-91〜TS-93、TS-95〜TS-99、TS-101〜TS-102、TS-135〜TS-136）、束 3 が 36 件（TS-103〜TS-116、TS-118〜TS-128、TS-130、TS-137〜TS-142、TS-152、TS-154〜TS-156）。計 136 件。追加分（review-11、review-12、review-13）は既存の番号を保つため末尾に付けた
 - 層の「薄い統合」は、複数の関数をつないで純粋なまま確かめるもの。「実機」は束 1〜3 に無い
 - 表中の「V」は basic-design.md の B1-7 の値（V1 コードの桁数、V2 試行の上限、V3 コードの有効時間、V4 超過後の待ち、V7 規模の目標、V12 時刻の許容、V20 消す確認の閾値、V23 要素の上限バイト、V24 接尾辞の文字数、V42 偏り除外の上限回数）
 
@@ -88,7 +88,7 @@
 | TS-72 | 1 | `buildPlaylistFileName` | 長い名前 | V23 を超える名前 | `.m3u8` を含めて V23 以内 | 単体 | ○ |
 | TS-73 | 1 | `classifyOutcome` | 完了 | `errors` が空 | 完了 | 単体 | ○ |
 | TS-74 | 1 | `classifyOutcome` | 曲単位だけ | E5、E8、E9 のみ。`transferStarted` は真と偽 | ともに一部 | 単体 | ○ |
-| TS-75 | 1 | `classifyOutcome` | 全体のエラーで未転送 | E1、E2、E3、E4 をそれぞれ単独で。`transferStarted` 偽 | いずれも失敗 | 単体 | ○ |
+| TS-75 | 1 | `classifyOutcome` | 全体のエラーで未転送 | E1、E2、E3、E4、E6（`persistentId` なし。P1 の受信中の切断）をそれぞれ単独で。`transferStarted` 偽 | いずれも失敗 | 単体 | ○ |
 | TS-76 | 1 | `classifyOutcome` | 全体のエラーで転送後 | E6 と E5。`transferStarted` 真 | 中断 | 単体 | ○ |
 | TS-77 | 1 | `classifyOutcome` | E7 | E7 のみ。`transferStarted` 偽 | 中断 | 単体 | ○ |
 | TS-78 | 1 | `mayRemove` | 区分ごとの可否 | 完了、一部、中断、失敗 | 完了と一部だけ真 | 単体 | ○ |
@@ -134,7 +134,7 @@
 | TS-125 | 3 | 未登録の端末 | 失敗の応答 | 未登録の device_id と、署名の誤りの要求。未登録で時刻が許容（V12）の外の要求 | 同じ失敗の応答（`detail` の差が無い）。時刻が外の未登録は 401（`clock_skew`。登録済みと同じ） | 単体 | ○ |
 | TS-126 | 3 | nonce の掃除 | 保持の期間 | V12 の 2 倍を過ぎた記録と、過ぎていない記録 | 過ぎたものだけ消える | 単体 | ○ |
 | TS-127 | 3 | nonce の掃除 | 件数の上限 | 上限（引数。試験用に小さくした値を渡す）を超える追加 | 古い順に消える | 単体 | ○ |
-| TS-128 | 3 | 指紋の表示 | 形式 | 既知の SPKI の DER。同じ SPKI から PC と端末の表示を作る | 24 桁の小文字 16 進を 4 桁ずつ空白で区切る。先頭 12 バイトだけ。PC と端末で同じ表示（M1 の同じ関数。X4-4） | 単体 | ○ |
+| TS-128 | 3 | 指紋の表示 | 形式 | 既知の SPKI の DER | 24 桁の小文字 16 進を 4 桁ずつ空白で区切る。先頭 12 バイトだけ | 単体 | ○ |
 | TS-130 | 3 | 暗号の部品 | 公開の試験ベクター | HKDF-SHA256、HMAC-SHA256、SHA-256 の公開の例を、手順（M1）と固定の暗号の実体の組み合わせに通す | 既知の値と一致（実体の既知の値は TD-54、TA-120。review-12） | 単体 | ○ |
 | TS-131 | 1 | `computeDiff` | 未解決のプレイリストがあるとき | 未解決が 1 件以上で `toRemove` が V20 以下の 1 件以上（記録の一部）。未解決が 1 件以上で `toRemove` が 0 件。未解決が 0 件 | 1 件目は `NeedsConfirmation`。`toRemove` は返す。2 件目と 3 件目は `Allowed`（J24。review-13） | 単体 | ○ |
 | TS-132 | 1 | `computeDiff` | `LibraryChanged` と `NeedsConfirmation` の両方 | 記録と違う `manifestLibraryId` かつ `toRemove` が V20 + 1 件 | `LibraryChanged`（X3-2）。`toRemove` は返す | 単体 | ○ |
@@ -149,14 +149,15 @@
 | TS-141 | 3 | P5 | 後の P5 が先の途中状態を破棄 | P5 を 2 回続けて受ける（P6 の前） | 先の途中状態は使われず、後の P5 から進む | 単体 | ○ |
 | TS-142 | 3 | SPAKE2 | w の導出 | 手で作った試料のコードと塩（HKDF 1 段。X4-2-4） | 手で計算した w と一致。RFC 9382 のベクターは w を直接与える範囲で使い、導出の検算に使わない | 単体 | ○ |
 | TS-143 | 1 | `mimeTypeOf` | 固定値・別名・表に無い拡張子 | `m3u8`、`aif` と `aiff`、表に無い小文字の拡張子 | `m3u8` は `audio/x-mpegurl`（J18）。`aif` と `aiff` は同じ値（2 対 1）。表に無いものは無し | 単体 | ○ |
-| TS-145 | 1 | 区分と T3 の `result` | 対応 | 完了、一部、中断、失敗（E3 の事前、E3 の事前以外） | `success`、`partial`、`interrupted`、`failed`。E3 の事前だけ `not_started` | 単体 | ○ |
+| TS-145 | 1 | 区分、T3 の `result`、P4 の `outcome` | 対応 | 完了、一部、中断、失敗（E3 の事前、E3 の事前以外） | T3 の `result` は `success`、`partial`、`interrupted`、`failed`。E3 の事前だけ `not_started`。P4 の `outcome` は 4 値（`success`、`partial`、`interrupted`、`failed`）で、E3 の事前の `not_started` は `failed` に畳む（X3-5 の対応表） | 単体 | ○ |
 | TS-147 | 1 | `breakdown` | E ごとの内訳 | E5 と E8 が混在する `SyncResult` | E ごとの件数と最初の曲名 | 単体 | ○ |
-| TS-149 | 1 | `toReport` | 報告の項目 | 曲名を含む `SyncResult`。E3 の事前で終えた `SyncResult`（`not_started`） | 曲名を含まない 8 項目。`excludedCount` は除外の件数。`not_started` の `outcome` は失敗に畳まれる（X3-5 の対応表） | 単体 | ○ |
+| TS-149 | 1 | `toReport` | 報告の項目 | 曲名を含む `SyncResult` | 曲名を含まない 8 項目。`excludedCount` は除外の件数 | 単体 | ○ |
 | TS-150 | 1 | `isEmpty` | 空の差分 | 全部空、3 つの一覧のうち 1 つだけ 1 件 | 全部空のときだけ真 | 単体 | ○ |
 | TS-152 | 3 | P5・P6 | V4 の間の `pairing_locked` | V2 回の不一致の後、V4 の間と V4 の後の P5・P6（時刻は引数） | V4 の間は P5・P6 とも 403（`pairing_locked`）。V4 の後は 403（`pairing_closed`） | 単体 | ○ |
 | TS-153 | 1 | マニフェストの読み | 必須項目の欠けと型違い（X3-1 の読み込みの手順 3） | `size` が無いトラック、`modified_at` が文字列のトラック | どちらも「壊れた」（理由の文字列つき） | 単体 | ○ |
 | TS-154 | 3 | P6 | コードの期限切れの後 | H2 で V3 ちょうどの P6（MAC_d は合う。時刻は引数） | 403（`pairing_closed`）。端末は登録されない | 単体 | ○ |
 | TS-155 | 3 | SPAKE2 | 端末側の MAC_p の不一致 | PC が返す MAC_p を 1 バイト変える | 端末は K に至らず失敗する（偽の PC を拒否する） | 単体 | ○ |
+| TS-156 | 3 | P5・P6 | 使用済みのコード | P6 の成功の後（H0）で V3 の内の P5、P6（時刻は引数） | どちらも 403（`pairing_closed`）。2 台目は登録されない | 単体 | ○ |
 
 削った ID：TS-15、TS-24、TS-34、TS-37、TS-39、TS-52、TS-55、TS-66、TS-79、TS-88、TS-89、TS-90、TS-94、TS-100、TS-117、TS-129、TS-144、TS-146、TS-148、TS-151（review-13）
 
@@ -186,4 +187,4 @@
 ## 5 食い違い・不足
 
 - review-11 で解消：観点の追加（TS-131〜TS-142）、境界の期待値（V2・V43 は達したら、V3 ちょうどは無効、起動より前は拒否）、nonce の上限は引数、試験ベクターの置き場は :shared
-- review-12 で追加：TS-143〜TS-152（X3-6 の MIME、区分と `result`、結果の関数、V4 の間の `pairing_locked`）。TS-133・TS-134 は関数ごとに分けた。X4-5 の実体の既知の値は TD-54、TA-120
+- review-12 で追加：TS-143〜TS-152（review-13 で一部を削除。X3-6 の MIME、区分と `result`、結果の関数、V4 の間の `pairing_locked`）。TS-133・TS-134 は関数ごとに分けた。X4-5 の実体の既知の値は TD-54、TA-120

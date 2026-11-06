@@ -114,11 +114,11 @@ desktop ──▶ itunes ──▶ shared ◀── android
   <div class="sep">▶</div>
   <div class="step"><b>6 m3u8 を書く</b>端末の索引で MediaStore へ</div>
   <div class="sep">▶</div>
-  <div class="step"><b>7 消す</b>自分が置いた曲だけ。多いときなどは確認あり（F3-10）</div>
+  <div class="step"><b>7 消す</b>自分が置いた曲だけ。多いときなどは確認あり</div>
   <div class="sep">▶</div>
   <div class="step"><b>8 結果の報告（P4）</b>PC の画面に表示</div>
 </div>
-<p class="meta">同期全体の失敗（E1・E2・E3・E4・E6・E7）の後では「消す」を実行しない。自動の同期は、確認が要る扱いのときだけ消さず、通知で知らせる（F3-10）。</p>
+<p class="meta">同期全体の失敗（E1・E2・E3・E4・E6・E7）の後では「消す」を実行しない。自動の同期は、消す件数が多いときなどだけ消さず、通知で知らせる。</p>
 
 <h2>5. API と失敗の種類</h2>
 <p>共通：HTTPS、パスの先頭に <code>/v1</code>。P1〜P4 は署名が要る。</p>
@@ -171,7 +171,7 @@ Music/
   <tr><td class="num">D10</td><td>形式の変換</td><td>最初の版では行わない。変換を PC 側に置く余地だけ残す</td></tr>
   <tr><td class="num">D11</td><td>端末の数</td><td>最初の版は 1 台。端末の識別子の列を持たせ、後で増やせる形にする</td></tr>
   <tr><td class="num">D12</td><td>配布</td><td>最初は GitHub で公開（repo は最初 private、公開前に public）。配布物は Releases。Play ストアは将来</td></tr>
-  <tr><td class="num">D13</td><td>自動起動</td><td>従量制でないネットワークにつながっている間、周期で起動。ペアリング済みの PC に届かなければ何もせず終わる。SSID は見ない（J40）</td></tr>
+  <tr><td class="num">D13</td><td>自動起動</td><td>従量制でないネットワークにつながっている間、周期で起動。ペアリング済みの PC に届かなければ何もせず終わる。SSID は見ない</td></tr>
   <tr><td class="num">D14</td><td>入れ直しの後</td><td>以前に置いた曲を「自分が置いた」と扱わない。消すときだけ利用者の同意の画面を出す</td></tr>
 </table>
 

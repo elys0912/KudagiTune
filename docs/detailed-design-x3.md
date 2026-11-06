@@ -145,7 +145,7 @@
 
 関数 `requiredBytes`：入力は `Diff`。出力は `toAdd` と `toReplace` の `size` の合計（置き換えは新しい `size`。消す分は引かない。B2-5）。空き容量との比較と V11 の余裕の加算は M4（X6-2）。合計は 64 ビットで足し、桁あふれは考えない（曲数 × 数百 MB で足りる）。
 
-差分が空のとき：`toAdd`、`toReplace`、`toRemove` がすべて空。M1 は `Diff` が空かの判定 `isEmpty` を持つ。差分が空で、`content_digest` が前回の完了と同じなら、m3u8 の書き出しと消す処理を省き、T3 だけ記録する（手動も同じ。N2-5、J37）。この判断は M4（X6-3）。
+差分が空のとき：`toAdd`、`toReplace`、`toRemove` がすべて空。M1 は `Diff` が空かの判定 `isEmpty` を持つ。差分が空で、前回の完了した同期（`content_digest` が NULL でない最新の T3 の行）が `success` であり、かつ `content_digest` がその行と同じなら、m3u8 の書き出しと消す処理を省き、T3 だけ記録する（手動も同じ。N2-5、J37）。この判断は M4（X6-3）。
 
 ### X3-3 保存先のパスの関数
 
@@ -239,7 +239,7 @@
 1. `name` を `sanitizeElement`（代わりは `Untitled`）にかけ、ステムを作る。ステムの上限は V23 から `.m3u8` の 5 バイトを引いた値
 2. 手順 1 の結果が同じ（大文字小文字を区別しない比較。X3-3 の手順 1 と同じ）になるプレイリストが 2 つ以上ある、または元の `name` が空（手順 1 で代わりの文字列になった）なら、そのプレイリストのすべてに ` [` ＋ プレイリストの `persistent_id` の先頭の V24 文字 ＋ `]` を足す。足すときのステムは、接尾辞の分を引いた上限で作り直す
 3. 接尾辞を足した後でも同じファイル名（同じく大文字小文字を区別しない）が残るときは、X3-3 の手順 6 と同じく接尾辞を全文にする
-4. 同期のたびに、選んだ全プレイリストを入力にする（F4-4）。名前の変更で m3u8 のファイル名が変わったときの古いファイルの削除は M4（X6）
+4. m3u8 を書くと決めたとき（省略は X6-3、J37）、選んだ全プレイリストを入力にする（F4-4）。名前の変更で m3u8 のファイル名が変わったときの古いファイルの削除は M4（X6）
 - 同じ名前の一方が選択から外れると、残る側の接尾辞が消えてファイル名が変わる。B3-3 の文言のとおりで、利用者の見える害は m3u8 が 1 回作り直されるだけ（J21（a））
 
 ### X3-5 エラーの型 E1〜E9 と結果の型
@@ -263,7 +263,7 @@
 - 範囲（同期全体か曲単位か）は型が持つ関数 `scope` で返す。値は E ごとに固定
 - 曲名は結果の表示（B2-8 の失敗の内訳）に使うので、曲単位の E は `name` を持つ。パスは持たない（N1-6）
 - 「版が合わない」と「壊れたマニフェスト」（X3-1）は E に含めない（J21（a））
-- E1 は到達確認で接続先の全部がだめなときだけ。P1 の受信中の切断（曲の指定が無いので E6 の `persistentId` は無し）と、同期の開始後（P1 の後）の接続の確立の失敗は E6 とし、V10 の回数で再試行する（B2-6、X6-5）
+- E1 は到達確認で接続先の全部がだめなときだけ。P1 の受信中の切断（曲の指定が無いので E6 の `persistentId` は無し）と、P3 の後の接続の確立の失敗は E6 とし、V10 の回数で再試行する（B2-6、X6-5）
 
 結果（`SyncResult`。M4 が作って保存し、B2-8 の項目に対応する）：
 
@@ -274,7 +274,7 @@
 | `transport` | LAN、Tailscale、USB テザリング | 接続の方式 |
 | `outcome` | 完了、一部、中断、失敗 | 下の関数で決める |
 | `hasMore` | 真偽 | 続きあり |
-| `counts` | `Counts`（足す、置き換える、消す、変更なしの予定と完了の各件数。項目は下の表） | B2-5 |
+| `counts` | `Counts`（足す、置き換える、消すの予定と完了、変更なしの件数（1 つ）。項目は下の表） | B2-5 |
 | `capacity` | `Capacity`（差分の合計バイト、転送したバイト、前後の空き容量。項目は下の表） | N2-4 |
 | `errors` | `SyncError` の並び | 失敗の内訳の元 |
 | `excluded` | `ExcludedTrack` の並び | マニフェストの写し |
@@ -282,8 +282,10 @@
 | `libraryId`、`contentDigest` | 文字列 | 次回の判定（B2-5、B2-7） |
 | `unresolvedPlaylists` | 名前の並び | マニフェストの写し |
 | `duplicatesDropped` | 整数 | X3-1 の読み込みの手順 4 で落とした件数 |
-| `removalSkipped` | 真偽 | 「消す」を飛ばしたとき真。自動が確認の扱いで飛ばしたとき（J9）と、手動で承認した件数を再計算の件数が超えて飛ばしたときに立てる。S4 の案内の条件。T3 の `result_json` に入る |
-| `keyMismatch` | 真偽、任意 | `errors` に E2 を含むときだけ持つ（無ければ空）。`detail` なしの 401 と証明書の固定の不一致は真。`clock_skew`・`replay`・429 の E2 は偽（J35）。自動の抑止（X6-3 の 2 の 1 の (b)）の判別用。T3 の `result_json` に入り、キーは `key_mismatch`（X6-1）。P4 には載せない |
+| `removalSkipped` | 真偽 | 「消す」を飛ばしたとき真。自動が確認の扱いで飛ばしたとき（J9）と、手動で承認した件数を再計算の件数が超えて飛ばしたとき、確認の取り消しで飛ばしたとき（J26）に立てる。S4 の案内の条件。T3 の `result_json` に入る |
+| `keyMismatch` | 真偽、任意 | `errors` に E2 を含むときだけ持つ（無ければ空）。`detail` なしの 401 と証明書の固定の不一致は真。`clock_skew`・`replay`・429 の E2 は偽（J35）。E2 の `cause` からは導かず、M4 が HTTP の応答から決める（X6 の表のとおり）。`cause` は 3 値のまま変えない。自動の抑止（X6-3 の 2 の 1 の (b)）の判別用。T3 の `result_json` に入り、キーは `key_mismatch`（X6-1）。P4 には載せない |
+
+- `SyncResult` を T3 の `result_json` にするときの JSON のキーは、項目名の `snake_case`（`removalSkipped`＝`removal_skipped`、`keyMismatch`＝`key_mismatch`。X3-1 の規則）
 
 `Counts`（すべて整数（32）。マニフェストを取れなかった実行は全項目 0。X6-3 の 2 の 3）：
 
@@ -302,7 +304,7 @@
 | `bytesTransferred` | `bytes_transferred` | 整数（64） | 転送したバイト。T3 の同名の列（X6-1） |
 | `freeBytesBefore`、`freeBytesAfter` | `free_bytes_before`、`free_bytes_after` | 整数（64）、任意 | 同期の前後の空き容量。測れなかったときは無し（0 を空の意味に使わない。X3-1） |
 
-- `reach_failed` は `SyncResult` の項目ではない。手動の同期で、画面側の到達確認が全部の接続先で届かなかったことを `SyncWorker` に渡す入力データ（X6-3 の入口の表、手順 6 の 1）で、T3 にも P4 にも載せない
+- `reach_failed` は `SyncResult` の項目ではない。手動の同期で、画面側の到達確認で全部の接続先が応えず、証明書の不一致が 1 つも無かったこと（不一致が 1 つでもあれば `reach_failed` を付けず、E2 になる。J36）を `SyncWorker` に渡す入力データ（X6-3 の入口の表、手順 6 の 1）で、T3 にも P4 にも載せない
 - 失敗の内訳（E の番号ごとの件数と最初の曲名）は `errors` から作る関数 `breakdown` で出す。結果に別の項目として持たない（二重の持ち方を避ける）
 - 画面に出す件数の上限（V21）の適用は M4（B3-6）
 - `UnplayableTrack` の `unsupported_format`（規則 2）は端末の再生能力の判定（B3）で付ける。M1 は型だけを持つ。`protected` は X3-2 の `unplayable` から作る関数 `toUnplayable` で写す
@@ -320,7 +322,7 @@
 2. `errors` がすべて曲単位（E5、E8、E9）なら「一部」
 3. 同期全体の E（E1、E2、E3、E4、E6、E7）を 1 つでも含む場合：`transferStarted` が偽なら「失敗」、真なら「中断」
 4. ただし E7 を含むときは `transferStarted` に関わらず「中断」
-- 結果の値の対応表。区分（M1 の `outcome`）を、M4 が T3 に保存するとき（X6-3）と P4 で報告するとき（X5-1）に写す。T3 の `result` は 5 値、P4 の `outcome` は 4 値で、`not_started` は失敗に畳む。画面の語は、S1・S4 が 5 値、W3 が 4 値（W3 は未開始を失敗として出す）：
+- 結果の値の対応表。区分（M1 の `outcome`）を、T3 に保存するとき（X6-3）と P4 で報告するとき（X5-1）に写す。T3 の `result` は 5 値、P4 の `outcome` は 4 値で、`not_started` は失敗に畳む。T3 の `result` への写しは M4（X6-3）が行い、P4 の `outcome` への畳みは `toReport`（M1）が行う。画面の語は、S1・S4 が 5 値、W3 が 4 値（W3 は未開始を失敗として出す）：
 
 | 区分（M1 の `outcome`） | T3 の `result`（5 値） | P4 の `outcome`（4 値） | S1・S4 の語（5 値） | W3 の語（4 値） |
 |---|---|---|---|---|
@@ -338,7 +340,7 @@ PC への報告（P4 の本文の元。`SyncReport`）。項目は次の 8 つ�
 | 項目 | 型 | 意味 |
 |---|---|---|
 | `startedAt`、`finishedAt` | 日時 | `SyncResult` と同じ |
-| `outcome` | 完了、一部、中断、失敗 | `SyncResult` と同じ |
+| `outcome` | 完了、一部、中断、失敗 | `SyncResult` と同じ。T3 の `not_started`（E3 の事前）は失敗に畳む |
 | `hasMore` | 真偽 | `SyncResult` と同じ |
 | `counts` | `Counts` | `SyncResult` と同じ |
 | `capacity` | `Capacity` | `SyncResult` と同じ |
@@ -363,8 +365,8 @@ PC への報告（P4 の本文の元。`SyncReport`）。項目は次の 8 つ�
 | 候補の文字列 | `album_artist` あり・なし・空白のみ、`artist` のみ、すべて空（`Unknown Artist`、`Unknown Album`、`Untitled`）。拡張子が空 |
 | m3u8 | `#EXTM3U` の行と LF。空のプレイリスト。置けていない曲を飛ばす。同じ曲の重複。BOM と CR を含まない。日本語と記号を含むパス。先頭が `#` のパスが出ない（`sanitizeElement` の手順 6。フォルダ名・ファイル名が `#` で始まる入力を含む）。U+0085、U+2028、U+2029 が削除される（`sanitizeElement` の手順 2。行の区切りがパスに残らないことを m3u8 の出力で確かめる） |
 | プレイリストのファイル名 | 同名の 2 件に接尾辞、大文字小文字だけ違う 2 件に接尾辞、空の名前、接尾辞後の再衝突、長い名前の切り詰め（`.m3u8` を含めて V23 以内） |
-| 区分 | `classifyOutcome` の 4 種と境界（E7 だけ、曲単位だけ、同期全体の E（E1〜E4 の 4 通り）＋ `transferStarted` の真偽、`userInterrupted` が真で `errors` が空）。区分から T3 の `result` と P4 の `outcome` への対応（E3 の事前だけ `not_started`。P4 では `failed`）。`mayRemove` |
-| 結果の関数 | `hasMore`（中断で未完了が残るときだけ真）。`breakdown`（E の番号ごとの件数と最初の曲名）。`toReport`（8 項目、曲名を含めない、`excludedCount`） |
+| 区分 | `classifyOutcome` の 4 種と境界（E7 だけ、曲単位だけ、同期全体の E（E1〜E4、E6 の 5 通り。E6 は `persistentId` なしを含む）＋ `transferStarted` の真偽、`userInterrupted` が真で `errors` が空）。区分から T3 の `result` と P4 の `outcome` への対応（E3 の事前だけ `not_started`。P4 では `failed`）。`mayRemove` |
+| 結果の関数 | `hasMore`（中断で未完了が残るときだけ真）。`breakdown`（E の番号ごとの件数と最初の曲名）。`toReport`（8 項目、曲名を含めない、`excludedCount`、`outcome` の畳み） |
 | MIME | `m3u8` は `audio/x-mpegurl`（固定。J18）。`aif` と `aiff` は同じ値（2 対 1）。表に無い拡張子は無し。表の全件の値は検算しない（定数表の写しになるため。実在の値は実機で確かめる） |
 
 - 試料はすべて合成データ。実在の曲名、パスを使わない
