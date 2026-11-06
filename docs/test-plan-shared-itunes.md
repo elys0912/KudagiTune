@@ -48,7 +48,7 @@
 | TS-24 | 1 | `computeDiff` | `SyncRecord` が空 | 記録なし、曲 3 件 | 3 件とも `toAdd`。`toRemove` は空 | 単体 | ○ |
 | TS-25 | 1 | `computeDiff` | ファイルが無く、マニフェストにも無い記録 | `presentIds` に無く入力の曲にも無い記録 | `toRemove` に入る | 単体 | ○ |
 | TS-26 | 1 | `computeDiff` | `recordedLibraryId` が null | null と任意の `manifestLibraryId` | `removalGate` は `Allowed` | 単体 | ○ |
-| TS-27 | 1 | `computeDiff` | `recordedLibraryId` が違う | 記録と違う `manifestLibraryId`、消す対象あり | `LibraryChanged`。`toRemove` は計算して返す（J25。2026-11-06） | 単体 | ○ |
+| TS-27 | 1 | `computeDiff` | `recordedLibraryId` が違う | 記録と違う `manifestLibraryId`。消す対象あり／消す対象が 0 件 | `LibraryChanged`。`toRemove` は計算して返す。`toRemove` が 0 件なら `Allowed`（J25、B2-5。2026-11-06） | 単体 | ○ |
 | TS-28 | 1 | `computeDiff` | 消す件数が V20 と同じ | `toRemove` が V20 件で、記録の一部 | `Allowed` | 単体 | ○ |
 | TS-29 | 1 | `computeDiff` | 消す件数が V20 を超える | `toRemove` が V20 + 1 件で、記録の一部 | `NeedsConfirmation`。`toRemove` は返す | 単体 | ○ |
 | TS-30 | 1 | `computeDiff` | 全部を消す | 記録が V20 以下の件数で、全部が `toRemove` | `NeedsConfirmation` | 単体 | ○ |
