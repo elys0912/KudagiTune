@@ -1,7 +1,7 @@
 # playlist-sync-fox 詳細設計 X7 android の画面と権限（M4）
 
 - 索引：detailed-design.md（X1）
-- 稿：第 2 稿（2026-11-05。review-05 を反映）
+- 稿：第 3 稿（2026-11-06。実物の確認（B2）と土台を反映）
 - 参照：basic-design-b3.md（B3-4、B3-5、B3-6、B3-7）、basic-design-b4a.md（B4-1）、basic-design-b4b.md（B4-6 の端末）、detailed-design-x4.md、detailed-design-x6.md
 
 ## X7 android の画面と権限（M4）
@@ -275,8 +275,9 @@ B3-7 を、マニフェストの宣言と実行時の要求に分ける。
 | `CHANGE_WIFI_MULTICAST_STATE` | する | 常に（通常の権限。X7-2-1 の `MulticastLock` のため。基本設計の直し 4） |
 | `SystemForegroundService`（`service` 要素の上書き） | する | `tools:node="merge"`、`foregroundServiceType="dataSync"`。targetSdk 34 以上で長い処理の Worker に必要（facts-android 1-5。`dataSync` を書く例は文書に無い） |
 
+- minSdk は 30（土台）。Android 11・12 が範囲に入るので `READ_EXTERNAL_STORAGE` の宣言は要る
 - 前面サービスの種別（`dataSync`）の宣言は上の `SystemForegroundService` の上書きの行に置く。X6-4 は X7-4-1 を参照する
-- `ACCESS_LOCAL_NETWORK` は Android 17 以降で targetSdk 37 以上のときだけ実行時権限が必須（NsdManager も対象。facts-android 7-2）。最初の版の targetSdk は 36 以下（J21）で、`INTERNET` で暗黙に許可されるため宣言しない
+- `ACCESS_LOCAL_NETWORK` は Android 17 以降で targetSdk 37 以上のときだけ実行時権限が必須（NsdManager も対象。facts-android 7-2）。最初の版の targetSdk は 36 以下（J21）で、土台は targetSdk 36（`gradle/libs.versions.toml`、2026-11-06）。`INTERNET` で暗黙に許可されるため宣言しない
 - 宣言しない権限は B3-7 の「求めない権限」の表のとおり（`WRITE_EXTERNAL_STORAGE`、`MANAGE_EXTERNAL_STORAGE`、`MANAGE_MEDIA`、位置情報、`ACCESS_WIFI_STATE`、`RECEIVE_BOOT_COMPLETED`）
 
 #### X7-4-2 実行時の要求
@@ -356,6 +357,8 @@ B3-7 を、マニフェストの宣言と実行時の要求に分ける。
 | NSD | 同一 LAN での発見、`pair=1` の絞り込み、テザリングのリンクでの発見の可否、`MulticastLock` の取得と放し（`CHANGE_WIFI_MULTICAST_STATE`） | 実機 |
 | 通知 | 拒否時の前面サービスの通知がタスクマネージャーに出ること、自動の起動での静かな通知 | 実機 |
 | 容量不足 | S3 と通知に `ACTION_MANAGE_STORAGE` の案内が出る | 実機 |
+
+- 実機は Android 14 の端末（B4-8）。13 以降の権限の経路は確かめられる。12 以下の経路（`READ_EXTERNAL_STORAGE`）は端末が無く未確認のまま
 
 ### X7 の決定（未付番）
 

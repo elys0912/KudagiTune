@@ -1,7 +1,7 @@
 # playlist-sync-fox 詳細設計 X6 android の保存と同期（M4）
 
 - 索引：[detailed-design.md](detailed-design.md)（X1）
-- 稿：第 2 稿（2026-11-05。review-05 を反映）
+- 稿：第 3 稿（2026-11-06。実物の確認（B2）と土台を反映）
 - 参照：他の X は [x2](detailed-design-x2.md)、[x3](detailed-design-x3.md)、[x4](detailed-design-x4.md)、[x5](detailed-design-x5.md)、[x7](detailed-design-x7.md)。基本設計は [basic-design.md](basic-design.md)（B1-1、B1-3、B1-7）、[basic-design-b2.md](basic-design-b2.md)（B2-6、B2-7）、[basic-design-b3.md](basic-design-b3.md)（B3-2〜B3-5）、[basic-design-b4a.md](basic-design-b4a.md)（B4-3 の K3・K4、B4-4 の端末側）
 
 ## X6 android の保存と同期
@@ -223,9 +223,10 @@ T7 `app_settings`：主キー `key`、`value` は必須。既知の `key` は `a
 | 再起動後 | WorkManager が登録を保つ（アプリ側の受信は要らない。未確認） | 該当しない |
 
 - 周期の間隔の最小は WorkManager の下限（15 分。確認済み）より V15 が長いので、下限は問題にならない
+- 最初の版の土台は targetSdk 36、compileSdk 37、minSdk 30（2026-11-06、#3）。下の条件はすべて当たる
 - 前面サービスの種別：targetSdk 34 以上では、長い処理の Worker に前面サービスの種別が要る。`SystemForegroundService` の上書き（`dataSync`）は X7-4-1 に書く。`dataSync` を書く例は文書に無い（確かめた事実の 1-5）
-- Android 16 以降の注：長い処理の Worker（前面サービス）がジョブの割り当て時間を使い切ることがある（確かめた事実の 1-6）。C-10 の表で確かめ、必要なら前面サービスの直接起動へ替える（基本設計の直し 18）
-- Android 15 以降（targetSdk 35 以上）の `dataSync` には実行時間の制限がある。制限の時間は取得しておらず未確認（確かめた事実の 1-7）
+- Android 16 以降の注：長い処理の Worker（前面サービス）がジョブの割り当て時間を使い切ることがある（確かめた事実の 1-6）。C-10 の表で確かめ、必要なら前面サービスの直接起動へ替える（基本設計の直し 18）。C-10 は今後対応。実装（前面サービスの直接起動へ替える余地）は最初の版に入れる（B4-8）
+- Android 15 以降（targetSdk 35 以上）の `dataSync` には実行時間の制限がある。制限の時間は取得しておらず未確認（確かめた事実の 1-7）。C-6 は今後対応（B4-8）
 - 手動と自動の排他（B2-7）：
   1. 手動の開始時に `auto-sync` が実行中なら、新しい仕事を作らず、実行中のものを画面に出す
   2. 自動の開始時に `manual-sync` が実行中か待機中なら、何もせず終える
@@ -310,7 +311,7 @@ T7 `app_settings`：主キー `key`、`value` は必須。既知の `key` は `a
 | HTTP クライアント | 単体（偽のサーバー） | SPKI が一致しないと切断。206 の `Content-Range` の不一致、200 への変化、409・416・401 の扱い。署名ヘッダの付与と、再開ごとの nonce の更新 |
 | 鍵の保管 | 実機 | Keystore への HMAC の取り込みと署名。別名の削除。別名が無いときの動作（C-12 へ） |
 | WorkManager の登録 | 薄い統合（WorkManager の試験用の部品） | 一意な名前の重複、解除、手動と自動の排他、V19 の抑止 |
-| 実機の表へ送るもの | C-n | `"wa"`（C-12）、`Files` への insert と索引（C-2）、`setForeground` と `dataSync`・割り当て時間（C-10）、OkHttp での信頼の判定の差し込み（C-11）、時間切れの通知の受け方、`getAllocatableBytes` の精度、`RELATIVE_PATH` の改変 |
+| 実機の表へ送るもの | C-n | 最初の実機確認は Android 14 の端末（B4-8）。C-6・C-10 は今後対応。`"wa"`（C-12）、`Files` への insert と索引（C-2）、`setForeground` と `dataSync`・割り当て時間（C-10）、OkHttp での信頼の判定の差し込み（C-11）、時間切れの通知の受け方、`getAllocatableBytes` の精度、`RELATIVE_PATH` の改変 |
 
 - 差し替えの導入は、M1 の純粋な関数（差分、パスの計算、m3u8）を試験の中心にする方針（B1-3）を崩さない範囲にとどめる。M4 の試験は、手順の順序と失敗後の状態に限る
 

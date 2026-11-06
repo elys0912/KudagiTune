@@ -1,7 +1,7 @@
 # playlist-sync-fox 詳細設計 X5 desktop（M3）
 
 - 索引：[detailed-design.md](detailed-design.md)（X1）
-- 稿：第 2 稿（2026-11-05。review-05 を反映）
+- 稿：第 3 稿（2026-11-06。実物の確認（B2）と土台を反映）
 - 参照：[detailed-design-x2.md](detailed-design-x2.md)、[detailed-design-x3.md](detailed-design-x3.md)、[detailed-design-x4.md](detailed-design-x4.md)、[detailed-design-x6.md](detailed-design-x6.md)、[detailed-design-x7.md](detailed-design-x7.md)。引き受ける基本設計は [basic-design-b4a.md](basic-design-b4a.md)（B4-1 の 1、B4-3 の 2、B4-4 の 1〜5・8）と [basic-design-b4b.md](basic-design-b4b.md)（B4-5、B4-6 の PC）
 
 ## X5 desktop
@@ -163,7 +163,7 @@ JSON の中身（暗号化の前）
 | 項目 | 型 | 必須 | 意味 |
 |---|---|---|---|
 | `schema_version` | 整数 | 要 | 設定の形の版。最初は 1 |
-| `xml_path` | 文字列 | 任意 | iTunes ライブラリ XML のパス（W5）。無いとき（初回）は既定の候補（`%USERPROFILE%\Music\iTunes\iTunes Music Library.xml`）を試し、読めなければ W5 で指定を促す。既定の場所は Apple の文書に無い（facts-jvm 1i） |
+| `xml_path` | 文字列 | 任意 | iTunes ライブラリ XML のパス（W5）。無いとき（初回）は既定の候補（`%USERPROFILE%\Music\iTunes\iTunes Music Library.xml`）を試し、読めなければ W5 で指定を促す。既定の場所は Apple の文書に無い（facts-jvm 1i）。実物（iTunes 12.13.7.1、Windows 11）はこの場所だった（2026-11-06 の実物の確認。B2）。ほかの版と OS は未確認 |
 | `selected_playlist_ids` | 文字列の配列 | 要 | 選択した葉のプレイリストの Persistent ID（W2） |
 | `stale_days` | 整数 | 要 | 古いと警告する日数。0 で警告しない（既定 V5） |
 | `launch_on_login` | 真偽 | 要 | ログイン時に起動（既定は有効） |
@@ -307,7 +307,7 @@ JSON の中身（暗号化の前）
 2. ログを初期化する
 3. 設定を読み込む（X5-4）
 4. 鍵を読み込む（`SecretStore`。X5-2。失敗なら X5-2 の扱い）
-5. XML の監視を始める（M2 の WatchService 側、X2-4）。読み取りの結果は「PC の状態」に流す
+5. XML の監視を始める（M3 の `desktop.watch`。X2-4）。読み取りの結果は「PC の状態」に流す
 6. サーバーを起動する（X5-1）。ポートの使用中は警告を出して続行（サーバーは止まった状態）
 7. mDNS の広告を登録する（X5-3）
 8. トレイに入る。初回の印があれば W4 を開く
@@ -398,7 +398,7 @@ B4-5 の W4 の MagicDNS 名は取得方法が未確認のまま（J21 の暫定
 
 | 行 | 事実 | 出典の名 | 取得日 |
 |---|---|---|---|
-| 1i | iTunes の XML の既定の場所 `%USERPROFILE%\Music\iTunes\iTunes Music Library.xml` は Apple の文書に無い。iTunes Media フォルダーの初期の場所は「Music\iTunes」（XML の場所ではない） | Apple サポート「iTunes for Windows の詳細設定」 | 2026-11-05 |
+| 1i | iTunes の XML の既定の場所 `%USERPROFILE%\Music\iTunes\iTunes Music Library.xml` は Apple の文書に無い。iTunes Media フォルダーの初期の場所は「Music\iTunes」（XML の場所ではない）。実物（iTunes 12.13.7.1、Windows 11）はこの場所だった（2026-11-06 の実物の確認。B2）。ほかの版と OS は未確認 | Apple サポート「iTunes for Windows の詳細設定」 | 2026-11-05 |
 | 1j | 英語版の設定名は「Share iTunes Library XML with other applications」。Edit > Preferences > Advanced にある。既定の状態は Apple の文書に無い | Apple サポート「Change Advanced preferences in iTunes on PC」 | 2026-11-05 |
 | 5a | JNA 5.14.0 の Advapi32 の Javadoc の一覧に CredRead・CredWrite・CredDelete は無い。別のクラスにある可能性は未確認 | JNA 5.14.0 Javadoc | 2026-11-05 |
 | 5b | `CredentialBlobSize` は 2560 バイト（5*512）を超えられない。TargetName の上限は 32767 文字 | Microsoft Learn「CREDENTIALW」 | 2026-11-05 |

@@ -1,9 +1,9 @@
 # playlist-sync-fox 開発者向け説明書
 
-対象の版：最初の版（2026-11-05 の設計）
+対象の版：最初の版（2026-11-05 の設計、土台は 2026-11-06）
 この説明書は設計を元に書いた。実機での確認は未。
 
-repo を作るときは `docs/` へ移す。設計の版が進んだら、ここも合わせて直す。
+設計の版が進んだら、ここも合わせて直す。
 
 ## 1. repo の構成
 
@@ -67,17 +67,17 @@ desktop ──▶ itunes ──▶ shared ◀── android
 | もの | 内容 |
 |---|---|
 | JDK | 定義ファイルで版を固定する（版は repo の定義が正。ここには書かない） |
-| Android SDK | 同上。android モジュールのビルドに要る |
+| Android SDK | 同上。全モジュールの構成に要る（shared が Android の対象を持つため。desktop だけの作業でも要る） |
 | Gradle | repo の wrapper（`gradlew`）を使う。手元に Gradle を入れない |
 | Windows | desktop の配布物（zip）は Windows の実行環境で作る。実行も Windows |
-| 実機 | Android 11 以降の端末。実機の確認の表を埋めるのに要る |
+| 実機 | Android 11 以降の端末。実機の確認の表を埋めるのに要る。最初の実機確認は Android 14 の端末。C-6・C-10 は 15・16 の端末を用意してから |
 
 - Kotlin、Ktor、Compose の版は version catalog の 1 か所で持つ
 - iOS など、他の対象は足さない
 
 ## 3. ビルドと実行
 
-コマンドはプロジェクト名を指定して実行する（実機で未確認）。
+コマンドはプロジェクト名を指定して実行する。2 と 4 は CI で確認済み（2026-11-06）。1 は未確認。手元では Android SDK が要る。
 
 1. desktop を実行する：`./gradlew :desktop:run`
 2. android のデバッグビルドを作る：`./gradlew :android:assembleDebug`
@@ -107,7 +107,7 @@ desktop ──▶ itunes ──▶ shared ◀── android
 
 - 実機でしか確かめられない項目は、C-1〜C-12 の表にまとめる
 - 表は repo の `docs/` に別ファイルとして置く。各項目に結果と日付を記録する
-- 項目の概要は次のとおり。状態はいずれも設計の時点のもの
+- 項目の概要は次のとおり。状態はいずれも設計の時点のもの。C-6・C-10 は今後対応（Android 14 で確認するため）
 
 | 番号 | 確かめること |
 |---|---|
@@ -130,8 +130,8 @@ GitHub Actions で動かす。細部は変わりうる。
 
 | 契機 | 内容 |
 |---|---|
-| プルリクエストと main への push | 全モジュールのコンパイル、shared と itunes と desktop のテスト、依存の向きの検査、android のデバッグビルド |
-| タグの push | android のリリースビルド（署名つき APK）、desktop の zip、下書きの Release の作成と配布物の添付 |
+| プルリクエストと main への push | ubuntu の環境に JDK 25 と Android SDK を用意し、`./gradlew build :android:assembleDebug`（全モジュールのコンパイルとテスト、android のデバッグビルド）、依存の向きの検査 |
+| タグの push | android のリリースビルド（署名つき APK）、desktop の zip、下書きの Release の作成と配布物の添付（未実装） |
 
 - APK の署名の鍵と資格情報は GitHub の Secrets に置き、環境変数で渡す。ログに出さない
 - Secrets の名前は未定
