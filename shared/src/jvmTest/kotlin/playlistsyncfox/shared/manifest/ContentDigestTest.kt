@@ -1,24 +1,18 @@
 package playlistsyncfox.shared.manifest
 
-import playlistsyncfox.shared.crypto.CryptoProvider
+import playlistsyncfox.shared.crypto.TestCrypto
 import playlistsyncfox.shared.playlist
 import playlistsyncfox.shared.sampleManifest
 import playlistsyncfox.shared.track
-import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
-
-// content_digest は実体の SHA-256 の値まで確かめるため、JVM の標準の実体を渡す
-private object Sha256Crypto : CryptoProvider {
-    override fun sha256(input: ByteArray): ByteArray = MessageDigest.getInstance("SHA-256").digest(input)
-}
 
 class ContentDigestTest {
     private val idA = "A000000000000001"
     private val idB = "B000000000000002"
 
-    private fun digest(manifest: Manifest) = computeContentDigest(Sha256Crypto, manifest)
+    private fun digest(manifest: Manifest) = computeContentDigest(TestCrypto(), manifest)
 
     @Test
     fun `TS-08 手で作った試料の指紋は別に計算した固定の値と一致する`() {
