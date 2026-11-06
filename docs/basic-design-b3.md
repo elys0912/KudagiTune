@@ -245,7 +245,7 @@ T3 `sync_runs`（S1 の最後の同期、S4 の結果、F6-2）：
 | `trigger` | text | `manual`、`auto`（時間の上限の後の続きは専用の値を持たず、次の同期として扱う。B3-5。review-05 の基本設計の直し 5） |
 | `started_at` | integer | 開始 |
 | `ended_at` | integer? | 終了。実行中は空。強制終了の跡は次の同期の始めに `started_at` と同じ値で閉じる（X6-3） |
-| `result` | text | `success`（完了）、`partial`（一部失敗）、`interrupted`（中断。時間の上限、利用者の中断、E なしの停止の転送後）、`failed`（失敗）、`not_started`（未開始。容量不足で、始める前に止まった。E3）。画面の語との対応は X3-5 の表（S1・S4 は 5 値、PC の W3 は P4 の 4 値で `not_started` は失敗に畳む） |
+| `result` | text | `success`（完了）、`partial`（一部失敗）、`interrupted`（中断。時間の上限、利用者の中断、同期全体の E と E なしの停止で転送の後に止まったもの。区分は X3-5）、`failed`（失敗）、`not_started`（未開始。容量不足で、始める前に止まった。E3）。画面の語との対応は X3-5 の表（S1・S4 は 5 値、PC の W3 は P4 の 4 値で `not_started` は失敗に畳む） |
 | `error_kind` | text? | B2 の E の番号（F6-2 の原因の種類）。主な 1 つ |
 | `added`、`replaced`、`removed`、`failed` | integer | 件数 |
 | `bytes_transferred` | integer | 転送したバイト数 |
