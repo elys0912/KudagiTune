@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Room のデータベースを機器間の移行とクラウドの復元から外す。移行先で T1 が戻ると、持ち主でないファイルを自分のものとみなす（X6-1） -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="database" path="." />
+    </device-transfer>
+</data-extraction-rules>

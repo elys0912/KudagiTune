@@ -1,0 +1,498 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "6d74664328447e09e1dd04ee337e9131",
+    "entities": [
+      {
+        "tableName": "placed_tracks",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`device_id` TEXT NOT NULL, `persistent_id` TEXT NOT NULL, `relative_path` TEXT NOT NULL, `media_uri` TEXT NOT NULL, `source_size` INTEGER NOT NULL, `source_modified` INTEGER NOT NULL, `local_size` INTEGER NOT NULL, `state` TEXT NOT NULL, `placed_at` INTEGER NOT NULL, PRIMARY KEY(`device_id`, `persistent_id`))",
+        "fields": [
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "persistentId",
+            "columnName": "persistent_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "relativePath",
+            "columnName": "relative_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaUri",
+            "columnName": "media_uri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceSize",
+            "columnName": "source_size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceModified",
+            "columnName": "source_modified",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localSize",
+            "columnName": "local_size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "placedAt",
+            "columnName": "placed_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "device_id",
+            "persistent_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_placed_tracks_device_id_relative_path",
+            "unique": true,
+            "columnNames": [
+              "device_id",
+              "relative_path"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_placed_tracks_device_id_relative_path` ON `${TABLE_NAME}` (`device_id`, `relative_path`)"
+          }
+        ]
+      },
+      {
+        "tableName": "playlists",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`device_id` TEXT NOT NULL, `playlist_id` TEXT NOT NULL, `name` TEXT NOT NULL, `relative_path` TEXT NOT NULL, `media_uri` TEXT NOT NULL, `track_count` INTEGER NOT NULL, `written_at` INTEGER NOT NULL, PRIMARY KEY(`device_id`, `playlist_id`))",
+        "fields": [
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playlistId",
+            "columnName": "playlist_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "relativePath",
+            "columnName": "relative_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaUri",
+            "columnName": "media_uri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trackCount",
+            "columnName": "track_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "writtenAt",
+            "columnName": "written_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "device_id",
+            "playlist_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_playlists_device_id_relative_path",
+            "unique": true,
+            "columnNames": [
+              "device_id",
+              "relative_path"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_playlists_device_id_relative_path` ON `${TABLE_NAME}` (`device_id`, `relative_path`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sync_runs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`run_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `device_id` TEXT NOT NULL, `trigger` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, `result` TEXT NOT NULL, `error_kind` TEXT, `added` INTEGER NOT NULL, `replaced` INTEGER NOT NULL, `removed` INTEGER NOT NULL, `failed` INTEGER NOT NULL, `bytes_transferred` INTEGER NOT NULL, `reported` INTEGER NOT NULL, `library_id` TEXT, `content_digest` TEXT, `result_json` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "runId",
+            "columnName": "run_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trigger",
+            "columnName": "trigger",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "started_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAt",
+            "columnName": "ended_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "result",
+            "columnName": "result",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "errorKind",
+            "columnName": "error_kind",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "added",
+            "columnName": "added",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "replaced",
+            "columnName": "replaced",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "removed",
+            "columnName": "removed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "failed",
+            "columnName": "failed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bytesTransferred",
+            "columnName": "bytes_transferred",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reported",
+            "columnName": "reported",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "libraryId",
+            "columnName": "library_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "contentDigest",
+            "columnName": "content_digest",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultJson",
+            "columnName": "result_json",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "run_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sync_runs_started_at",
+            "unique": false,
+            "columnNames": [
+              "started_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sync_runs_started_at` ON `${TABLE_NAME}` (`started_at`)"
+          }
+        ]
+      },
+      {
+        "tableName": "pairing",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`device_id` TEXT NOT NULL, `pc_id` TEXT NOT NULL, `pc_name` TEXT NOT NULL, `endpoint_lan` TEXT, `endpoint_tailscale` TEXT, `endpoint_usb` TEXT, `last_endpoint` TEXT, `spki_hash` TEXT NOT NULL, `key_alias` TEXT NOT NULL, `paired_at` INTEGER NOT NULL, PRIMARY KEY(`device_id`))",
+        "fields": [
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pcId",
+            "columnName": "pc_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pcName",
+            "columnName": "pc_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endpointLan",
+            "columnName": "endpoint_lan",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "endpointTailscale",
+            "columnName": "endpoint_tailscale",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "endpointUsb",
+            "columnName": "endpoint_usb",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastEndpoint",
+            "columnName": "last_endpoint",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "spkiHash",
+            "columnName": "spki_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "keyAlias",
+            "columnName": "key_alias",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pairedAt",
+            "columnName": "paired_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "device_id"
+          ]
+        }
+      },
+      {
+        "tableName": "pending_transfers",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`persistent_id` TEXT NOT NULL, `media_uri` TEXT NOT NULL, `expected_size` INTEGER NOT NULL, `received_bytes` INTEGER NOT NULL, `source_modified` INTEGER NOT NULL, `started_at` INTEGER NOT NULL, PRIMARY KEY(`persistent_id`))",
+        "fields": [
+          {
+            "fieldPath": "persistentId",
+            "columnName": "persistent_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaUri",
+            "columnName": "media_uri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expectedSize",
+            "columnName": "expected_size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "receivedBytes",
+            "columnName": "received_bytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceModified",
+            "columnName": "source_modified",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "started_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "persistent_id"
+          ]
+        }
+      },
+      {
+        "tableName": "run_issues",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`issue_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `run_id` INTEGER NOT NULL, `persistent_id` TEXT, `title` TEXT NOT NULL, `artist` TEXT, `reason` TEXT, `format` TEXT, `kind` TEXT NOT NULL, `error_kind` TEXT, FOREIGN KEY(`run_id`) REFERENCES `sync_runs`(`run_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "issueId",
+            "columnName": "issue_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runId",
+            "columnName": "run_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "persistentId",
+            "columnName": "persistent_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "artist",
+            "columnName": "artist",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "format",
+            "columnName": "format",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "errorKind",
+            "columnName": "error_kind",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "issue_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_run_issues_run_id",
+            "unique": false,
+            "columnNames": [
+              "run_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_run_issues_run_id` ON `${TABLE_NAME}` (`run_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "sync_runs",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "run_id"
+            ],
+            "referencedColumns": [
+              "run_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "app_settings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`key` TEXT NOT NULL, `value` TEXT NOT NULL, PRIMARY KEY(`key`))",
+        "fields": [
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "value",
+            "columnName": "value",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "key"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6d74664328447e09e1dd04ee337e9131')"
+    ]
+  }
+}

@@ -1,0 +1,111 @@
+package playlistsyncfox.android.notify
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import playlistsyncfox.android.db.SyncRun
+import playlistsyncfox.android.sync.SyncProgress
+import playlistsyncfox.android.sync.SyncStage
+import playlistsyncfox.android.sync.SyncValues
+import playlistsyncfox.shared.result.SyncTrigger
+
+/** 同期の通知（X7-3 のうち、ワーカーが前面へ昇格するときの通知と終了の通知）。チャンネル名は V52。 */
+object SyncNotifications {
+    const val CHANNEL_PROGRESS = "sync_progress"
+    const val CHANNEL_RESULT = "sync_result"
+    const val CHANNEL_RESULT_QUIET = "sync_result_quiet"
+
+    const val PROGRESS_ID = 1001
+
+    /** 終了の通知は 1 つだけにする（同じ番号で更新して積み上げない）。 */
+    const val RESULT_ID = 1002
+
+    fun ensureChannels(context: Context) {
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(NotificationChannel(CHANNEL_PROGRESS, "同期中", NotificationManager.IMPORTANCE_LOW))
+        manager.createNotificationChannel(NotificationChannel(CHANNEL_RESULT, "同期の結果", NotificationManager.IMPORTANCE_DEFAULT))
+        manager.createNotificationChannel(NotificationChannel(CHANNEL_RESULT_QUIET, "同期の結果（自動）", NotificationManager.IMPORTANCE_LOW))
+    }
+
+    /** 持続の通知。音と振動なし。「中断」は [cancel]、本体のタップは [open]。 */
+    fun progress(context: Context, progress: SyncProgress, cancel: PendingIntent?, open: PendingIntent?): Notification {
+        val builder = Notification.Builder(context, CHANNEL_PROGRESS)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle("同期中")
+            .setContentText(progressText(progress))
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(open)
+        if (progress.stage == SyncStage.Transfer && progress.totalBytes > 0) {
+            builder.setProgress(PROGRESS_SCALE, (progress.doneBytes * PROGRESS_SCALE / progress.totalBytes).toInt(), false)
+        } else {
+            builder.setProgress(0, 0, true)
+        }
+        if (cancel != null) builder.addAction(Notification.Action.Builder(null, "中断", cancel).build())
+        return builder.build()
+    }
+
+    /** 終了の通知。自動は静かなチャンネルに出す。 */
+    fun finished(context: Context, run: SyncRun, progress: SyncProgress, trigger: SyncTrigger, open: PendingIntent?): Notification {
+        val channel = if (trigger == SyncTrigger.Manual) CHANNEL_RESULT else CHANNEL_RESULT_QUIET
+        val title = when (run.result) {
+            SyncRun.RESULT_SUCCESS -> "同期が完了した"
+            SyncRun.RESULT_PARTIAL -> "一部の曲で失敗した"
+            SyncRun.RESULT_INTERRUPTED -> "同期が中断された"
+            SyncRun.RESULT_NOT_STARTED -> "空き容量が足りず始められなかった"
+            else -> "同期に失敗した"
+        }
+        val text = buildString {
+            append("追加 ${run.added}、置き換え ${run.replaced}、削除 ${run.removed}、失敗 ${run.failed}")
+            // E7 は続きを次の同期で行う
+            if (run.errorKind == "E7") append("。続きは次の同期で行う")
+            progress.shortageBytes?.let { append("。あと ${it / (1024 * 1024)} MiB 空けてほしい") }
+        }
+        return Notification.Builder(context, channel)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setAutoCancel(true)
+            .setContentIntent(open)
+            .build()
+    }
+
+    /** 終了の通知を出す。通知の権限が無ければ OS が出さないだけで、同期には影響しない。 */
+    fun postFinished(context: Context, run: SyncRun, progress: SyncProgress, trigger: SyncTrigger) {
+        val open = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            ?.let { PendingIntent.getActivity(context, 0, it, PendingIntent.FLAG_IMMUTABLE) }
+        context.getSystemService(NotificationManager::class.java)
+            .notify(RESULT_ID, finished(context, run, progress, trigger, open))
+    }
+
+    private fun progressText(progress: SyncProgress): String = when (progress.stage) {
+        SyncStage.Connecting -> "PC に接続している"
+        SyncStage.Manifest -> "曲の一覧を取得している"
+        SyncStage.Diff -> "差分を計算している"
+        SyncStage.Capacity -> "空き容量を確認している"
+        SyncStage.Transfer -> "${progress.doneCount}/${progress.totalCount} 曲" + (progress.currentTitle?.let { "：$it" } ?: "")
+        SyncStage.Playlist -> "プレイリストを書いている"
+        SyncStage.Finished -> "終了"
+    }
+
+    private const val PROGRESS_SCALE = 1000
+}
+
+/** 持続の通知の更新は、前回から V28 以上空かなければ捨てる。`stage` の変化と `finished` は間隔に関わらず通す（X7-3-3）。 */
+class NotificationThrottle {
+    private var lastAt: Long? = null
+    private var lastStage: SyncStage? = null
+
+    fun accept(progress: SyncProgress, now: Long): Boolean {
+        val last = lastAt
+        val pass = last == null || progress.stage != lastStage || progress.stage == SyncStage.Finished ||
+            now - last >= SyncValues.NOTIFICATION_INTERVAL_MS
+        if (pass) {
+            lastAt = now
+            lastStage = progress.stage
+        }
+        return pass
+    }
+}
