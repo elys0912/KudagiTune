@@ -1,10 +1,10 @@
 # playlist-sync-fox：iTunes のプレイリストを Android へ同期するツール（概要設計）
 
 - 起票：2026-11-05
-- 状態：概要設計 第 2 稿で区切り（2026-11-05。review-02 まで。実物の確認 1 の結果で D1 を直した）。基本設計 第 2 稿で区切り（2026-11-05。review-04 まで。J7〜J15 は決定済み）。詳細設計 第 2 稿で区切り（2026-11-05。review-06 まで。J16〜J21 は決定済み）。基本設計は詳細設計の差し戻し 19 件を当てて第 3 稿（2026-11-05。requirements の N1-4 も直した）。説明書 3 本（`manual/`）と overview.html を review-08 で区切り（2026-11-05）。設計の 4 段階は完了、次は実装。基本設計 5 本と詳細設計 X1〜X7 は第 4 稿（2026-11-06。review-11 を反映）
+- 状態：概要設計 第 2 稿で区切り（2026-11-05。review-02 まで。実物の確認 1 の結果で D1 を直した）。基本設計 第 2 稿で区切り（2026-11-05。review-04 まで。J7〜J15 は決定済み）。詳細設計 第 2 稿で区切り（2026-11-05。review-06 まで。J16〜J21 は決定済み）。基本設計は詳細設計の差し戻し 19 件を当てて第 3 稿（2026-11-05。requirements の N1-4 も直した）。説明書 3 本（`manual/`）と overview.html を review-08 で区切り（2026-11-05）。設計の 4 段階は完了、次は実装。基本設計 5 本と詳細設計 X1〜X7 は第 5 稿（2026-11-06。review-13 を反映）、テスト計画は第 3 稿（2026-11-06。review-13 を反映）
 - 置き場：この repo の `docs/`（2026-11-05 に portfolio の `notes/ideas/playlist-sync-fox/` から移した）
 - 仮名：playlist-sync-fox（屋号のような名。正式名は未決、Q1）
-- レビューの記録：`reviews/`（概要設計は review-01・02、基本設計は review-03・04、詳細設計は review-05・06。公式文書の確認の結果は facts-android・facts-jvm。この repo には置かない）
+- レビューの記録：`reviews/`（概要設計は review-01・02、基本設計は review-03・04、詳細設計は review-05・06、以降は review-13 まで。公式文書の確認の結果は facts-android・facts-jvm。この repo には置かない）
 
 ## 動機
 
@@ -23,7 +23,7 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 │ ライブラリ読み取り         │                  │ 同期クライアント            │
 │  iTunes Music Library.xml  │   HTTPS/TCP      │  マニフェストの差分         │
 │ マニフェスト生成           │ ───────────────▶ │  ファイルの取得             │
-│ 配信サーバー（HTTP）       │ ◀─────────────── │  m3u8 の書き出し            │
+│ 配信サーバー（HTTPS）      │ ◀─────────────── │  m3u8 の書き出し            │
 │ 検出（mDNS）／USB テザリング │   取得要求        │  同期状態の DB（Room）      │
 │ トレイ常駐の小さな GUI     │                  │  発見（NSD）／手入力        │
 └──────────────────────────┘                  └──────────────────────────┘
@@ -56,7 +56,7 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 
 ## 決定事項
 
-日数、容量、版番号などの値は requirements.md に一本化し、ここには項目と対応する要件だけを書く。
+日数、容量、版番号などの値は basic-design.md の V 表（B1-7）に一本化し、ここには項目と対応する要件だけを書く。
 
 | ID | 項目 | 決めたこと | 対応する F/N/Q | 経緯 |
 |---|---|---|---|---|
@@ -72,7 +72,7 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 | D10 | 形式の変換 | 最初の版では行わない。変換を PC 側に置く余地だけ残す | F3、Q3 | 2026-11-05 先生（計画の承認） |
 | D11 | 端末の数 | 最初の版は端末 1 台。同期状態と PC 側の設定に端末の識別子の列を持たせ、後で増やせる形にする | F2、F5、Q8 | 2026-11-05 先生（review-01 の J1） |
 | D12 | 配布 | 最初は GitHub で公開する。repo は最初 private にし、公開の前に public にする。配布物（APK と PC の実行物）は Releases に置く。Play ストアは将来の対応 | N4、Q12 | 2026-11-05 先生（review-01 の J4） |
-| D13 | 自動起動 | 従量制でないネットワークにつながったときに起動し、ペアリング済みの PC に届かなければ何もせず終わる。SSID は見ない（位置情報の権限を要するため） | F3、Q6 | 2026-11-05 先生（review-01 の J2） |
+| D13 | 自動起動 | 従量制でないネットワークにつながっている間、周期で起動し、ペアリング済みの PC に届かなければ何もせず終わる。SSID は見ない（位置情報の権限を要するため） | F3、Q6 | 2026-11-05 先生（review-01 の J2）。2026-11-06 に文言を周期の形に直した（review-13 の J40） |
 | D14 | 入れ直しの後 | アプリを入れ直した後は、以前に置いた曲を「自分が置いた」と扱わない。消すときだけ利用者の同意の画面を出す | F3、F4、Q7 | 2026-11-05 先生（review-01 の J5） |
 
 ## 用語
@@ -117,7 +117,13 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 | trust on first use | 初回に受け取った鍵や証明書を、以後の信頼の基準にする方式 |
 | Range | HTTP で曲の一部だけを取得する指定。中断からの再開に使う |
 | MediaStore | Android が端末内のメディアを索引する仕組み。プレイリストも持つ（D3） |
-| SAF | Android のファイルへのアクセスの仕組み（Storage Access Framework） |
+| SAF | Android のファイルへのアクセスの仕組み（Storage Access Framework）。Q7 の却下案で、設計では使わない |
+| 指紋 | PC の証明書の公開鍵のハッシュを表示用に整えたもの。ペアリングのとき、PC と端末の画面で見比べる |
+| SPKI | 証明書に入る公開鍵の情報。端末はこのハッシュを固定して PC を確かめる |
+| SPAKE2 | コードそのものを送らずに、互いにコードを知っていることを確かめて鍵を導く方式。ペアリングに使う |
+| DPAPI | Windows が利用者ごとにデータを保護する仕組み。PC の鍵の保管に使う |
+| Keystore | Android Keystore。端末の鍵の保管に使う |
+| 前面サービス | Android で、通知を出しながら長い処理を行う仕組み。同期の転送に使う |
 | m3u8 | プレイリストを書く文字ファイル。ここでは相対パス、UTF-8 |
 | KMP | Kotlin Multiplatform。1 つのコードを複数の実行環境で使う仕組み（D4） |
 | Compose Multiplatform | Kotlin の画面の部品の集まり。PC のトレイ常駐の画面に使う |
@@ -135,7 +141,7 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 |---|---|
 | [design-overview.md](design-overview.md) | このファイル。動機、範囲、決定事項、用語 |
 | [requirements.md](requirements.md) | 機能要件（F1〜F6）と非機能要件（N1〜N5） |
-| [open-questions.md](open-questions.md) | 論点（Q1〜Q12。Q2・Q6・Q8 は決定） |
+| [open-questions.md](open-questions.md) | 論点（Q1〜Q13。Q1・Q9・Q13 は未決、Q11 は保留、Q4 は暫定、ほかは決定） |
 | [basic-design.md](basic-design.md) | 基本設計 B1（索引、モジュール M、技術、ビルド、値の表 V、決定（未付番）） |
 | [basic-design-b2.md](basic-design-b2.md) | 基本設計 B2（ライブラリの読み取りと同期。エラーの種類 E） |
 | [basic-design-b3.md](basic-design-b3.md) | 基本設計 B3（端末側。表 T、画面 S、権限） |
@@ -148,6 +154,10 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 | [detailed-design-x5.md](detailed-design-x5.md) | 詳細設計 X5（desktop：サーバー、鍵、mDNS、設定、画面 W、起動） |
 | [detailed-design-x6.md](detailed-design-x6.md) | 詳細設計 X6（android：Room、MediaStore、同期、WorkManager、HTTP、鍵） |
 | [detailed-design-x7.md](detailed-design-x7.md) | 詳細設計 X7（android：画面 S、発見、通知、権限、ログ、ライセンス） |
+| [test-plan.md](test-plan.md) | テスト計画（方針、束、回し方） |
+| [test-plan-shared-itunes.md](test-plan-shared-itunes.md) | テスト計画 shared と itunes（TS） |
+| [test-plan-desktop.md](test-plan-desktop.md) | テスト計画 desktop（TD） |
+| [test-plan-android.md](test-plan-android.md) | テスト計画 android（TA） |
 | [manual/manual-pc.md](manual/manual-pc.md) | 説明書 PC 版（利用者向け） |
 | [manual/manual-android.md](manual/manual-android.md) | 説明書 Android 版（利用者向け） |
 | [manual/development.md](manual/development.md) | 開発者向け説明書（repo 構成、ビルド、CI、Release、番号の読み方） |
