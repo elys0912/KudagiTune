@@ -1,7 +1,7 @@
 # playlist-sync-fox：iTunes のプレイリストを Android へ同期するツール（概要設計）
 
 - 起票：2026-11-05
-- 状態：概要設計 第 2 稿で区切り（2026-11-05。review-02 まで。実物の確認 1 の結果で D1 を直した）。基本設計 第 2 稿で区切り（2026-11-05。review-04 まで。J7〜J15 は決定済み）。詳細設計 第 2 稿で区切り（2026-11-05。review-06 まで。J16〜J21 は決定済み）。基本設計は詳細設計の差し戻し 19 件を当てて第 3 稿（2026-11-05。requirements の N1-4 も直した）。説明書 3 本（`manual/`）と overview.html を review-08 で区切り（2026-11-05）。設計の 4 段階は完了、次は実装
+- 状態：概要設計 第 2 稿で区切り（2026-11-05。review-02 まで。実物の確認 1 の結果で D1 を直した）。基本設計 第 2 稿で区切り（2026-11-05。review-04 まで。J7〜J15 は決定済み）。詳細設計 第 2 稿で区切り（2026-11-05。review-06 まで。J16〜J21 は決定済み）。基本設計は詳細設計の差し戻し 19 件を当てて第 3 稿（2026-11-05。requirements の N1-4 も直した）。説明書 3 本（`manual/`）と overview.html を review-08 で区切り（2026-11-05）。設計の 4 段階は完了、次は実装。基本設計 5 本と詳細設計 X1〜X7 は第 4 稿（2026-11-06。review-11 を反映）
 - 置き場：この repo の `docs/`（2026-11-05 に portfolio の `notes/ideas/playlist-sync-fox/` から移した）
 - 仮名：playlist-sync-fox（屋号のような名。正式名は未決、Q1）
 - レビューの記録：`reviews/`（概要設計は review-01・02、基本設計は review-03・04、詳細設計は review-05・06。公式文書の確認の結果は facts-android・facts-jvm。この repo には置かない）
@@ -15,7 +15,7 @@ Windows の iTunes（12.x）のプレイリストを、曲ごと Android へ運�
 
 ## 構成の概要
 
-元の案は [architecture-draft-2026-11-05.md](architecture-draft-2026-11-05.md)。全体の形は次のとおり。
+全体の形は次のとおり。
 
 ```
 Windows（JVM、Kotlin）                          Android（Kotlin）
@@ -136,7 +136,6 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 | [design-overview.md](design-overview.md) | このファイル。動機、範囲、決定事項、用語 |
 | [requirements.md](requirements.md) | 機能要件（F1〜F6）と非機能要件（N1〜N5） |
 | [open-questions.md](open-questions.md) | 論点（Q1〜Q12。Q2・Q6・Q8 は決定） |
-| [architecture-draft-2026-11-05.md](architecture-draft-2026-11-05.md) | アーキテクチャのたたき台。概要設計の元。区切り後は参照用に残す |
 | [basic-design.md](basic-design.md) | 基本設計 B1（索引、モジュール M、技術、ビルド、値の表 V、決定（未付番）） |
 | [basic-design-b2.md](basic-design-b2.md) | 基本設計 B2（ライブラリの読み取りと同期。エラーの種類 E） |
 | [basic-design-b3.md](basic-design-b3.md) | 基本設計 B3（端末側。表 T、画面 S、権限） |
@@ -153,7 +152,6 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 | [manual/manual-android.md](manual/manual-android.md) | 説明書 Android 版（利用者向け） |
 | [manual/development.md](manual/development.md) | 開発者向け説明書（repo 構成、ビルド、CI、Release、番号の読み方） |
 | [overview.html](overview.html) | 設計の視覚資料（単体の HTML） |
-| `reviews/` | レビューの記録（review-01〜08、facts-android、facts-jvm） |
 
 ## 参考
 
