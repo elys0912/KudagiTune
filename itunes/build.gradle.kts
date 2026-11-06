@@ -8,4 +8,10 @@ kotlin {
 
 dependencies {
     implementation(project(":shared"))
+
+    testImplementation(libs.kotlin.test)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
