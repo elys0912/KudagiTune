@@ -263,6 +263,7 @@
 - 範囲（同期全体か曲単位か）は型が持つ関数 `scope` で返す。値は E ごとに固定
 - 曲名は結果の表示（B2-8 の失敗の内訳）に使うので、曲単位の E は `name` を持つ。パスは持たない（N1-6）
 - 「版が合わない」と「壊れたマニフェスト」（X3-1）は E に含めない（J21（a））
+- E1 は到達確認で接続先の全部がだめなときだけ。P1 の受信中の切断（曲の指定が無いので E6 の `persistentId` は無し）と、同期の開始後（P1 の後）の接続の確立の失敗は E6 とし、V10 の回数で再試行する（B2-6、X6-5）
 
 結果（`SyncResult`。M4 が作って保存し、B2-8 の項目に対応する）：
 
@@ -273,8 +274,8 @@
 | `transport` | LAN、Tailscale、USB テザリング | 接続の方式 |
 | `outcome` | 完了、一部、中断、失敗 | 下の関数で決める |
 | `hasMore` | 真偽 | 続きあり |
-| `counts` | `Counts`（足す、置き換える、消す、変更なしの予定と完了の各件数） | B2-5 |
-| `capacity` | `Capacity`（差分の合計バイト、転送したバイト、前後の空き容量） | N2-4 |
+| `counts` | `Counts`（足す、置き換える、消す、変更なしの予定と完了の各件数。項目は下の表） | B2-5 |
+| `capacity` | `Capacity`（差分の合計バイト、転送したバイト、前後の空き容量。項目は下の表） | N2-4 |
 | `errors` | `SyncError` の並び | 失敗の内訳の元 |
 | `excluded` | `ExcludedTrack` の並び | マニフェストの写し |
 | `unplayable` | `UnplayableTrack` の並び | 曲名、`kind`、拡張子、理由（`protected`、`unsupported_format`） |
@@ -282,7 +283,26 @@
 | `unresolvedPlaylists` | 名前の並び | マニフェストの写し |
 | `duplicatesDropped` | 整数 | X3-1 の読み込みの手順 4 で落とした件数 |
 | `removalSkipped` | 真偽 | 「消す」を飛ばしたとき真。自動が確認の扱いで飛ばしたとき（J9）と、手動で承認した件数を再計算の件数が超えて飛ばしたときに立てる。S4 の案内の条件。T3 の `result_json` に入る |
+| `keyMismatch` | 真偽、任意 | `errors` に E2 を含むときだけ持つ（無ければ空）。`detail` なしの 401 と証明書の固定の不一致は真。`clock_skew`・`replay`・429 の E2 は偽（J35）。自動の抑止（X6-3 の 2 の 1 の (b)）の判別用。T3 の `result_json` に入り、キーは `key_mismatch`（X6-1）。P4 には載せない |
 
+`Counts`（すべて整数（32）。マニフェストを取れなかった実行は全項目 0。X6-3 の 2 の 3）：
+
+| 項目 | JSON のキー | 意味 |
+|---|---|---|
+| `toAdd`、`toReplace`、`toRemove` | `to_add`、`to_replace`、`to_remove` | 予定。`Diff` の同名の並び（X3-2）の件数 |
+| `unchanged` | `unchanged` | 変更なし。`Diff` の `unchangedCount`。作業が無いので予定と完了を分けず 1 つだけ持つ |
+| `added`、`replaced`、`removed` | 同じ | 完了。足し終えた、置き換え終えた、消し終えた曲の件数。T3 の同名の列（X6-1） |
+| `failed` | `failed` | 曲単位の失敗（E5、E8、E9）の曲数。T3 の `failed` の列。内訳は `errors` から作る |
+
+`Capacity`：
+
+| 項目 | JSON のキー | 型 | 意味 |
+|---|---|---|---|
+| `diffBytes` | `diff_bytes` | 整数（64） | 差分の合計バイト。`requiredBytes` の値（V11 の余裕は含めない）。差分を作れなかった実行は 0 |
+| `bytesTransferred` | `bytes_transferred` | 整数（64） | 転送したバイト。T3 の同名の列（X6-1） |
+| `freeBytesBefore`、`freeBytesAfter` | `free_bytes_before`、`free_bytes_after` | 整数（64）、任意 | 同期の前後の空き容量。測れなかったときは無し（0 を空の意味に使わない。X3-1） |
+
+- `reach_failed` は `SyncResult` の項目ではない。手動の同期で、画面側の到達確認が全部の接続先で届かなかったことを `SyncWorker` に渡す入力データ（X6-3 の入口の表、手順 6 の 1）で、T3 にも P4 にも載せない
 - 失敗の内訳（E の番号ごとの件数と最初の曲名）は `errors` から作る関数 `breakdown` で出す。結果に別の項目として持たない（二重の持ち方を避ける）
 - 画面に出す件数の上限（V21）の適用は M4（B3-6）
 - `UnplayableTrack` の `unsupported_format`（規則 2）は端末の再生能力の判定（B3）で付ける。M1 は型だけを持つ。`protected` は X3-2 の `unplayable` から作る関数 `toUnplayable` で写す
@@ -333,13 +353,13 @@ PC への報告（P4 の本文の元。`SyncReport`）。項目は次の 8 つ�
 
 | 対象 | 観点 |
 |---|---|
-| マニフェストの読み書き | 往復で同じ値になる。未知のキー（`content_hash` を含む）を読み捨てる。任意の項目の無しと値あり。`persistent_id` の形の違い（15 桁、小文字、非 16 進）。重複の落とし。`format_version` の範囲外と欠落。`track_ids` が `tracks` に無い ID を持つ |
+| マニフェストの読み書き | 往復で同じ値になる。未知のキー（`content_hash` を含む）を読み捨てる。任意の項目の無しと値あり。`persistent_id` の形の違い（15 桁、小文字、非 16 進）。重複の落とし。`format_version` の範囲外と欠落。`track_ids` が `tracks` に無い ID を持つ。必須項目の欠け（`size` が無い）と型違い（`modified_at` が文字列）は「壊れた」 |
 | `content_digest` | 固定の入力の期待値（手で作った試料の値を 1 つ固定する）。入力の並びを入れ替えても同じ。`generated_at`、`library_id`、`excluded` を変えても同じ。`track_ids` の順を変えると違う。文字列の境界（「ab」「c」と「a」「bc」）で違う。`CryptoProvider` は固定の SHA-256 の実体を使う |
 | 差分 | 判定（足す、置き換える、変更なし、消す。ファイルが無い場合の補充は「足す」の一種。ほかに保護付き）の表。`size` だけ違う、`modified_at` だけ違う。保護付きと `m4p`。1 曲が複数のプレイリストに入る（集合は `tracks` なので 1 件）。`SyncRecord` が空（入れ直し）。ファイルが無く、かつマニフェストに無い記録（消す）。`recordedLibraryId` の null と違い。消す件数が V20 と同じ、V20 を超える、全部。`toRemove` が 0 件で全部の条件に当たらない（全部の条件は 1 件以上）。`toRemove` が 1 件以上で `unresolvedPlaylists` が 1 件なら `NeedsConfirmation`、`unresolvedPlaylists` が 0 件なら `Allowed`。`toRemove` が 0 件で `unresolvedPlaylists` が 1 件のときは `Allowed`。`LibraryChanged` でも `toRemove` を計算して返す。`LibraryChanged` と `NeedsConfirmation` の両方に当たるとき `LibraryChanged`。`isEmpty`（3 つの並びがすべて空のときだけ真） |
 | 容量 | 足す、置き換えるだけを数え、消すを引かない。空の差分は 0 |
 | `sanitizeElement` | 使えない文字 9 種、制御文字（U+0000〜U+001F、U+007F）、先頭末尾の空白（全角を含む）、末尾の `.`、`.` と `..`、空白と `.` が混ざる末尾、空になる入力、日本語、絵文字、結合文字（正規化されないこと） |
 | 長さ | V23 ちょうど、V23 + 1、3 バイトの文字の境界、4 バイトの文字（サロゲートペア）の境界、切った後に末尾が空白か `.`、拡張子と接尾辞を含めた全体が V23 以内 |
-| 衝突 | マニフェスト内の 2 件と 3 件、`persistent_id` の昇順で先が接尾辞なし。使用中の集合との衝突。接尾辞の後も衝突（V24 の文字数の一致）→ 全文。置き換えの曲の `placedPath` が動かない。入力の並びを入れ替えても結果が同じ。大文字小文字だけの違いは同じパスとして衝突する（区別しない比較。基本設計の直し 12）。NFC と NFD の同じ見た目の名前は衝突せず別のパスになる（正規化しない。B3-1） |
+| 衝突 | マニフェスト内の 2 件と 3 件、`persistent_id` の昇順で先が接尾辞なし。使用中の集合との衝突。接尾辞の後も衝突（V24 の文字数の一致）→ 全文。全文でも使用中なら「解けない」を返さず全文のパスをそのまま返す（J42）。置き換えの曲の `placedPath` が動かない。入力の並びを入れ替えても結果が同じ。大文字小文字だけの違いは同じパスとして衝突する（区別しない比較。基本設計の直し 12）。NFC と NFD の同じ見た目の名前は衝突せず別のパスになる（正規化しない。B3-1） |
 | 候補の文字列 | `album_artist` あり・なし・空白のみ、`artist` のみ、すべて空（`Unknown Artist`、`Unknown Album`、`Untitled`）。拡張子が空 |
 | m3u8 | `#EXTM3U` の行と LF。空のプレイリスト。置けていない曲を飛ばす。同じ曲の重複。BOM と CR を含まない。日本語と記号を含むパス。先頭が `#` のパスが出ない（`sanitizeElement` の手順 6。フォルダ名・ファイル名が `#` で始まる入力を含む）。U+0085、U+2028、U+2029 が削除される（`sanitizeElement` の手順 2。行の区切りがパスに残らないことを m3u8 の出力で確かめる） |
 | プレイリストのファイル名 | 同名の 2 件に接尾辞、大文字小文字だけ違う 2 件に接尾辞、空の名前、接尾辞後の再衝突、長い名前の切り詰め（`.m3u8` を含めて V23 以内） |
