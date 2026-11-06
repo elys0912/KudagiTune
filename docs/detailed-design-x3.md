@@ -24,7 +24,7 @@
 | 名前 | JSON のキーは B2-4 の snake_case。型の項目名は camelCase とし、`SerialName` で対応させる |
 | 未知のキー | 読み捨てる。`content_hash` のような空の項目の追加で `format_version` を増やさないため（B2-4） |
 | 空の項目 | 「空を許す」項目は、型では null を許し、JSON では書かない（読むときは無い＝null）。空文字列と 0 を空の意味に使わない |
-| 日時 | `generated_at`、`xml_modified_at` は UTC の ISO 8601 文字列（ミリ秒まで、末尾 `Z`）。`modified_at` は B2-4 のとおり UTC のエポックミリ秒の整数 |
+| 日時 | `generated_at`、`xml_modified_at` は UTC の ISO 8601 文字列（ミリ秒まで、末尾 `Z`）。`modified_at` は B2-4 のとおり UTC のエポックミリ秒の整数。`generated_at`、`xml_modified_at` は文字列であることだけを検査し、形は検査しない（同期の判定に使わないので、形の違いで同期を止めない。2026-11-07 先生） |
 | 整数 | `size`、`modified_at` は 64 ビット。`track_number`、`disc_number`、`duration_ms` は 32 ビット |
 | 識別子 | `persistent_id` は大文字の 16 桁の 16 進。境界（読み込み）で形を検査し、合わなければ「壊れたマニフェスト」にする（パスの材料に入るため） |
 
@@ -403,7 +403,7 @@ X1、X4 への依頼は反映済み。未了は次の表のみ。
 | X2 | `ExcludedTrack` の理由（`no_location`、`undecodable`、`not_found`、`unreadable`、`no_id`）は、M2 の材料（場所の結果、ID 無しの一覧、`kind`）から M3 が導く。保護付きは除外せず `protected` の印で出す |
 | X5 | P1 の応答の本文は `Manifest` の直列化の結果。`content_digest` は X3-1 の関数で PC が計算する。除外の理由の値は M2 の材料から写す |
 | X6 | `SyncRecord`、`Diff`、`SyncResult`、`SyncError` を M4 が写す（T1 の列との対応は X3-2）。`presentIds` の作成、MediaStore の既存のパスの問い合わせ（使用中のパスの集合）、読み戻したパスの T1 への保存、`removalGate` の扱い（`LibraryChanged` の承認後は T3 の `library_id` を更新。`NeedsConfirmation` は手動が確認、自動は飛ばして通知）、区分から T3 の `result` への対応（X3-5）、`hasMore` の入力（完了件数）、プレイリストのファイル名の変更時の古い m3u8 の削除、UTF-8（BOM なし）への変換、MIME は X3-3 の表を使う |
-| X7 | 結果の表示は `SyncResult` の項目を使う。除外の理由と再生できない形式の理由の表示の文は X7（S の表示）で決める。版が合わない・壊れたマニフェストの画面の文も同じ |
+| X7 | 結果の表示は `SyncResult` の項目を使う。除外の理由と再生できない形式の理由の表示の文は X7（S の表示）で決める。版が合わない・壊れたマニフェストの画面の文も同じ。`xml_modified_at` を読めないときは、古さの表示を「不明」にする |
 
 ### X3 の確かめた事実
 
