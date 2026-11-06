@@ -1,8 +1,8 @@
 # playlist-sync-fox 詳細設計
 
 - 起票：2026-11-05
-- 状態：第 3 稿（2026-11-06。review-09 を反映）。節ごとの稿は X1-2
-- 前提：基本設計 5 本（[basic-design.md](basic-design.md)、[basic-design-b2.md](basic-design-b2.md)、[basic-design-b3.md](basic-design-b3.md)、[basic-design-b4a.md](basic-design-b4a.md)、[basic-design-b4b.md](basic-design-b4b.md)。第 3 稿）と概要設計 3 本（[design-overview.md](design-overview.md)、[requirements.md](requirements.md)、[open-questions.md](open-questions.md)）に従う。review-03 の J7〜J15 は推奨 a で取り込む
+- 状態：第 4 稿（2026-11-06。review-11 を反映）。節ごとの稿は X1-2
+- 前提：基本設計 5 本（[basic-design.md](basic-design.md)、[basic-design-b2.md](basic-design-b2.md)、[basic-design-b3.md](basic-design-b3.md)、[basic-design-b4a.md](basic-design-b4a.md)、[basic-design-b4b.md](basic-design-b4b.md)。第 4 稿）と概要設計 3 本（[design-overview.md](design-overview.md)、[requirements.md](requirements.md)、[open-questions.md](open-questions.md)）に従う。review-03 の J7〜J15 は推奨 a で取り込む
 - 置き場：この repo の `docs/`（2026-11-05 に portfolio の `notes/ideas/playlist-sync-fox/` から移した。D5）
 
 ## X1 構成
@@ -51,7 +51,7 @@
 
 ### X1-2 節の対応表
 
-項の見出しは、X2〜X7 の稿の実際の見出し（X4 は第 2 稿、ほかは第 3 稿）。
+項の見出しは、X2〜X7 の稿（すべて第 4 稿）の実際の見出し。
 
 | 節 | ファイル | 題 | 引き受ける B の項 | 項の見出し |
 |---|---|---|---|---|
@@ -63,7 +63,16 @@
 | X6 | detailed-design-x6.md | android の保存と同期（M4） | B2-6、B2-7、B3-2、B3-3 の書き方、B3-4、B3-5、B4-3 の 2（K3、K4）、B4-4 の端末側 | X6-1 Room の定義 T1〜T7、X6-2 MediaStore の書き込み、X6-3 同期の実行、X6-4 WorkManager の登録、X6-5 HTTP クライアント、X6-6 鍵の保管 K3・K4、X6-7 テストの観点 |
 | X7 | detailed-design-x7.md | android の画面と権限（M4） | B3-6、B3-7、B4-1 の 2・3、B3-5 の通知、B4-6 の端末 | X7-1 画面 S1〜S5、X7-2 発見と手入力、X7-3 通知、X7-4 権限の一覧、X7-5 ログ、X7-6 ライセンスの表示、X7-7 テストの観点 |
 
-引き受けない B の項（B4-7 配布、B4-8 テストの方針、B1-6 の CI）は、この稿の範囲外。各節の「テストの観点」が B4-8 の C-1〜C-9 を参照する。配布と CI の詳細は X1 の範囲に入れず、必要なら要判断に挙げる（X1 の要判断 3）。
+テスト計画（X の 7 節の外。B4-8 の方針を束ごとのケースに落とす。第 2 稿。review-11）：
+
+| ファイル | 受け持つ束 | 引き受ける節 |
+|---|---|---|
+| test-plan.md | 索引 | 3 本の対応と共通の約束 |
+| test-plan-shared-itunes.md | 束 1〜3（shared の同期、itunes、shared の認証） | X3-6、X2-5（X2-1〜X2-3 の範囲）、X4-5 |
+| test-plan-desktop.md | 束 4（desktop） | X5-7、X2-5（X2-4 の読み直しと監視） |
+| test-plan-android.md | 束 5・6（android の保存と同期、画面と権限）と確認の表 C-1〜C-14 | X6-7、X7-7、B4-8 |
+
+引き受けない B の項（B4-7 配布、B4-8 テストの方針、B1-6 の CI）は、この稿の範囲外。各節の「テストの観点」が B4-8 の C-1〜C-14 を参照する。配布と CI の詳細は X1 の範囲に入れず、必要なら要判断に挙げる（X1 の要判断 3）。
 
 ### X1-3 パッケージの構成
 
@@ -171,7 +180,7 @@ version catalog の項目名（版は書かない。B1-6。項目名は候補で
 約束：
 
 - 値は B1-7 の V に移す前の候補。承認の状態は「承認待ち」で始め、承認後に B1-7 の番号（V34 以降）を付ける。番号を付けるのは B1 の執筆者だけ（B1-9 の 5）
-- 既存の V と同じ値は足さず、V の番号で参照する
+- 既存の V と同じ値は足さず、V の番号で参照する。例外：V37（V18 と同じ値）と V47（V27 の流用）は、X1-4 の A4・A14 との対応を保つため、識別のために V に載せる（V の番号は固定。review-11）
 - 実装の形を決めるもの（列の型、パラメータ名、パッケージ名）は値の対象外で、決めた項に書く（X1 の例外は A1、A2）
 - X3 の置いた値 3・4（切る境界の単位、接尾辞の 2 回目の文字数）は本文の約束として表に入れない。X5 の X5-V1 は A10 に統合し、X5-V4 は消した（`pc_id` は乱数 16 バイトの UUID の形）。X6 の X6-a は消した（J18）
 
@@ -204,6 +213,7 @@ version catalog の項目名（版は書かない。B1-6。項目名は候補で
 | 第 1 稿 | 2026-11-05 | X1 を書いた（X1-1〜X1-6）。X2〜X7 は同時に別の執筆者が書く |
 | 第 2 稿 | 2026-11-05 | review-05 を反映。パッケージ `desktop.keystore` を `desktop.secrets` に改名、version catalog の暗号と保管の項目を `bouncycastle`・`jna`・`jna-platform` に、`licensee` を足した（指摘 2、3、12）。X1-2 の項の見出しを確定、X1-4 に A3〜A19、X1-6 に X-3〜X-24 を集めた（指摘 24）。依存の向きの検査の方法を X1-3 に足した（指摘 33）。節末を `###` にした（指摘 35）。署名失敗の閾値を A10（10 回）にした（指摘 17） |
 | 第 3 稿 | 2026-11-06 | X2・X3・X5〜X7 を第 3 稿に。実物の確認と土台の反映。X1-3 の version catalog の候補の項目名を土台に合わせて差し替えた（A1 の規則は変えない）。review-09 |
+| 第 4 稿 | 2026-11-06 | X1〜X7 を第 4 稿に揃えた（review-11）。X1-1 の約束に V37・V47 の例外、X1-2 にテスト計画の対応、C-1〜C-14 への参照の更新 |
 
 ### X1-6 決定（未付番）の一覧
 

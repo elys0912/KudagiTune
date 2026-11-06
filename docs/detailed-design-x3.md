@@ -1,7 +1,7 @@
 # playlist-sync-fox 詳細設計 X3 shared の同期（M1）
 
 - 索引：detailed-design.md（X1）
-- 稿：第 3 稿（2026-11-06。実物の確認（B2）と土台を反映）
+- 稿：第 4 稿（2026-11-06。review-11 を反映）
 - 参照：X2 は detailed-design-x2.md、X4 は detailed-design-x4.md、X5 は detailed-design-x5.md、X6 は detailed-design-x6.md、X7 は detailed-design-x7.md。引き受ける基本設計は B2-4・B2-5・B2-8 が basic-design-b2.md、B3-1・B3-3 が basic-design-b3.md、値は basic-design.md の B1-7
 
 ## X3 shared の同期
@@ -40,11 +40,11 @@
 
 | 項目 | 型 | 必須 | 意味 |
 |---|---|---|---|
-| `format_version` | 整数 | 必須 | 版。初版の値は X3 の置いた値 1 |
+| `format_version` | 整数 | 必須 | 版。初版の値は V38 |
 | `generated_at` | 日時 | 必須 | 作成の時刻 |
 | `library_id` | 文字列 | 必須 | B2-4 のとおり |
 | `xml_modified_at` | 日時 | 必須 | 読み込んだ XML の更新日時 |
-| `content_digest` | 文字列 | 必須 | 下の計算の結果。小文字の 16 進 64 桁 |
+| `content_digest` | 文字列 | 必須 | 下の計算の結果。表記は V40 |
 | `tracks` | `ManifestTrack` の並び | 必須 | 空の並びを許す |
 | `playlists` | `ManifestPlaylist` の並び | 必須 | 空の並びを許す |
 | `unresolved_playlists` | `UnresolvedPlaylist` の並び | 必須 | 空の並びを許す |
@@ -84,7 +84,7 @@
 
 1. 入力は `tracks`、`playlists`、`unresolved_playlists` の 3 つの一覧。`generated_at`、`xml_modified_at`、`library_id`、`excluded` は含めない（J21（a））
 2. 値の符号化：文字列は「UTF-8 の長さ（4 バイト、ビッグエンディアン）＋ UTF-8 の列」、整数は 8 バイトのビッグエンディアンの符号付き、真偽は 1 バイト（0 か 1）、任意の項目は「無し＝0x00、有り＝0x01 ＋ 値」
-3. 先頭に固定の文字列（X3 の置いた値 2）と `format_version` を置く
+3. 先頭に固定の文字列（V39）と `format_version` を置く
 4. `tracks` は `persistent_id` の昇順（文字列の辞書順）に並べ、件数（4 バイト）の後に、各トラックの全項目を表の順（`content_hash` を含む）で符号化する
 5. `playlists` は `persistent_id` の昇順に並べ、件数の後に、各プレイリストの `persistent_id`、`name`、`track_ids` の件数、`track_ids` を元の順のまま符号化する（順序は m3u8 に効く）
 6. `unresolved_playlists` は `persistent_id` の昇順に並べ、件数の後に、`persistent_id`、`last_known_name` を符号化する
@@ -101,10 +101,11 @@
 | 項目 | 内容 |
 |---|---|
 | 入力 1 | `ManifestTrack` の並び（マニフェストの `tracks`） |
-| 入力 2 | `SyncRecord` の並び（端末が置いた曲）。項目は `persistent_id`、`size`、`modified_at`、`placedPath`。M1 の型として定義し、Room の行とは M4 が写す。`placedPath` は T1 の列 `relative_path` に対応する（X6-1 に同じ対応を書く） |
+| 入力 2 | `SyncRecord` の並び（端末が置いた曲）。項目は `persistent_id`、`size`、`modified_at`、`placedPath`。M1 の型として定義し、Room の行とは M4 が写す。T1 の列との対応は `size`＝`source_size`、`modified_at`＝`source_modified`、`placedPath`＝`relative_path`（`persistent_id` は同名）。値の変換はしない（マニフェストの値のまま。X6-1 に同じ対応を書く） |
 | 入力 3 | `presentIds`：`SyncRecord` のうち、置いた場所にファイルが今ある曲の `persistent_id` の集合（M4 が調べて渡す） |
 | 入力 4 | `manifestLibraryId` と `recordedLibraryId`（後者は無い＝初回で null） |
 | 入力 5 | 消す件数の確認の閾値（V20） |
+| 入力 6 | `unresolvedPlaylists`：マニフェストの `unresolved_playlists`（選択した ID が XML に無いプレイリスト。J24） |
 | 出力 | `Diff`（下の表） |
 
 `Diff`：
@@ -112,8 +113,8 @@
 | 項目 | 型 | 意味 |
 |---|---|---|
 | `toAdd` | `ManifestTrack` の並び | 足す |
-| `toReplace` | `ManifestTrack` の並び | 置き換える。置き場所は `SyncRecord` の `placed_path` のまま |
-| `toRemove` | `SyncRecord` の並び | 消す |
+| `toReplace` | `ManifestTrack` の並び | 置き換える。置き場所は `SyncRecord` の `placedPath` のまま |
+| `toRemove` | `SyncRecord` の並び | 消す。`removalGate` が `Allowed` 以外でも計算して返す（J25） |
 | `unchangedCount` | 整数 | 変更なしの件数 |
 | `unplayable` | `ManifestTrack` の並び | 保護付き。転送しない（B2-8 の規則 1） |
 | `removalGate` | 3 種 | 消すの扱い（下） |
@@ -135,10 +136,11 @@
 | 値 | 条件 | 端末の扱い（M4。X6-3） |
 |---|---|---|
 | `Allowed` | 下の 2 つに当たらない | 消す |
-| `LibraryChanged` | `recordedLibraryId` が null でなく、`manifestLibraryId` と違う | 「消す」を出力せず（`toRemove` は空）、手動は確認、自動は飛ばして通知 |
-| `NeedsConfirmation` | `toRemove` の件数が V20 を超える、または `SyncRecord` の全部が `toRemove` に当たり、かつ件数が 1 以上 | `toRemove` は計算して返す。手動は確認、自動は飛ばして通知 |
+| `LibraryChanged` | `recordedLibraryId` が null でなく、`manifestLibraryId` と違う | `toRemove` は計算して返す（J25）。手動は確認し、承認後に実行して、T3 の `library_id` を新しい値にする（記録の更新は M4）。自動は飛ばして通知 |
+| `NeedsConfirmation` | `toRemove` の件数が V20 を超える、`SyncRecord` の全部が `toRemove` に当たり、かつ件数が 1 以上、または `unresolvedPlaylists` が 1 件以上（J24） | `toRemove` は計算して返す。手動は確認、自動は飛ばして通知 |
 - `LibraryChanged` と `NeedsConfirmation` の両方に当たるときは `LibraryChanged` を返す
-- 確認後の実行は、M4 が `toRemove` をそのまま使う。M1 は確認の結果を持たない
+- 未解決のプレイリストの曲は、`SyncRecord` にプレイリストとの対応が無く、「消さない」を曲ごとには実装できない。1 件でもあれば、消すを確認の扱いにする（手動は確認、自動は飛ばす。J24。2026-11-06）
+- 確認後の実行は M4 が行う。M4 は P1 を取り直して差分を計算し直し、`toRemove` の件数が承認した件数以内なら実行する（X6-3 の 6）。M1 は確認の結果を持たない
 
 関数 `requiredBytes`：入力は `Diff`。出力は `toAdd` と `toReplace` の `size` の合計（置き換えは新しい `size`。消す分は引かない。B2-5）。空き容量との比較と V11 の余裕の加算は M4（X6-2）。合計は 64 ビットで足し、桁あふれは考えない（曲数 × 数百 MB で足りる）。
 
@@ -157,6 +159,7 @@
 | `buildTrackCandidate` | `ManifestTrack` | `PathParts`（フォルダ 2 要素、ステム、拡張子）。衝突の前の候補 | なし |
 | `assemblePath` | `PathParts`、接尾辞（空を許す） | `/` 区切りの相対パス（`Music/<アプリ名>/` を含まない） | なし |
 | `resolveTrackPaths` | 置く対象の `ManifestTrack` の並び、使用中のパスの集合、V24、V23 | `persistent_id` から相対パスへの対応 | なし |
+| `mimeTypeOf` | 小文字の拡張子 | MIME の文字列、または無し | なし |
 
 `sanitizeElement` の手順（B3-1 の表の順。1 要素ごと）：
 
@@ -170,7 +173,7 @@
 - 文字を足さない、区切りを足さない（B3-1）
 - 手順 4 は手順 3 の前の値と後の値のどちらかが `.` か `..` に当たれば `_` にする
 
-`truncateToBytes`：UTF-8 のバイト数が上限以内ならそのまま。超えるときは、コードポイントの境界で、上限以内に収まる最長の前方の部分を返す。結合文字の途中や書記素の途中では切れうる（書記素の境界は扱わない。X3 の置いた値 3）。切った後に `sanitizeElement` の手順 3 の末尾の空白と `.` の削除をもう一度行い、空になれば代わりの文字列にする。
+`truncateToBytes`：UTF-8 のバイト数が上限以内ならそのまま。超えるときは、コードポイントの境界で、上限以内に収まる最長の前方の部分を返す。結合文字の途中や書記素の途中では切れうる（書記素の境界は扱わない。X3 の置いた値）。切った後に `sanitizeElement` の手順 3 の末尾の空白と `.` の削除をもう一度行い、空になれば代わりの文字列にする。
 
 `buildTrackCandidate` の手順：
 
@@ -185,15 +188,29 @@
 
 `resolveTrackPaths` の手順（J7。端末の計算が 1 か所になる）：
 
-1. 入力の「使用中のパスの集合」は、`SyncRecord` の `placed_path` のうち今回の対象に含まれない曲のもの、および M4 が MediaStore の問い合わせで知った既存のパス。パスの比較は大文字小文字を区別しないで行い、使用中の集合と接尾辞なしの候補は小文字にそろえて比べる（FAT 系に備える。基本設計の直し 12）。返すパスは元の綴りのまま
-2. 置く対象のうち、すでに `SyncRecord` を持つ曲（置き換え）は、パスを再計算せず `placed_path` をそのまま返す。使用中の集合にも入れる（B3-1 の「動かさない」）
+1. 入力の「使用中のパスの集合」は、`SyncRecord` の `placedPath` のうち今回の対象に含まれない曲のもの、および M4 が MediaStore の問い合わせで知った既存のパス。パスの比較は大文字小文字を区別しないで行い、使用中の集合と接尾辞なしの候補は小文字にそろえて比べる（FAT 系に備える。基本設計の直し 12）。返すパスは元の綴りのまま
+2. 置く対象のうち、すでに `SyncRecord` を持つ曲（置き換え）は、パスを再計算せず `placedPath` をそのまま返す。使用中の集合にも入れる（B3-1 の「動かさない」）
 3. 残り（足す）を `persistent_id` の昇順に処理する
 4. 各曲の接尾辞なしの候補を作る。使用中の集合に無ければ、そのパスで確定し、集合に足す
 5. 使用中なら、接尾辞を V24 文字で作り直す。無ければ確定
 6. それでも使用中なら、接尾辞の文字数を `persistent_id` の全文（16 文字）にして再計算する。全文では衝突しない（`persistent_id` が一意なため）。衝突するときは異常として、結果に「解けない」を返す（J21（a））
 - 処理の順が決まっているので、同じ入力から必ず同じ結果になる。先に置く側が接尾辞なしを取る（B3-1 の「後から置く側」）
-- 後からの実行で `persistent_id` の小さい新しい曲が現れても、すでに置いた曲は `placed_path` が固定されるので動かない（手順 2）
+- 後からの実行で `persistent_id` の小さい新しい曲が現れても、すでに置いた曲は `placedPath` が固定されるので動かない（手順 2）
 - M4 は置いた後に `DISPLAY_NAME` と `RELATIVE_PATH` を読み戻して T1 に保存する（B3-1。X6-2）。M1 は読み戻しを知らない
+
+`mimeTypeOf` の表（M4 が MediaStore の `MIME_TYPE` に使う。X6-2。置いた規則で、値は実機で未確認）：
+
+| 拡張子 | MIME |
+|---|---|
+| `mp3` | `audio/mpeg` |
+| `m4a` | `audio/mp4` |
+| `aac` | `audio/aac` |
+| `wav` | `audio/x-wav` |
+| `aif`、`aiff` | `audio/x-aiff` |
+| `flac` | `audio/flac` |
+| `m3u8` | `audio/x-mpegurl`（固定。J18） |
+
+- 表に無い拡張子は「無し」を返す。端末の再生能力の判定（B3）で外れる形式は転送の前に除かれるため、「無し」は判定の漏れに当たる。M4 は E9（MediaStore への登録）として扱う
 
 ### X3-4 m3u8 の生成
 
@@ -203,14 +220,14 @@
 
 | 関数 | 入力 | 出力 | 副作用 |
 |---|---|---|---|
-| `buildM3u8` | `ManifestPlaylist`、`placedPaths`（`persistent_id` から `placed_path` への対応） | m3u8 の本文（文字列） | なし |
+| `buildM3u8` | `ManifestPlaylist`、`placedPaths`（`persistent_id` から `placedPath` への対応） | m3u8 の本文（文字列） | なし |
 | `buildPlaylistFileName` | プレイリストの並び（`persistent_id`、`name`）、V24、V23 | `persistent_id` からファイル名（拡張子 `.m3u8` を含む）への対応 | なし |
 
 `buildM3u8` の手順：
 
 1. 1 行目は `#EXTM3U`、行末は LF
 2. `track_ids` を元の順に見て、`placedPaths` に無い ID は飛ばす（置けていない曲は載せない。B3-3）
-3. あるものは `placed_path` をそのまま 1 行に書き、行末は LF。同じ曲が重複していればその回数だけ書く
+3. あるものは `placedPath` をそのまま 1 行に書き、行末は LF。同じ曲が重複していればその回数だけ書く
 4. 文字コードの変換は M4（UTF-8、BOM なし）。M1 は行末が LF の文字列を返す
 5. 曲が 0 でも `#EXTM3U` の 1 行（行末の LF を含む）を返す
 - `#EXTINF` は書かない（J14）。区切りは `/`。`..` は使わない（J14）
@@ -219,8 +236,8 @@
 `buildPlaylistFileName` の手順（B3-3 の「プレイリスト名の使えない文字」）：
 
 1. `name` を `sanitizeElement`（代わりは `Untitled`）にかけ、ステムを作る。ステムの上限は V23 から `.m3u8` の 5 バイトを引いた値
-2. 手順 1 の結果が同じになるプレイリストが 2 つ以上ある、または元の `name` が空（手順 1 で代わりの文字列になった）なら、そのプレイリストのすべてに ` [` ＋ プレイリストの `persistent_id` の先頭の V24 文字 ＋ `]` を足す。足すときのステムは、接尾辞の分を引いた上限で作り直す
-3. 接尾辞を足した後でも同じファイル名が残るときは、X3-3 の手順 6 と同じく接尾辞を全文にする
+2. 手順 1 の結果が同じ（大文字小文字を区別しない比較。X3-3 の手順 1 と同じ）になるプレイリストが 2 つ以上ある、または元の `name` が空（手順 1 で代わりの文字列になった）なら、そのプレイリストのすべてに ` [` ＋ プレイリストの `persistent_id` の先頭の V24 文字 ＋ `]` を足す。足すときのステムは、接尾辞の分を引いた上限で作り直す
+3. 接尾辞を足した後でも同じファイル名（同じく大文字小文字を区別しない）が残るときは、X3-3 の手順 6 と同じく接尾辞を全文にする
 4. 同期のたびに、選んだ全プレイリストを入力にする（F4-4）。名前の変更で m3u8 のファイル名が変わったときの古いファイルの削除は M4（X6）
 - 同じ名前の一方が選択から外れると、残る側の接尾辞が消えてファイル名が変わる。B3-3 の文言のとおりで、利用者の見える害は m3u8 が 1 回作り直されるだけ（J21（a））
 
@@ -236,7 +253,7 @@
 | E2 | `KeyMismatch` | `cause`（署名の不一致、証明書の固定の不一致、ペアリングの解除） | 同期全体 |
 | E3 | `InsufficientStorage` | `shortfallBytes`、`phase`（事前、書き込み中） | 同期全体 |
 | E4 | `XmlUnavailable` | なし | 同期全体 |
-| E5 | `FileMissing` | `persistentId`、`name`、`reason`（`no_location`、`undecodable`、`not_found`、`unreadable`。X3-1 の `reason` と同じ値） | 曲単位 |
+| E5 | `FileMissing` | `persistentId`、`name`、`reason`（`no_location`、`undecodable`、`not_found`、`unreadable`。X3-1 の `reason` から `no_id` を除く 4 値） | 曲単位 |
 | E6 | `TransferInterrupted` | `persistentId`、`attempts` | 同期全体 |
 | E7 | `TimeLimit` | なし | 同期全体 |
 | E8 | `ManifestStale` | `persistentId`、`name`、`retried`（やり直しでも E8 だったか） | 曲単位 |
@@ -274,11 +291,22 @@
 |---|---|
 | `errors` | 同期の間に起きた `SyncError` |
 | `transferStarted` | 1 曲でも取得の要求を送ったか |
+| `userInterrupted` | 利用者が中断したか（通知の「中断」、S3 の操作） |
 
+0. `userInterrupted` が真なら、`errors` と `transferStarted` に関わらず「中断」
 1. `errors` が空なら「完了」
 2. `errors` がすべて曲単位（E5、E8、E9）なら「一部」
 3. 同期全体の E（E1、E2、E3、E4、E6、E7）を 1 つでも含む場合：`transferStarted` が偽なら「失敗」、真なら「中断」
 4. ただし E7 を含むときは `transferStarted` に関わらず「中断」
+- 区分と T3 の `result` の対応（M4 が保存のときに写す。X6-3）：
+
+| 区分 | T3 の `result` |
+|---|---|
+| 完了 | `success` |
+| 一部 | `partial` |
+| 中断 | `interrupted` |
+| 失敗 | `failed`。ただし E3 の `phase` が事前なら `not_started` |
+
 - `hasMore`（関数 `hasMore`）：区分が「中断」で、`Diff` の足す・置き換えに未完了が残るとき真（入力は完了した件数と予定の件数。J21（a））
 - 「消す」を実行するのは、区分が「完了」か「一部」のとき（B2-6）。判定の関数 `mayRemove`（入力は区分）を M1 に置く
 
@@ -304,15 +332,17 @@ PC への報告（P4 の本文の元。`SyncReport`）。項目は次の 8 つ�
 |---|---|
 | マニフェストの読み書き | 往復で同じ値になる。未知のキー（`content_hash` を含む）を読み捨てる。任意の項目の無しと値あり。`persistent_id` の形の違い（15 桁、小文字、非 16 進）。重複の落とし。`format_version` の範囲外と欠落。`track_ids` が `tracks` に無い ID を持つ |
 | `content_digest` | 固定の入力の期待値（手で作った試料の値を 1 つ固定する）。入力の並びを入れ替えても同じ。`generated_at`、`library_id`、`excluded` を変えても同じ。`track_ids` の順を変えると違う。文字列の境界（「ab」「c」と「a」「bc」）で違う。`CryptoProvider` は固定の SHA-256 の実体を使う |
-| 差分 | 5 つの判定（足す、ファイル無しの補充、置き換える、変更なし、消す）の表。`size` だけ違う、`modified_at` だけ違う。保護付きと `m4p`。1 曲が複数のプレイリストに入る（集合は `tracks` なので 1 件）。`SyncRecord` が空（入れ直し）。ファイルが無く、かつマニフェストに無い記録（消す）。`recordedLibraryId` の null と違い。消す件数が V20 と同じ、V20 を超える、全部。`toRemove` が 0 件で全部の条件に当たらない（全部の条件は 1 件以上） |
+| 差分 | 5 つの判定（足す、ファイル無しの補充、置き換える、変更なし、消す）の表。`size` だけ違う、`modified_at` だけ違う。保護付きと `m4p`。1 曲が複数のプレイリストに入る（集合は `tracks` なので 1 件）。`SyncRecord` が空（入れ直し）。ファイルが無く、かつマニフェストに無い記録（消す）。`recordedLibraryId` の null と違い。消す件数が V20 と同じ、V20 を超える、全部。`toRemove` が 0 件で全部の条件に当たらない（全部の条件は 1 件以上）。`unresolvedPlaylists` が 1 件で `NeedsConfirmation`、0 件で `Allowed`。`LibraryChanged` でも `toRemove` を計算して返す。`LibraryChanged` と `NeedsConfirmation` の両方に当たるとき `LibraryChanged`。`isEmpty`（3 つの並びがすべて空のときだけ真） |
 | 容量 | 足す、置き換えるだけを数え、消すを引かない。空の差分は 0 |
 | `sanitizeElement` | 使えない文字 9 種、制御文字（U+0085、U+2028、U+2029 を含む）、先頭の `#`、先頭末尾の空白（全角を含む）、末尾の `.`、`.` と `..`、空白と `.` が混ざる末尾、空になる入力、日本語、絵文字、結合文字（正規化されないこと） |
 | 長さ | V23 ちょうど、V23 + 1、3 バイトの文字の境界、4 バイトの文字（サロゲートペア）の境界、切った後に末尾が空白か `.`、拡張子と接尾辞を含めた全体が V23 以内 |
-| 衝突 | マニフェスト内の 2 件と 3 件、`persistent_id` の昇順で先が接尾辞なし。使用中の集合との衝突。接尾辞の後も衝突（V24 の文字数の一致）→ 全文。置き換えの曲の `placed_path` が動かない。入力の並びを入れ替えても結果が同じ。大文字小文字だけの違いは同じパスとして衝突する（区別しない比較。基本設計の直し 12）。NFC と NFD の同じ見た目の名前は衝突せず別のパスになる（正規化しない。B3-1） |
+| 衝突 | マニフェスト内の 2 件と 3 件、`persistent_id` の昇順で先が接尾辞なし。使用中の集合との衝突。接尾辞の後も衝突（V24 の文字数の一致）→ 全文。全文でも衝突するとき「解けない」を返す。置き換えの曲の `placedPath` が動かない。入力の並びを入れ替えても結果が同じ。大文字小文字だけの違いは同じパスとして衝突する（区別しない比較。基本設計の直し 12）。NFC と NFD の同じ見た目の名前は衝突せず別のパスになる（正規化しない。B3-1） |
 | 候補の文字列 | `album_artist` あり・なし・空白のみ、`artist` のみ、すべて空（`Unknown Artist`、`Unknown Album`、`Untitled`）。拡張子が空 |
 | m3u8 | `#EXTM3U` の行と LF。空のプレイリスト。置けていない曲を飛ばす。同じ曲の重複。BOM と CR を含まない。日本語と記号を含むパス。先頭が `#` のパスが出ない（`sanitizeElement` の手順 6）。U+0085、U+2028、U+2029 が削除される |
-| プレイリストのファイル名 | 同名の 2 件に接尾辞、空の名前、接尾辞後の再衝突、長い名前の切り詰め（`.m3u8` を含めて V23 以内） |
-| 区分 | `classifyOutcome` の 4 種と境界（E7 だけ、曲単位だけ、全体＋ `transferStarted` の真偽）。`mayRemove` |
+| プレイリストのファイル名 | 同名の 2 件に接尾辞、大文字小文字だけ違う 2 件に接尾辞、空の名前、接尾辞後の再衝突、長い名前の切り詰め（`.m3u8` を含めて V23 以内） |
+| 区分 | `classifyOutcome` の 4 種と境界（E7 だけ、曲単位だけ、全体＋ `transferStarted` の真偽、`userInterrupted` が真で `errors` が空）。区分から T3 の `result` への対応（E3 の事前だけ `not_started`）。`mayRemove` |
+| 結果の関数 | `hasMore`（中断で未完了が残るときだけ真）。`breakdown`（E の番号ごとの件数と最初の曲名）。`toUnplayable`（保護付きを `protected` の理由で写す）。`toReport`（8 項目、曲名を含めない、`excludedCount`） |
+| MIME | `mimeTypeOf` の表の全件。表に無い拡張子は無し。`m3u8` は `audio/x-mpegurl` |
 | E の型 | 全 9 種の範囲が B2-6 の表と一致する（表を試料にして検査） |
 
 - 試料はすべて合成データ。実在の曲名、パスを使わない
@@ -327,52 +357,26 @@ PC への報告（P4 の本文の元。`SyncReport`）。項目は次の 8 つ�
 
 ### X3 の置いた値
 
-承認後に B1-7 へ移す（X1-4 に集める）。
-
-| # | 項目 | 置いた値 | 使う場所 |
-|---|---|---|---|
-| 1 | `format_version` の初版 | 1 | X3-1 |
-| 2 | `content_digest` の先頭の固定の文字列 | `playlist-sync-fox/manifest-digest/v1`（UTF-8） | X3-1 |
-| 3 | 切る境界の単位 | コードポイント（書記素ではない） | X3-3 |
-| 4 | 接尾辞の 2 回目の文字数 | `persistent_id` の全文（16） | X3-3、X3-4 |
-| 5 | `content_digest` の表記 | 小文字の 16 進 64 桁 | X3-1 |
-
-- 3、4 は固定の約束で調整する値ではない。V の表に入れず、本文の約束として残してよい（X1 の判断）
+V38〜V40 に登録済み（B1-7）。固定の約束 2 件（切る境界はコードポイント、接尾辞の 2 回目は全文の 16 文字）は V の表に入れない（X1 の判断）。X3-3 の `mimeTypeOf` の表は V 未付番で、B1-7 への登録を要する。
 
 ### X3 の要判断
 
-J21（すべて推奨どおり）で決定済み。
-
-| 論点 | J | 結論 |
-|---|---|---|
-| 1 `content_digest` の入力に `excluded` を含めるか | J21 | a 含めない |
-| 2 差分の並びの基準 | J21 | a `persistent_id` の昇順 |
-| 3 全文の接尾辞でも衝突するとき | J21 | a 「解けない」を返し、その曲を E9 の対象とする |
-| 4 重複した名前のプレイリストの接尾辞 | J21 | a 全員に付ける |
-| 5 壊れたマニフェストと版の不一致に E の番号を付けるか | J21 | a 付けない |
-| 6 `hasMore` を E7 に限るか | J21 | a 中断で未完了が残るとき |
+J21 の結論（すべて推奨どおり）は本文に反映済み（review-05、06）。
 
 ### X3 の差し戻し候補
 
-| 参照 | 箇所 |
-|---|---|
-| 基本設計の直し 10 | B2-2 の「保護」の行 |
-| 基本設計の直し 11 | B3-1 の使えない文字の表 |
-| 基本設計の直し 12 | B3-1 の衝突 |
-| 基本設計の直し 13 | B2-4 の `file_name` |
-
-- 旧 5（B2-8 の「失敗の内訳」を `errors` から作る関数にした件）は review-05 の表に無い。第 3 稿の基本設計で扱うか、本文のままとする
+基本設計の直し 10〜13 は B2、B3 に反映済み（review-05）。
 
 ### X3 の他の節への依頼
 
+X1、X4 への依頼は反映済み。未了は次の表のみ。
+
 | 宛先 | 依頼 |
 |---|---|
-| X1 | M1 のパッケージの案：`manifest`（X3-1）、`diff`（X3-2）、`path`（X3-3、X3-4）、`result`（X3-5）。version catalog に kotlinx-serialization の JSON と kotlinx-datetime（日時の型）を足す。X3 の置いた値の表を X1-4 に集める |
-| X4 | `CryptoProvider` に SHA-256 を含める（X3-1 の `content_digest`。入力はバイト列、出力は 32 バイト）。P4 の本文の項目名を `SyncReport`（X3-5）に合わせる（X4 と X5 が決める） |
-| X5 | P1 の応答の本文は `Manifest` の直列化の結果。`content_digest` は X3-1 の関数で PC が計算する。除外の理由の値（`ExcludedTrack.reason`）は M2 の出力の理由から写す |
-| X6 | `SyncRecord`、`Diff`、`SyncResult`、`SyncError` を M4 が写す。`presentIds` の作成、MediaStore の既存のパスの問い合わせ（X3-3 の使用中の集合）、読み戻したパスの T1 への保存、`removalGate` の扱い（手動は確認、自動は飛ばして通知）、`hasMore` の入力（完了件数）、プレイリストのファイル名の変更時の古い m3u8 の削除、UTF-8（BOM なし）への変換 |
+| X2 | `ExcludedTrack` の理由（`no_location`、`undecodable`、`not_found`、`unreadable`、`no_id`）は、M2 の材料（場所の結果、ID 無しの一覧、`kind`）から M3 が導く。保護付きは除外せず `protected` の印で出す |
+| X5 | P1 の応答の本文は `Manifest` の直列化の結果。`content_digest` は X3-1 の関数で PC が計算する。除外の理由の値は M2 の材料から写す |
+| X6 | `SyncRecord`、`Diff`、`SyncResult`、`SyncError` を M4 が写す（T1 の列との対応は X3-2）。`presentIds` の作成、MediaStore の既存のパスの問い合わせ（使用中のパスの集合）、読み戻したパスの T1 への保存、`removalGate` の扱い（`LibraryChanged` の承認後は T3 の `library_id` を更新。`NeedsConfirmation` は手動が確認、自動は飛ばして通知）、区分から T3 の `result` への対応（X3-5）、`hasMore` の入力（完了件数）、プレイリストのファイル名の変更時の古い m3u8 の削除、UTF-8（BOM なし）への変換、MIME は X3-3 の表を使う |
 | X7 | 結果の表示は `SyncResult` の項目を使う。除外の理由と再生できない形式の理由の表示の文は X7（S の表示）で決める。版が合わない・壊れたマニフェストの画面の文も同じ |
-| X2 | `ExcludedTrack` の理由（`no_location`、`undecodable`、`not_found`、`unreadable`、`no_id`）の値の名を M2 の出力に合わせる。保護付きは除外せず `protected` の印で出す |
 
 ### X3 の確かめた事実
 
