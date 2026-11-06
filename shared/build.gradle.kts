@@ -22,5 +22,9 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
+        // 暗号の実体が要るテスト用。commonMain には足さない（J16）
+        jvmTest.dependencies {
+            implementation(libs.bouncycastle.bcprov)
+        }
     }
 }
