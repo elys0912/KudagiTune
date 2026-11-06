@@ -118,7 +118,7 @@ desktop ──▶ itunes ──▶ shared ◀── android
   <div class="sep">▶</div>
   <div class="step"><b>8 結果の報告（P4）</b>PC の画面に表示</div>
 </div>
-<p class="meta">同期全体の失敗（E1・E2・E3・E4・E6・E7）の後では「消す」を実行しない。自動の同期は、消す件数が多いときなどだけ消さず、通知で知らせる。</p>
+<p class="meta">同期全体の失敗（E1・E2・E3・E4・E6・E7）と利用者の中断の後では「消す」を実行しない。自動の同期は、消す件数が多いときなどだけ消さず、通知で知らせる。</p>
 
 <h2>5. API と失敗の種類</h2>
 <p>共通：HTTPS、パスの先頭に <code>/v1</code>。P1〜P4 は署名が要る。</p>
@@ -183,13 +183,13 @@ Music/
   <tr><td class="num">Q2</td><td>USB の方式</td><td class="s-decided">決定（D7）</td><td>USB テザリング（概要設計）</td></tr>
   <tr><td class="num">Q3</td><td>形式の変換</td><td class="s-decided">決定（D10）</td><td>変換なし（概要設計）</td></tr>
   <tr><td class="num">Q4</td><td>MediaStore への反映の仕方</td><td class="s-temp">暫定（実機の確認待ち）</td><td>m3u8 を <code>MediaStore.Files</code> に置き、索引に任せる（基本設計）。実機は C-2</td></tr>
-  <tr><td class="num">Q5</td><td>TLS と鍵の保管</td><td class="s-decided">決定</td><td>自己署名 TLS と SPKI 固定。SPAKE2（Bouncy Castle の点演算）。PC の鍵は DPAPI の <code>secrets.bin</code>、端末は Keystore（基本設計・詳細設計）</td></tr>
+  <tr><td class="num">Q5</td><td>TLS と鍵の保管</td><td class="s-decided">決定（基本・詳細設計）</td><td>自己署名 TLS と SPKI 固定。SPAKE2（Bouncy Castle の点演算）。PC の鍵は DPAPI の <code>secrets.bin</code>、端末は Keystore（基本設計・詳細設計）</td></tr>
   <tr><td class="num">Q6</td><td>同期の自動起動の条件</td><td class="s-decided">決定（D13）</td><td>概要設計</td></tr>
   <tr><td class="num">Q7</td><td>端末側の保存先</td><td class="s-decided">決定</td><td><code>Music/&lt;アプリ名&gt;/&lt;アーティスト&gt;/&lt;アルバム&gt;/</code> と名前の規則（基本設計 B3-1）</td></tr>
   <tr><td class="num">Q8</td><td>複数の端末</td><td class="s-decided">決定（D11）</td><td>概要設計</td></tr>
   <tr><td class="num">Q9</td><td>複数の PC</td><td class="s-open">未決</td><td>未決のまま。library_id の確認で備える</td></tr>
   <tr><td class="num">Q10</td><td>変更の検知</td><td class="s-decided">決定</td><td>サイズと更新日時（実ファイルの値）。ハッシュは使わない（基本設計）</td></tr>
-  <tr><td class="num">Q11</td><td>Apple Music アプリの XML の書き出しの運用</td><td class="s-open">保留</td><td>保留のまま（D1、T11）</td></tr>
+  <tr><td class="num">Q11</td><td>Apple Music アプリのライブラリの読み方</td><td class="s-decided">決定（D1：保留）</td><td>保留のまま（D1、T11）</td></tr>
   <tr><td class="num">Q12</td><td>配布の形</td><td class="s-decided">決定（細部は未決）</td><td>jpackage の zip と署名つき APK を Releases に置く。公開は手動（基本設計）</td></tr>
   <tr><td class="num">Q13</td><td>MagicDNS 名の取得方法</td><td class="s-open">未決</td><td>実装時に決める。取れないときは Tailscale の管理画面で調べた名前を入力する（説明書）</td></tr>
 </table>
