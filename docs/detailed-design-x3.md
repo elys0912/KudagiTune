@@ -139,7 +139,7 @@
 | `LibraryChanged` | `recordedLibraryId` が null でなく、`manifestLibraryId` と違い、`toRemove` が 1 件以上 | `toRemove` は計算して返す（J25）。手動は確認し、承認後に実行して、T3 の `library_id` を新しい値にする（記録の更新は M4）。自動は飛ばして通知 |
 | `NeedsConfirmation` | `toRemove` の件数が V20 を超える、`SyncRecord` の全部が `toRemove` に当たり、かつ件数が 1 以上、または `unresolvedPlaylists` が 1 件以上（J24） | `toRemove` は計算して返す。手動は確認、自動は飛ばして通知 |
 - `LibraryChanged` と `NeedsConfirmation` の両方に当たるときは `LibraryChanged` を返す
-- `recordedLibraryId` が違っても `toRemove` が 0 件なら `Allowed` を返す。M4 は T3 の `library_id` を確認なしで新しい値にする（B2-5。J25）
+- `recordedLibraryId` が違っても `toRemove` が 0 件なら `LibraryChanged` には当たらない（ほかの条件で `NeedsConfirmation` になりうる）。M4 は T3 の `library_id` を確認なしで新しい値にする（B2-5。J25）
 - 未解決のプレイリストの曲は、`SyncRecord` にプレイリストとの対応が無く、「消さない」を曲ごとには実装できない。1 件でもあれば、消すを確認の扱いにする（手動は確認、自動は飛ばす。J24。2026-11-06）
 - 確認後の実行は M4 が行う。M4 は P1 を取り直して差分を計算し直し、`toRemove` の件数が承認した件数以内なら実行する（X6-3 の 6）。M1 は確認の結果を持たない
 
