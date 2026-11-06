@@ -26,9 +26,9 @@ M3 は薄く保つ（N5-2）。判断（差分、署名の手順、再送防止�
 
 | P | メソッドとパス | 署名 | M3 の処理 | 呼ぶ先 |
 |---|---|---|---|---|
-| P1 | `GET /v1/manifest` | 要 | 選択の集合（X5-4）と M2 の結果から、M1 にマニフェストを作らせて返す。作ったマニフェストの曲の表（persistent_id ごとの size、modified_at）を M3 が持ち、P1 のたびに置き換える（J31。メモリのみ）。XML が読めなければ 503（E4） | M1（X3-1）、M2（X2-3） |
+| P1 | `GET /v1/manifest` | 要 | 選択の集合（X5-4）と M2 の結果から、M1 にマニフェストを作らせて返す。作ったマニフェストの曲の表（persistent_id ごとの size、modified_at）を M3 が持ち、P1 のたびに置き換える（J31。メモリのみ）。表は実ファイルのパスも持つ（X2-4 の 9）。XML が読めなければ 503（E4） | M1（X3-1）、M2（X2-3） |
 | P2 | `GET /v1/tracks/{persistent_id}` | 要 | 下記「P2 の検査」 | 曲の表（P1 で作ったもの）、M2 の結果（X2-3）と `LibraryHolder`（X2-4）、実ファイル |
-| P3 | `GET /v1/digest` | 要 | `content_digest` だけ返す | M1 |
+| P3 | `GET /v1/digest` | 要 | マニフェストを作らず、`content_digest` だけ返す | M1 |
 | P4 | `POST /v1/reports` | 要 | 本文を検査し、X5-4 の端末の表の `last_sync` へ `SyncReport` の全項目をそのまま保存（項目は X3-5）。204 | 設定の保存 |
 | P5 | `POST /v1/pairing/start` | 不要 | コード表示中のみ受ける。それ以外は 403（E2、`pairing_closed`。H0 のうち V4 の待ちの間は `pairing_locked`）。devices が 1 件でもあれば 403（E2、`device_exists`）。順は X4-2-2 | M1（X4-2） |
 | P6 | `POST /v1/pairing/confirm` | 不要 | 同上。不一致は 401（E2）。試行が V2 に達したら 403（`pairing_locked`）。成功のときは、応答の前に K1 の保存と settings.json の `devices` への追加（`display_name`、`registered_at`）を済ませる（K1 と同じ時点。review-11） | M1（X4-2）、K1 の保存、設定の保存 |
@@ -58,7 +58,7 @@ M3 は薄く保つ（N5-2）。判断（差分、署名の手順、再送防止�
 2. 曲の表（P1 で最後に作ったマニフェストの曲の表。J31）に無い ID は 404（E5）。起動後に P1 が無く表が空のときも 404
 3. 問い合わせの `size`、`modified_at` が曲の表の値と違えば 409（E8）。本文を送らない。XML が置き換わった後も、P1 で作った表と比べる（現在の XML の値は使わない）
 4. 実ファイルが無ければ 404（E5）。実ファイルの大きさが `size` と違えば 409（E8）
-5. 実ファイルのパスは、M2 が解いた ID からの対応表だけで引く。要求の文字列からパスを作らない（N1-7）
+5. 実ファイルのパスは、手順 2 の曲の表（P1 で作った表。実ファイルのパスを持つ）だけで引く。XML が置き換わった後も現在の XML は引かない。要求の文字列からパスを作らない（N1-7）
 6. `Range: bytes=N-` があれば、N が大きさ以上なら 416。範囲内なら 206 と `Content-Range`（`PartialContent` が受ける。GET と HEAD のみで、他のメソッドは 405。`Content-Length` が要る。facts-jvm 7a）
 7. 応答のヘッダは `Content-Length`、`Accept-Ranges: bytes`、`X-Psfox-Size`、`X-Psfox-Modified-At`。本文は圧縮しない（範囲の配信中は `PartialContent` が圧縮を無効にする。facts-jvm 7a）
 8. 本文はファイルから逐次に送る。全体をメモリに載せない

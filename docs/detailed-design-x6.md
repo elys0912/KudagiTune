@@ -89,7 +89,7 @@ T3 `sync_runs`（索引：`started_at`）：
 | `reported` | integer | はい | P4 で報告済みなら 1、未報告は 0（初期値 0）。再送の対象の判定に使う（X6-3 の 11） |
 | `library_id` | text | いいえ | マニフェストの `library_id`。差分の `recordedLibraryId` は、この列が NULL でない最新の行の値（無ければ初回で null）。書き方は X6-3 の 10（J22、J25） |
 | `content_digest` | text | いいえ | P3 の `content_digest`。自動の抑止（X6-3 の 2）の比較に使う（J22） |
-| `result_json` | text | いいえ | `SyncResult`（X3-5）のうち上の列に無い項目を 1 列の JSON で持つ。予定と完了の件数、容量、接続の方式、続きあり、未解決のプレイリスト、自動が「消す」を飛ばした印（`removal_skipped`）。S4 の表示と P4 の再送の元。実行中は NULL（J22） |
+| `result_json` | text | いいえ | `SyncResult`（X3-5）の全体を 1 列の JSON で持つ（`library_id`・`content_digest` は判定用に上の列にも持つ。J22）。予定と完了の件数、容量、接続の方式、続きあり、未解決のプレイリスト、自動が「消す」を飛ばした印（`removal_skipped`）。S4 の表示と P4 の再送の元。実行中は NULL（J22） |
 
 T4 `pairing`：列は B3-4 のとおり。足す列は `last_endpoint`（text。最後に応えた接続先の方式。語は B3-4 の接続の方式。J30）。必須は `endpoint_lan`、`endpoint_tailscale`、`endpoint_usb`、`last_endpoint` だけ「いいえ」。主キー `device_id`。
 
@@ -139,7 +139,7 @@ T7 `app_settings`：主キー `key`、`value` は必須。既知の `key` は `a
 #### 再開と回収
 
 1. 同期の始めの整理（X6-3 の 1）で、T5 の期限切れ（V25）の行を回収する。pending の行を削除し、T5 を消す
-2. T5 に行があり、`source_modified` が今のマニフェストと同じなら、その URI を開き直して続ける（手順 5 から）。再開の位置は pending のファイルの大きさを正とする（フラッシュと T5 の更新の間に落ちると T5 の `received_bytes` が遅れる。違えば大きさに合わせて T5 を直す）。違えば、pending の行を削除して T5 を消し、新規に書く
+2. T5 に行があり、`source_modified` が今のマニフェストと同じなら、その URI を開き直して続ける（手順 5 から）。`source_modified` が違えば、pending の行を削除して T5 を消し、新規に書く。同じ場合の再開の位置は pending のファイルの大きさを正とする（フラッシュと T5 の更新の間に落ちると T5 の `received_bytes` が遅れる。`received_bytes` が大きさと違えば大きさに合わせて T5 を直す）
 3. T5 に行があるが、その URI が MediaStore に無い（利用者が消した、OS が掃除した）ときは、T5 を消して新規に書く
 4. 置き換えの途中（T1 の `state`＝`replacing`）は、続きから再開せず、最初から書き直す。根拠：`"wt"` で切り詰めており、途中の位置が使えない。T5 には置き換えの行を作らない
 
@@ -191,7 +191,7 @@ T7 `app_settings`：主キー `key`、`value` は必須。既知の `key` は `a
 3. T3 に行を追加する（`ended_at` は NULL）。上の抑止で終える自動は追加しない。手動が手順 2 の 3 で終えるときは、そこで追加している（J10）
 4. P1 でマニフェストを取り、M1 の差分を計算する（足す、置き換える、消す）。入力は T1 の全行、`presentIds`（T1 の曲のうち MediaStore に行が今もある曲の `persistent_id`。無い曲は X3-2 の判定で「足す」になる）、記録の `library_id`（X6-1 の T3）、V20
 5. 容量の確認：「足す」「置き換える」の `size` の合計に V11 を足し、共有ストレージのボリュームの UUID で `StorageManager.getAllocatableBytes` を worker スレッドで呼んで比べる（数秒かかることがある）。呼べなければ `StatFs` の空きで比べる。足りなければ E3、`not_started` で終える。不足分を T3 と通知へ渡す。通知と S3 には `ACTION_MANAGE_STORAGE` で利用者に空けてもらう案内を出す（X7 への依頼）
-6. 「消す」の扱い（J9、J21（a）、J24〜J26）。判定は M1 の `removalGate`（X3-2）。マニフェストに未解決のプレイリストが 1 件でもあるときは、`Allowed` でも `NeedsConfirmation` と同じ扱いにする（J24）：
+6. 「消す」の扱い（J9、J21（a）、J24〜J26）。判定は M1 の `removalGate`（X3-2。未解決のプレイリストの有無も入力に含まれる。J24）：
    1. 手動では、画面側（前面。X7-1-2）が、ワーカーを起動する前に P1 と差分の計算までを行う。`Allowed` でなければ「消す」の件数を確認の画面に出す。`Allowed` なら確認なしで起動する。画面側の P1 が失敗したとき（届かない、E2、E4）は、確認を飛ばしてワーカーを起動し、ワーカーが手順 2 から E を記録する
    2. 承認されたら、`delete_approved`＝真と `approved_delete_count` を付けてワーカーを起動する。確認が取り消されたら、`delete_approved`＝偽で起動し、「消す」だけ飛ばして同期する（J26）
    3. ワーカーは手順 4 で P1 を取り直して差分を再計算し、`removalGate` で決める。自動は `Allowed` なら実行し、ほかは飛ばす。手動は `Allowed` なら実行し、ほかは `delete_approved`＝真で「消す」の件数が `approved_delete_count` 以内のときだけ実行して、それ以外は飛ばす
@@ -210,8 +210,8 @@ T7 `app_settings`：主キー `key`、`value` は必須。既知の `key` は `a
 
 #### 進行の状態（SyncProgress）
 
-- X6 が公開する読み取りの状態。型は X7-1-4 の表のとおり（`stage`、`done_count`、`total_count`、`done_bytes`、`total_bytes`、`current_title`、`shortage_bytes`、`near_limit`、`outcome`）。ワーカーが更新し、画面（S3）と通知（X7-3）が購読する。DB には持たない（T3 は終了後の記録）
-- `stage` は手順に対応する：`manifest`（手順 4 の P1）、`diff`（差分の計算）、`capacity`（手順 5。足りないとき `shortage_bytes` を入れる）、`transfer`（手順 7）、`playlist`（手順 8）、`finished`（手順 10 の後。`outcome` に T3 の `result`）
+- X6 が公開する読み取りの状態。型は X7-1-4 の表のとおり（`stage`、`done_count`、`total_count`、`done_bytes`、`total_bytes`、`current_title`、`shortage_bytes`、`near_limit`、`outcome`、`error_detail`）。ワーカーが更新し、画面（S3）と通知（X7-3）が購読する。DB には持たない（T3 は終了後の記録）
+- `stage` は手順に対応する：`manifest`（手順 4 の P1）、`diff`（差分の計算）、`capacity`（手順 5。足りないとき `shortage_bytes` を入れる）、`transfer`（手順 7）、`playlist`（手順 8）、`finished`（手順 10 の後。`outcome` に T3 の `result`。E2 のときは `error_detail` に E2 の `detail` を入れる。T3 には残らず、X7-1-3 の表示だけに使う）
 - `near_limit` は、ワーカーが前面へ昇格してからの経過が V17 に達したときに真にする（時間の上限に当たる前の注意。V17 以外の値は置かない）。更新は V28 の間隔以上
 
 #### 中断と時間の上限
@@ -297,7 +297,7 @@ T7 `app_settings`：主キー `key`、`value` は必須。既知の `key` は `a
 
 | 項目 | 内容 |
 |---|---|
-| 取り込み | ペアリングの完了時、X4 の手順が返した 32 バイトの鍵を Android Keystore に取り込む。鍵の種類は HMAC-SHA256、用途は署名のみ。Keystore への HMAC の取り込みが使えることは（未確認。実機で確かめる。C-12） |
+| 取り込み | P6 の成功で確定する（J27）。失敗や離脱では T4 と Keystore に書かない。X4 の手順が返した 32 バイトの鍵を Android Keystore に取り込む。鍵の種類は HMAC-SHA256、用途は署名のみ。Keystore への HMAC の取り込みが使えることは（未確認。実機で確かめる。C-12） |
 | 別名 | `psfox-k3-<device_id>`。T4 の `key_alias` に保存。別名の接頭辞は Q1 で変わる |
 | 取り出し | しない。署名は Keystore に依頼する（B4-3） |
 | 取り込み後 | メモリ上の 32 バイトを上書きして捨てる（ガベージコレクタの都合で完全な保証はない） |
@@ -309,7 +309,7 @@ T7 `app_settings`：主キー `key`、`value` は必須。既知の `key` は `a
 #### K4（SPKI のハッシュと PC の識別子）
 
 - T4 の `spki_hash`、`pc_id` に持つ。内部領域に限る。バックアップの対象外（`allowBackup` を無効。B3-2）
-- 更新はペアリング完了時だけ。同期の途中で書き換えない（接続先が変わるのを避ける）
+- 更新は P6 の成功で確定するペアリング完了時だけ。失敗や離脱では T4 に書かない（J27）。同期の途中で書き換えない（接続先が変わるのを避ける）
 
 #### CryptoProvider の端末側の実体
 
@@ -366,9 +366,10 @@ J18、J21（a）の結論は本文に反映済み（review-05、06）。J22〜J2
 
 ### X6 の他の節への依頼
 
+X3 への依頼は反映済み（review-11）。未了だけを残す。
+
 | 宛先 | 内容 |
 |---|---|
-| X3 | `removalGate` に、未解決のプレイリストが 1 件でもあるときの確認の扱いを含める（J24）。`LibraryChanged` でも `toRemove` を計算して返す（J25）。`classifyOutcome` に利用者の中断を足す。MIME の表（拡張子から決める）を X3-3 に置く |
 | X7 | S3 に手動の「消す」の確認を置く。取り消しは「消す」だけ飛ばして同期（J26）。画面側の P1 が失敗したら確認を飛ばしてワーカーを起動する（X6-3 の 6）。容量が足りないとき（X6-3 の 5）の `ACTION_MANAGE_STORAGE` の案内。自動が「消す」を飛ばした印は T3 の `result_json` の `removal_skipped`。S3 は SyncProgress（X6-3）を表示する。S4 の入力は T3、T6。S5 の「以前の曲の整理」は X6-2 の「以前の曲を一覧する」の結果（T2 に無い m3u8 を含む。J32）を表示し、Activity から `createDeleteRequest` を呼ぶ。通知の更新の担当（V28）は X6-3 の `setForeground` の通知と X7-3 を 1 つにそろえる。「証明書が変わった」と「時計が違う」の案内。X7-2-1 の NSD の記述は、同期の到達確認での引き直し（X6-3 の 2）を含める形にする |
 
 ### X6 の確かめた事実
