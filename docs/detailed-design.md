@@ -1,8 +1,8 @@
 # playlist-sync-fox 詳細設計
 
 - 起票：2026-11-05
-- 状態：第 2 稿（2026-11-05。review-05 を反映）。節ごとの稿は X1-2
-- 前提：基本設計 5 本（[basic-design.md](basic-design.md)、[basic-design-b2.md](basic-design-b2.md)、[basic-design-b3.md](basic-design-b3.md)、[basic-design-b4a.md](basic-design-b4a.md)、[basic-design-b4b.md](basic-design-b4b.md)。第 2 稿）と概要設計 3 本（[design-overview.md](design-overview.md)、[requirements.md](requirements.md)、[open-questions.md](open-questions.md)）に従う。review-03 の J7〜J15 は推奨 a で取り込む
+- 状態：第 3 稿（2026-11-06。review-09 を反映）。節ごとの稿は X1-2
+- 前提：基本設計 5 本（[basic-design.md](basic-design.md)、[basic-design-b2.md](basic-design-b2.md)、[basic-design-b3.md](basic-design-b3.md)、[basic-design-b4a.md](basic-design-b4a.md)、[basic-design-b4b.md](basic-design-b4b.md)。第 3 稿）と概要設計 3 本（[design-overview.md](design-overview.md)、[requirements.md](requirements.md)、[open-questions.md](open-questions.md)）に従う。review-03 の J7〜J15 は推奨 a で取り込む
 - 置き場：この repo の `docs/`（2026-11-05 に portfolio の `notes/ideas/playlist-sync-fox/` から移した。D5）
 
 ## X1 構成
@@ -51,7 +51,7 @@
 
 ### X1-2 節の対応表
 
-項の見出しは、X2〜X7 の稿の実際の見出し（第 2 稿）。
+項の見出しは、X2〜X7 の稿の実際の見出し（X4 は第 2 稿、ほかは第 3 稿）。
 
 | 節 | ファイル | 題 | 引き受ける B の項 | 項の見出し |
 |---|---|---|---|---|
@@ -133,25 +133,35 @@ M4 android（差分の判断、m3u8 の生成、署名の手順の中身を持�
 依存の向きの検査（J21、X1 の要判断 3）：
 
 - 向きは Gradle の依存の宣言で保つ。サブプロジェクトの `build.gradle.kts` に、許す向きの `project(...)` だけを書き、禁止の向きは宣言しない（宣言が無ければコンパイルできない）
-- CI で各サブプロジェクトの `dependencies` の出力を取り、禁止の向きのサブプロジェクトが含まれないことを検査する
+- CI で各サブプロジェクトの `dependencies` の出力を取り、禁止の向きのサブプロジェクトが含まれないことを検査する（土台（#3、2026-11-06）で CI に入れた）
 - 配布（B4-7）の詳細は実装の段階で書く
 
 Gradle のサブプロジェクトの名（B1-6）：
 
 | M | サブプロジェクト | 種類 |
 |---|---|---|
-| M1 | `shared` | KMP（JVM と Android） |
+| M1 | `shared` | KMP（JVM と Android）。Android の対象は AGP の KMP ライブラリのプラグインで持つ（#3）。構成に Android SDK が要る |
 | M2 | `itunes` | JVM |
 | M3 | `desktop` | JVM（Compose Multiplatform） |
 | M4 | `android` | Android（Jetpack Compose） |
 
 version catalog の項目名（版は書かない。B1-6。項目名は候補で、X1-4 の A1 に挙げる）：
 
+土台で置いた項目（2026-11-06、#3。正は `gradle/libs.versions.toml`）：
+
+| 区分 | 項目名 | 用途 |
+|---|---|---|
+| versions | `kotlin`、`agp`、`compose-multiplatform`、`compose-bom`、`activity-compose`、`jdk`、`android-compileSdk`、`android-minSdk`、`android-targetSdk` | 版の 1 か所持ち（B1-4） |
+| libraries | `androidx-activity-compose`、`androidx-compose-bom`、`androidx-compose-foundation` | M4 の依存 |
+| plugins | `kotlin-multiplatform`、`kotlin-jvm`、`kotlin-compose`、`compose`、`android-application`、`android-kmp-library` | ビルドの設定 |
+
+実装で足す項目（候補）：
+
 | 区分 | 項目名（候補） | 用途 |
 |---|---|---|
-| versions | `kotlin`、`ktor`、`compose`、`room`、`workmanager`、`serialization`、`jmdns`、`coroutines` | 版の 1 か所持ち（B1-4） |
-| libraries | `ktor-server-core`、`ktor-server-tls`（名は未確認）、`ktor-client-core`、`kotlinx-serialization-json`、`room-runtime`、`room-compiler`、`work-runtime`、`jmdns`、`kotlinx-coroutines-core` | M1〜M4 の依存 |
-| plugins | `kotlin-multiplatform`、`kotlin-jvm`、`kotlin-android`、`kotlin-serialization`、`compose`、`android-application`、`android-library`、`ksp`、`licensee` | ビルドの設定（`licensee` は X7-6 のライセンス一覧の生成） |
+| versions | `ktor`、`room`、`workmanager`、`serialization`、`jmdns`、`coroutines`、`kotlinx-datetime`、`ksp`、`licensee` | 版の 1 か所持ち（B1-4） |
+| libraries | `ktor-server-core`、`ktor-server-tls`（名は未確認）、`ktor-client-core`、`kotlinx-serialization-json`、`room-runtime`、`room-compiler`、`work-runtime`、`jmdns`、`kotlinx-coroutines-core`、`kotlinx-datetime` | M1〜M4 の依存 |
+| plugins | `kotlin-serialization`、`ksp`、`licensee` | ビルドの設定（`licensee` は X7-6 のライセンス一覧の生成） |
 | 暗号と保管 | `bouncycastle`、`jna`、`jna-platform` | `bouncycastle` は SPAKE2 の点演算の実体（J16、X4-1）。`jna`・`jna-platform` は DPAPI（`Crypt32Util`）による K1・K2 の保管（J17、X5-2） |
 
 ### X1-4 置いた値の候補の表
@@ -193,6 +203,7 @@ version catalog の項目名（版は書かない。B1-6。項目名は候補で
 |---|---|---|
 | 第 1 稿 | 2026-11-05 | X1 を書いた（X1-1〜X1-6）。X2〜X7 は同時に別の執筆者が書く |
 | 第 2 稿 | 2026-11-05 | review-05 を反映。パッケージ `desktop.keystore` を `desktop.secrets` に改名、version catalog の暗号と保管の項目を `bouncycastle`・`jna`・`jna-platform` に、`licensee` を足した（指摘 2、3、12）。X1-2 の項の見出しを確定、X1-4 に A3〜A19、X1-6 に X-3〜X-24 を集めた（指摘 24）。依存の向きの検査の方法を X1-3 に足した（指摘 33）。節末を `###` にした（指摘 35）。署名失敗の閾値を A10（10 回）にした（指摘 17） |
+| 第 3 稿 | 2026-11-06 | X2・X3・X5〜X7 を第 3 稿に。実物の確認と土台の反映。X1-3 の version catalog の候補の項目名を土台に合わせて差し替えた（A1 の規則は変えない）。review-09 |
 
 ### X1-6 決定（未付番）の一覧
 
@@ -243,4 +254,4 @@ version catalog の項目名（版は書かない。B1-6。項目名は候補で
 ### X1 の確かめた事実
 
 - 指示書と基本設計 B1（B1-1、B1-3、B1-4、B1-6、B1-7、B1-9）を読んだ（2026-11-05）。Ktor の TLS の部品名、Compose Multiplatform のトレイの扱いは公式文書で確かめていない（未確認）
-- review-05 の反映で、`bouncycastle`（J16。facts-jvm 4a〜4d）、DPAPI の `jna`・`jna-platform`（J17。facts-jvm 5a・5b）、`licensee`（facts-jvm 8b）を書いた（2026-11-05）。ライブラリの版と Gradle の設定は未確認
+- review-05 の反映で、`bouncycastle`（J16。facts-jvm 4a〜4d）、DPAPI の `jna`・`jna-platform`（J17。facts-jvm 5a・5b）、`licensee`（facts-jvm 8b）を書いた（2026-11-05）。Gradle の設定は土台（#3）で入った。版は toml が正で、設計書には書かない。Ktor・Room・JmDNS などの依存はまだ toml に無い

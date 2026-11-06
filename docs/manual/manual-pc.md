@@ -34,7 +34,7 @@ PC のアプリは、iTunes が出力する「iTunes ライブラリ XML」を�
 
 1. iTunes の「編集」→「環境設定」→「詳細」を開きます。
 2. 「Share iTunes Library XML with other applications」に当たる項目を有効にします。日本語版での項目名は未確認です。
-3. 設定の窓の「XML の場所」を確認します。未設定のときは、`%USERPROFILE%\Music\iTunes\iTunes Music Library.xml` を試します。この場所は Apple の文書に無いため、読めない場合は手で指定してください。
+3. 設定の窓の「XML の場所」を確認します。未設定のときは、`%USERPROFILE%\Music\iTunes\iTunes Music Library.xml` を試します。iTunes 12.13.7.1 ではこの場所でした。ほかの版では違う場合があるので、読めないときは手で指定してください。
 4. 指定した場所が読めるか、その場で検査されます。読めなければ結果が横に表示され、保存されません。
 
 iTunes を起動してライブラリを変えると、XML が更新されます。
