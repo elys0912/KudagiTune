@@ -88,15 +88,18 @@ class ResolverMediaStoreFiles(context: Context, volume: String) : MediaStoreFile
         }
         val found = mutableListOf<StoredFile>()
         resolver.query(filesUri, STORED_COLUMNS, args, null)?.use { cursor ->
-            while (cursor.moveToNext()) found += cursor.toStored(filesUri)
+            while (cursor.moveToNext()) {
+                found += cursor.toStored(ContentUris.withAppendedId(filesUri, cursor.getLong(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID))))
+            }
         }
         return found
     }
 
     private fun pendingArgs(mode: Int) = Bundle().apply { putInt(MediaStore.QUERY_ARG_MATCH_PENDING, mode) }
 
-    private fun android.database.Cursor.toStored(collection: Uri) = StoredFile(
-        uri = ContentUris.withAppendedId(collection, getLong(getColumnIndexOrThrow(MediaStore.MediaColumns._ID))).toString(),
+    /** [item] は行そのものの URI（ID まで付いたもの）。ここで ID を足さない。 */
+    private fun android.database.Cursor.toStored(item: Uri) = StoredFile(
+        uri = item.toString(),
         displayName = getString(getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)).orEmpty(),
         relativePath = getString(getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)).orEmpty(),
         size = getLong(getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)),
