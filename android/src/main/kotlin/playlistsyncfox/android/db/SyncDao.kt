@@ -8,6 +8,7 @@ import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 abstract class SyncDao {
@@ -87,6 +88,15 @@ abstract class SyncDao {
 
     @Query("DELETE FROM pairing WHERE device_id = :deviceId")
     abstract suspend fun deletePairing(deviceId: String)
+
+    @Query("SELECT * FROM pairing LIMIT 1")
+    abstract fun observePairing(): Flow<Pairing?>
+
+    @Query("SELECT * FROM sync_runs ORDER BY started_at DESC, run_id DESC")
+    abstract fun observeRuns(): Flow<List<SyncRun>>
+
+    @Query("SELECT * FROM playlists")
+    abstract fun observePlaylists(): Flow<List<WrittenPlaylist>>
 
     @Query("SELECT value FROM app_settings WHERE `key` = :key")
     abstract suspend fun setting(key: String): String?

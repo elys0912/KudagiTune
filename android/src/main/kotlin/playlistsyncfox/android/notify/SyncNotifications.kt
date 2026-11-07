@@ -5,7 +5,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
+import android.os.storage.StorageManager
 import playlistsyncfox.android.db.SyncRun
+import playlistsyncfox.android.db.decodeResult
 import playlistsyncfox.android.sync.SyncProgress
 import playlistsyncfox.android.sync.SyncStage
 import playlistsyncfox.android.sync.SyncValues
@@ -21,6 +24,11 @@ object SyncNotifications {
 
     /** 終了の通知は 1 つだけにする（同じ番号で更新して積み上げない）。 */
     const val RESULT_ID = 1002
+
+    /** 通知のタップで開く画面（S3 は進行、S4 は結果）。 */
+    const val EXTRA_OPEN = "open"
+    const val OPEN_PROGRESS = "progress"
+    const val OPEN_RESULT = "result"
 
     fun ensureChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -49,7 +57,7 @@ object SyncNotifications {
 
     /** 終了の通知。自動は静かなチャンネルに出す。 */
     fun finished(context: Context, run: SyncRun, progress: SyncProgress, trigger: SyncTrigger, open: PendingIntent?): Notification {
-        val channel = if (trigger == SyncTrigger.Manual) CHANNEL_RESULT else CHANNEL_RESULT_QUIET
+        val channel = resultChannel(trigger)
         val title = when (run.result) {
             SyncRun.RESULT_SUCCESS -> "同期が完了した"
             SyncRun.RESULT_PARTIAL -> "一部の曲で失敗した"
@@ -61,7 +69,9 @@ object SyncNotifications {
             append("追加 ${run.added}、置き換え ${run.replaced}、削除 ${run.removed}、失敗 ${run.failed}")
             // E7 は続きを次の同期で行う
             if (run.errorKind == "E7") append("。続きは次の同期で行う")
-            progress.shortageBytes?.let { append("。あと ${it / (1024 * 1024)} MiB 空けてほしい") }
+            progress.shortageBytes?.let { append("。あと ${it / (1024 * 1024)} MiB 空けてほしい。タップで空きを作る画面を開く") }
+            // 自動が「消す」を飛ばしたときは、確認が要る旨を足す（J9）
+            if (trigger == SyncTrigger.Auto && removalSkipped(run)) append("。確認が要る消す処理がある")
         }
         return Notification.Builder(context, channel)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
@@ -72,13 +82,27 @@ object SyncNotifications {
             .build()
     }
 
+    /** 手動は既定の重要度、自動は静かなチャンネル（利用者の中断を含む。X7-3-2）。 */
+    fun resultChannel(trigger: SyncTrigger) = if (trigger == SyncTrigger.Manual) CHANNEL_RESULT else CHANNEL_RESULT_QUIET
+
     /** 終了の通知を出す。通知の権限が無ければ OS が出さないだけで、同期には影響しない。 */
     fun postFinished(context: Context, run: SyncRun, progress: SyncProgress, trigger: SyncTrigger) {
-        val open = context.packageManager.getLaunchIntentForPackage(context.packageName)
-            ?.let { PendingIntent.getActivity(context, 0, it, PendingIntent.FLAG_IMMUTABLE) }
+        // 容量不足は空きを作る画面へ、そのほかは S4 へ
+        val open = if (progress.shortageBytes != null) storageIntent(context) else openIntent(context, OPEN_RESULT)
         context.getSystemService(NotificationManager::class.java)
             .notify(RESULT_ID, finished(context, run, progress, trigger, open))
     }
+
+    /** アプリを開き、[route] の画面へ進ませる PendingIntent。 */
+    fun openIntent(context: Context, route: String): PendingIntent? =
+        context.packageManager.getLaunchIntentForPackage(context.packageName)?.let {
+            PendingIntent.getActivity(context, route.hashCode(), it.putExtra(EXTRA_OPEN, route), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        }
+
+    private fun storageIntent(context: Context): PendingIntent =
+        PendingIntent.getActivity(context, 0, Intent(StorageManager.ACTION_MANAGE_STORAGE), PendingIntent.FLAG_IMMUTABLE)
+
+    private fun removalSkipped(run: SyncRun) = run.resultJson?.let { runCatching { decodeResult(it).removalSkipped }.getOrNull() } == true
 
     private fun progressText(progress: SyncProgress): String = when (progress.stage) {
         SyncStage.Connecting -> "PC に接続している"

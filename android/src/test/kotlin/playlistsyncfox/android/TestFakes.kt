@@ -172,6 +172,21 @@ class InMemoryStore : SyncStore {
         pairingRow = row
     }
 
+    override suspend fun savePairing(row: Pairing) {
+        pairingRow = row
+    }
+
+    override suspend fun deletePairing(deviceId: String) {
+        pairingRow = null
+    }
+
+    // 画面の試験は、読み込んだ時点の中身を 1 回流す
+    override fun observePairing() = kotlinx.coroutines.flow.flow { emit(pairingRow) }
+
+    override fun observeRuns() = kotlinx.coroutines.flow.flow { emit(runs()) }
+
+    override fun observePlaylists() = kotlinx.coroutines.flow.flow { emit(playlistRows.values.toList()) }
+
     override suspend fun setting(key: String) = settings[key]
 
     override suspend fun putSetting(key: String, value: String) {

@@ -41,17 +41,16 @@ class SyncScheduler(private val workManager: WorkManager, private val store: Syn
     /**
      * S5 の切り替え。T7 を更新してから登録または解除し、失敗したら T7 を戻す。成功なら真。
      */
-    suspend fun setAutoEnabled(enabled: Boolean): Boolean {
-        val before = store.setting(AUTO_ENABLED_KEY)
-        store.putSetting(AUTO_ENABLED_KEY, enabled.toString())
-        return try {
-            if (enabled) registerAuto() else workManager.cancelUniqueWork(AUTO)
-            true
-        } catch (_: Exception) {
-            store.putSetting(AUTO_ENABLED_KEY, before ?: false.toString())
-            false
-        }
+    suspend fun setAutoEnabled(enabled: Boolean): Boolean =
+        store.switchAutoSync(enabled) { if (enabled) registerAuto() else workManager.cancelUniqueWork(AUTO) }
+
+    /** S3 の「中断」。実行中の手動の同期を取り消す（ワーカーは利用者の中断として T3 を閉じる）。 */
+    fun cancelManual() {
+        workManager.cancelUniqueWork(MANUAL)
     }
+
+    /** 自動の同期が実行中か。画面が手動の確認の前に見る（J34）。 */
+    suspend fun autoRunning(): Boolean = isActive(AUTO, runningOnly = true)
 
     private fun registerAuto() {
         val data = Data.Builder().putString(SyncWorker.KEY_TRIGGER, SyncWorker.TRIGGER_AUTO).build()

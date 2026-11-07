@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.licensee)
 }
 
 android {
@@ -22,6 +23,13 @@ android {
         // 移行の試験の入力にする Room のスキーマ（X6-1）
         getByName("androidTest").assets.directories.add("$projectDir/schemas")
     }
+}
+
+// 依存の許諾を `artifacts.json` にして資産へ入れる（X7-6）。許す許諾は Apache-2.0 と、SPDX の無い MIT（slf4j-api）
+licensee {
+    allow("Apache-2.0")
+    allowUrl("https://opensource.org/license/mit")
+    bundleAndroidAsset.set(true)
 }
 
 // Room のスキーマの JSON を repo に置く（X6-1）

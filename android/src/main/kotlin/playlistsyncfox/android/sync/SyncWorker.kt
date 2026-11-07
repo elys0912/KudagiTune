@@ -124,9 +124,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         applicationContext,
         progress,
         cancel = WorkManager.getInstance(applicationContext).createCancelPendingIntent(id),
-        open = applicationContext.packageManager.getLaunchIntentForPackage(applicationContext.packageName)?.let {
-            android.app.PendingIntent.getActivity(applicationContext, 0, it, android.app.PendingIntent.FLAG_IMMUTABLE)
-        },
+        open = SyncNotifications.openIntent(applicationContext, SyncNotifications.OPEN_PROGRESS),
     )
 
     /** `manual-sync` が実行中か待機中か。 */
