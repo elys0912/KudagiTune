@@ -3,10 +3,18 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose)
+    alias(libs.plugins.licensee)
 }
 
 kotlin {
     jvmToolchain(libs.versions.jdk.get().toInt())
+}
+
+// 依存の許諾を `artifacts.json` にして配布物の資源へ入れる（B4-7）。許す許諾は android に合わせる
+licensee {
+    allow("Apache-2.0")
+    allowUrl("https://opensource.org/license/mit")
+    allowUrl("https://www.bouncycastle.org/licence.html")
 }
 
 dependencies {
@@ -42,4 +50,8 @@ compose.desktop {
     application {
         mainClass = "playlistsyncfox.desktop.MainKt"
     }
+}
+
+tasks.processResources {
+    from(tasks.named("licensee")) { include("artifacts.json") }
 }

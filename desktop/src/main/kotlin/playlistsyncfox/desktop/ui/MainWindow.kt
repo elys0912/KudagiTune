@@ -154,4 +154,19 @@ private fun SettingsSection(app: PcApp) {
         Checkbox(launch, { launch = it; app.setLaunchOnLogin(it) })
         Text("ログイン時に起動")
     }
+
+    var licenses by remember { mutableStateOf<List<LicenseEntry>?>(null) }
+    var showLicenses by remember { mutableStateOf(false) }
+    Button(onClick = {
+        showLicenses = !showLicenses
+        if (showLicenses && licenses == null) licenses = loadBundledLicenses().orEmpty()
+    }) { Text("ライセンス") }
+    if (showLicenses) {
+        val entries = licenses.orEmpty()
+        if (entries.isEmpty()) Text("読み込めない")
+        entries.forEach { e ->
+            Text("${e.name} ${e.version}", style = MaterialTheme.typography.bodyMedium)
+            e.licenses.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
+    }
 }
