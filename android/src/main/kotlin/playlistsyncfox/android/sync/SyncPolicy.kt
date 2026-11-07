@@ -81,15 +81,15 @@ fun isCrashTrace(run: SyncRun): Boolean =
 /** 差分の記録 `library_id`：この列が NULL でない最新の行の値。無ければ初回で null。 */
 fun recordedLibraryId(runs: List<SyncRun>): String? = runs.firstOrNull { it.libraryId != null }?.libraryId
 
-/** 「消す」を実行してよいか（X6-3 の 6）。自動は `Allowed` だけ。手動は承認した件数以内なら `Allowed` 以外も実行する。 */
+/** 「消す」を実行してよいか（X6-3 の 6）。自動は `Allowed` だけ。手動は 1 件でも承認が要り、承認した件数以内なら実行する（D19）。 */
 fun mayExecuteRemoval(
     trigger: String,
     gateAllowed: Boolean,
     removeCount: Int,
     deleteApproved: Boolean,
     approvedDeleteCount: Int,
-): Boolean = removeCount == 0 || gateAllowed ||
-    (trigger == SyncRun.TRIGGER_MANUAL && deleteApproved && removeCount <= approvedDeleteCount)
+): Boolean = removeCount == 0 ||
+    if (trigger == SyncRun.TRIGGER_MANUAL) deleteApproved && removeCount <= approvedDeleteCount else gateAllowed
 
 private val isoMillis = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
 
