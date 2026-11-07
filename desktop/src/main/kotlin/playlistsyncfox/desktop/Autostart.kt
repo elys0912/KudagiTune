@@ -36,6 +36,15 @@ class WindowsRunKey : RunKey {
     }
 }
 
+/** 配布物でない実行（開発）用。何も登録しない。 */
+object NoRunKey : RunKey {
+    override fun get(name: String): String? = null
+
+    override fun set(name: String, data: String) = Unit
+
+    override fun delete(name: String) = Unit
+}
+
 private const val RUN_VALUE_NAME = "playlist-sync-fox"
 private const val BACKGROUND_FLAG = "--background"
 

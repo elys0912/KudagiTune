@@ -19,7 +19,7 @@ private const val DEVICE_ID_KEY = "device_id"
 private val ConnectFailed = Notice("PC に接続できない", "宛先と PC の起動を確かめてやり直す", "接続失敗", rePair = false)
 private val BadReply = Notice("PC の応答が読めない", "やり直す", "応答の形", rePair = false)
 private val PcRefused = Notice("PC が受け付けなかった", "PC を確かめてやり直す", "PC の拒否", rePair = false)
-private val BadProof = Notice("PC の確認の印が合わない", "PC の W3 で解除してからやり直す", "確認の印", rePair = true)
+private val BadProof = Notice("PC の確認の印が合わない", "PC の窓の「端末」で解除してからやり直す", "確認の印", rePair = true)
 private val CertificateChanged = Notice("接続の途中で証明書が変わった", "ネットワークを確かめてやり直す", "証明書の変更", rePair = false)
 
 /**

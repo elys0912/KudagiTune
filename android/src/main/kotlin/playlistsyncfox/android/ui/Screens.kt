@@ -117,7 +117,11 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions, notification
             }
         }
     }
-    if (state.kind == HomeKind.Syncing) Action("進み具合を見る", model::showProgress) else Action("同期", actions.onSyncButton)
+    when (state.kind) {
+        HomeKind.Syncing -> Action("進み具合を見る", model::showProgress)
+        HomeKind.Unpaired -> Action("ペアリング", actions.onSyncButton)
+        else -> Action("同期", actions.onSyncButton)
+    }
     if (state.last != null) Action("結果を見る") { model.openResult(null) }
     Action("設定") { model.openSettings(notificationsAllowed(), readGranted()) }
     confirm?.let {
@@ -161,12 +165,12 @@ private fun PairingScreen(model: AppViewModel) {
         }
         is PairingStage.Done -> {
             Label("ペアリングが済んだ：${stage.pcName}", bold = true)
-            Label("違うと思えば、PC の W3 と端末の S5 の両方で解除する")
+            Label("違うと思えば、PC の窓の「端末」とこのアプリの設定の両方で解除する")
             if (stage.showCleanupHint) Label("以前このアプリを使っていたなら、先に以前の曲の整理を")
         }
         PairingStage.AttemptsExhausted -> Label("試行の上限に達した。PC でコードを作り直してほしい")
         PairingStage.Waiting -> Label("しばらく待ってからやり直してほしい")
-        PairingStage.DeviceExists -> Label("PC に登録が残っている。PC の W3 で解除してから")
+        PairingStage.DeviceExists -> Label("PC に登録が残っている。PC の窓の「端末」で解除してから")
         is PairingStage.Failed -> {
             Label(stage.notice.title, bold = true)
             Label(stage.notice.guidance)
@@ -255,7 +259,7 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
         ui.fingerprint?.let { Label("指紋：$it") }
         Action("解除") { confirmUnpair = true }
         if (confirmUnpair) {
-            Confirm("ペアリングを解除する。曲とプレイリストは端末に残る。PC の W3 でも解除してほしい", "解除する", { confirmUnpair = false; model.unpair() }, { confirmUnpair = false })
+            Confirm("ペアリングを解除する。曲とプレイリストは端末に残る。PC の窓の「端末」でも解除してほしい", "解除する", { confirmUnpair = false; model.unpair() }, { confirmUnpair = false })
         }
     }
     Label("以前の曲の整理", bold = true)

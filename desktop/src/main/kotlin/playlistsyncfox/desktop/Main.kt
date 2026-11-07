@@ -53,6 +53,8 @@ fun main(args: Array<String>) {
         exitProcess(0)
     }
 
+    // 配布物の起動だけ jpackage がパスを渡す。開発の実行で Java 本体をログイン時の起動に登録しない
+    val packagedPath: String? = System.getProperty("jpackage.app-path")
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val app = PcApp(
         paths = paths,
@@ -65,7 +67,7 @@ fun main(args: Array<String>) {
         registrar = JmdnsRegistrar(),
         enumerateAddresses = ::listIpv4Addresses,
         watchOpener = WatchServiceOpener(),
-        autostart = Autostart(WindowsRunKey()) { ProcessHandle.current().info().command().orElseThrow() },
+        autostart = Autostart(if (packagedPath != null) WindowsRunKey() else NoRunKey) { packagedPath.orEmpty() },
     )
     app.start()
 

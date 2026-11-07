@@ -11,7 +11,7 @@ import java.time.format.DateTimeFormatter
 /** E2 の `detail` の表示（X7-1-3 の表）。S4 は [label] で、S2・S3 は [title] と [guidance] を出す。 */
 data class Notice(val title: String, val guidance: String, val label: String, val rePair: Boolean)
 
-private const val REPAIR_GUIDE = "PC の W3 と端末の S5 の両方で解除してから再ペアリングする"
+private const val REPAIR_GUIDE = "PC の窓の「端末」とこのアプリの設定の両方で解除してから再ペアリングする"
 
 fun noticeOf(detail: ErrorDetail): Notice = when (detail) {
     ErrorDetail.ClockSkew -> Notice("端末と PC の時計が違う", "時刻を合わせてやり直す", "時計のずれ", rePair = false)
