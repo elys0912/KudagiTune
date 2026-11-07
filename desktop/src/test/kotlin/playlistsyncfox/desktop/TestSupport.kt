@@ -1,8 +1,8 @@
 package playlistsyncfox.desktop
 
-import playlistsyncfox.desktop.secrets.SecretCipher
-import playlistsyncfox.desktop.secrets.SecretStore
-import playlistsyncfox.desktop.secrets.SecretStoreException
+import playlistsyncfox.desktop.vault.SecretCipher
+import playlistsyncfox.desktop.vault.SecretStore
+import playlistsyncfox.desktop.vault.SecretStoreException
 import playlistsyncfox.itunes.library.LibraryReadResult
 import playlistsyncfox.itunes.library.ReadDiagnostics
 import java.time.Clock

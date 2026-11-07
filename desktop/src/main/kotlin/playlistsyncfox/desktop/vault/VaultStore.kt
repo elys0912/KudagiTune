@@ -1,4 +1,4 @@
-package playlistsyncfox.desktop.secrets
+package playlistsyncfox.desktop.vault
 
 import com.sun.jna.platform.win32.Crypt32Util
 import kotlinx.serialization.SerialName

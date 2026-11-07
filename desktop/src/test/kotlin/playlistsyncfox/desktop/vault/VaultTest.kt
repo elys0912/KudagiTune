@@ -1,4 +1,4 @@
-package playlistsyncfox.desktop.secrets
+package playlistsyncfox.desktop.vault
 
 import playlistsyncfox.desktop.MarkingCipher
 import playlistsyncfox.desktop.MemorySecretStore

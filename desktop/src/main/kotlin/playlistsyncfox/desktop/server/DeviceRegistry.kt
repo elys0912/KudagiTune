@@ -1,6 +1,6 @@
 package playlistsyncfox.desktop.server
 
-import playlistsyncfox.desktop.secrets.KeyRing
+import playlistsyncfox.desktop.vault.KeyRing
 import playlistsyncfox.desktop.settings.PairedDevice
 import playlistsyncfox.desktop.settings.SettingsStore
 import java.time.Clock

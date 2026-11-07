@@ -167,7 +167,6 @@ private fun PairingScreen(model: AppViewModel) {
         PairingStage.AttemptsExhausted -> Label("試行の上限に達した。PC でコードを作り直してほしい")
         PairingStage.Waiting -> Label("しばらく待ってからやり直してほしい")
         PairingStage.DeviceExists -> Label("PC に登録が残っている。PC の W3 で解除してから")
-        PairingStage.Unavailable -> Label("ペアリングはまだ使えない（鍵の保管が未接続）")
         is PairingStage.Failed -> {
             Label(stage.notice.title, bold = true)
             Label(stage.notice.guidance)

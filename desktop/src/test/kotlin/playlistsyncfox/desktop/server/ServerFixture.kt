@@ -20,8 +20,8 @@ import playlistsyncfox.desktop.MutableClock
 import playlistsyncfox.desktop.T0
 import playlistsyncfox.desktop.crypto.PcCrypto
 import playlistsyncfox.desktop.emptyLibrary
-import playlistsyncfox.desktop.secrets.KeyRing
-import playlistsyncfox.desktop.secrets.SecretStore
+import playlistsyncfox.desktop.vault.KeyRing
+import playlistsyncfox.desktop.vault.SecretStore
 import playlistsyncfox.desktop.settings.AppLog
 import playlistsyncfox.desktop.settings.SettingsStore
 import playlistsyncfox.desktop.watch.HeldLibrary

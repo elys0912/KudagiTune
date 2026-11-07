@@ -148,7 +148,6 @@ class PairingPresenterTest {
         assertEquals(PairingStage.AttemptsExhausted, stageFor(PairingEvent.AttemptsExhausted))
         assertEquals(PairingStage.Waiting, stageFor(PairingEvent.Waiting))
         assertEquals(PairingStage.DeviceExists, stageFor(PairingEvent.DeviceExists))
-        assertEquals(PairingStage.Unavailable, stageFor(PairingEvent.Unavailable))
     }
 
     @Test

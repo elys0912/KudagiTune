@@ -11,7 +11,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import playlistsyncfox.desktop.DesktopValues
 import playlistsyncfox.desktop.MarkingCipher
 import playlistsyncfox.desktop.crypto.PcCrypto
-import playlistsyncfox.desktop.secrets.FileSecretStore
+import playlistsyncfox.desktop.vault.FileSecretStore
 import playlistsyncfox.desktop.settings.PairedDevice
 import playlistsyncfox.shared.auth.PairingInitiation
 import playlistsyncfox.shared.auth.SignatureHeaderNames

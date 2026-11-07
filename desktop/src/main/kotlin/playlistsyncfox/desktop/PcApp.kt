@@ -10,11 +10,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import playlistsyncfox.desktop.discovery.Advertiser
 import playlistsyncfox.desktop.discovery.MdnsRegistrar
-import playlistsyncfox.desktop.secrets.KeyRing
-import playlistsyncfox.desktop.secrets.SecretStore
-import playlistsyncfox.desktop.secrets.SecretStoreException
-import playlistsyncfox.desktop.secrets.TlsIdentity
-import playlistsyncfox.desktop.secrets.loadOrCreateTls
+import playlistsyncfox.desktop.vault.KeyRing
+import playlistsyncfox.desktop.vault.SecretStore
+import playlistsyncfox.desktop.vault.SecretStoreException
+import playlistsyncfox.desktop.vault.TlsIdentity
+import playlistsyncfox.desktop.vault.loadOrCreateTls
 import playlistsyncfox.desktop.server.ActivityTracker
 import playlistsyncfox.desktop.server.DeviceRegistry
 import playlistsyncfox.desktop.server.ManifestService

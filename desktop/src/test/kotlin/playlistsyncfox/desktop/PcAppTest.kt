@@ -12,8 +12,8 @@ import playlistsyncfox.desktop.crypto.PcCrypto
 import playlistsyncfox.desktop.discovery.Advertisement
 import playlistsyncfox.desktop.discovery.MdnsRegistrar
 import playlistsyncfox.desktop.discovery.MdnsRegistration
-import playlistsyncfox.desktop.secrets.SecretStore
-import playlistsyncfox.desktop.secrets.TlsIdentity
+import playlistsyncfox.desktop.vault.SecretStore
+import playlistsyncfox.desktop.vault.TlsIdentity
 import playlistsyncfox.desktop.server.PairingView
 import playlistsyncfox.desktop.server.RunningServer
 import playlistsyncfox.desktop.server.ServerEnv
