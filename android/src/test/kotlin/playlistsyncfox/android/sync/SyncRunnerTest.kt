@@ -2,6 +2,7 @@ package playlistsyncfox.android.sync
 
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import playlistsyncfox.android.DEVICE
 import playlistsyncfox.android.Harness
@@ -23,6 +24,9 @@ import playlistsyncfox.android.track
 import playlistsyncfox.shared.manifest.ManifestPlaylist
 import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.result.ErrorDetail
+import playlistsyncfox.shared.result.ProgressReport
+import playlistsyncfox.shared.result.ProgressStage
+import playlistsyncfox.shared.result.readProgressReport
 import playlistsyncfox.shared.result.SyncError
 import playlistsyncfox.shared.result.SyncOutcome
 import playlistsyncfox.shared.result.SyncTrigger
@@ -1075,6 +1079,98 @@ class SyncRunnerTest {
         assertNull(h.run())
 
         assertTrue(h.runs.isEmpty())
+    }
+
+    @Test
+    fun `TA-232 曲ごとの行は waiting から transferring を経て done か failed になり止めた曲は waiting に戻り done_bytes は書いた分だけ進む`() = runTest {
+        val h = Harness()
+        val three = listOf(track(1), track(2), track(3))
+        h.sync(three)
+        // 要求の時点と、書き込みの 1 区切りごとの進行の状態を集める
+        val seen = mutableListOf<SyncProgress>()
+        val serve = h.lanApi.trackScript
+        h.lanApi.trackScript = {
+            seen += h.progress.value!!
+            h.media.readBackSizeDelta = if (it.persistentId == id(2)) -1 else 0
+            // 3 曲目は途中で切れ続け、V10 の回数で同期全体が止まる（E6）
+            if (it.persistentId == id(3)) TrackScript.Body(Harness.contentOf(three[2]), startAt = it.rangeFrom, disconnectAfter = 10) else serve(it)
+        }
+        h.media.onWrite = { seen += h.progress.value!! }
+        // 手順 7 の始めは、書き込みの前の最初の更新を流れから見る
+        val flowSeen = mutableListOf<SyncProgress>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { h.progress.collect { it?.let(flowSeen::add) } }
+
+        val row = assertNotNull(h.run())
+
+        fun SyncProgress.states() = tracks.map { it.state }
+        assertEquals(List(3) { TrackState.Waiting }, flowSeen.first { it.stage == SyncStage.Transfer }.states())
+        val midway = seen.first { it.tracks[0].state == TrackState.Transferring && it.tracks[0].receivedBytes == 40L }
+        assertEquals(40, midway.doneBytes)
+        assertTrue(seen.any { it.states() == listOf(TrackState.Done, TrackState.Transferring, TrackState.Waiting) })
+        val last = h.finished.single().second
+        assertEquals(listOf(TrackState.Done, TrackState.Failed, TrackState.Waiting), last.states())
+        assertEquals(9, last.tracks[1].errorNumber)
+        assertEquals("E6", row.errorKind)
+        assertEquals(100, row.bytesTransferred)
+        assertEquals(100, last.doneBytes)
+    }
+
+    @Test
+    fun `TA-233 P8 は同じ段なら V28 未満は送らず ちょうどと段の変化で送り P3 の前は送らない`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        val serve = h.lanApi.trackScript
+        h.lanApi.trackScript = {
+            // 1 曲目で V28 の 1 ミリ秒前まで、2 曲目でちょうどまで時計を進める
+            if (it.persistentId == id(1)) h.clock += SyncValues.NOTIFICATION_INTERVAL_MS - 1
+            if (it.persistentId == id(2)) h.clock += 1
+            serve(it)
+        }
+
+        assertNotNull(h.run())
+
+        val sent = h.lanApi.progressBodies.map { assertNotNull(readProgressReport(it)) }
+        assertEquals(
+            listOf(
+                ProgressReport(ProgressStage.Manifest, 0, 0, 0, 0),
+                ProgressReport(ProgressStage.Diff, 0, 0, 0, 0),
+                ProgressReport(ProgressStage.Capacity, 0, 3, 0, 300),
+                ProgressReport(ProgressStage.Transfer, 0, 3, 0, 300),
+                // V28 ちょうどで送る更新。1 曲終え、2 曲目の 1 区切り目まで書いた分を含む
+                ProgressReport(ProgressStage.Transfer, 1, 3, 140, 300),
+                ProgressReport(ProgressStage.Playlist, 3, 3, 300, 300),
+            ),
+            sent,
+        )
+    }
+
+    @Test
+    fun `TA-233 P8 が切断と 500 を返しても同期の結果は変わらず再送もしない`() = runTest {
+        val expected = Harness().also { it.sync(tracks) }.let { base -> assertNotNull(base.run()) to base.lanApi.progressBodies.size }
+        for (failure in listOf(ApiFailure.Disconnected, ApiFailure.ServerFault)) {
+            val h = Harness()
+            h.sync(tracks)
+            h.lanApi.progressResult = ApiResult.Fail(failure)
+
+            val row = assertNotNull(h.run())
+
+            assertEquals(expected.first.result, row.result)
+            assertEquals(expected.first.added, row.added)
+            assertEquals(expected.first.failed, row.failed)
+            assertEquals(1, row.reported)
+            assertEquals(expected.second, h.lanApi.progressBodies.size)
+        }
+    }
+
+    @Test
+    fun `TA-233 P3 が通らなければ P8 を送らない`() = runTest {
+        val h = Harness()
+        h.lanApi.digestResult = ApiResult.Fail(ApiFailure.Disconnected)
+        h.tailApi.digestResult = ApiResult.Fail(ApiFailure.Disconnected)
+
+        h.run()
+
+        assertTrue(h.lanApi.progressBodies.isEmpty() && h.tailApi.progressBodies.isEmpty())
     }
 
     private fun sampleJson(startedAt: String): String {

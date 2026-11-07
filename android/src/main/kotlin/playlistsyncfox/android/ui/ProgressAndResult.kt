@@ -4,8 +4,14 @@ import playlistsyncfox.android.db.RunIssue
 import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.SyncStore
 import playlistsyncfox.android.db.decodeResult
+import playlistsyncfox.android.log.LogEntry
 import playlistsyncfox.android.sync.SyncProgress
 import playlistsyncfox.android.sync.SyncStage
+import playlistsyncfox.android.sync.TrackRow
+import playlistsyncfox.android.sync.TrackState
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 // S3 同期の進み具合（X7-1-4）と S4 結果（X7-1-5）。
 
@@ -33,7 +39,57 @@ data class ProgressUiState(
     val nearLimitNote: String?,
     /** `finished` で E2 のときの案内（X7-1-3 の表）。 */
     val notice: Notice?,
+    /** 全体の棒の割合（0〜1）。 */
+    val fraction: Float,
+    val failedCount: Int,
+    val tracks: List<TrackRowUi>,
 )
+
+/** 行の状態の印（X7-1-4）。完了＝成功の色のチェック、転送中＝アクセントの下向きの矢印、待機＝薄い時計、失敗＝失敗の色の×。 */
+enum class TrackMark { Done, Transferring, Waiting, Failed }
+
+/**
+ * S3 の曲ごとの行の表示（X7-1-4）。[highlighted] は転送中の行の地の色、[dimmed] は完了の曲名の薄い文字、
+ * [fraction] は転送中の行の細い棒（それ以外は null）、[reason] は失敗の理由の語（X7-1-5 と同じ語）。
+ */
+data class TrackRowUi(
+    val id: String,
+    val title: String,
+    val mark: TrackMark,
+    val highlighted: Boolean,
+    val dimmed: Boolean,
+    val sizeText: String,
+    val fraction: Float?,
+    val reason: String?,
+)
+
+fun trackRowUi(row: TrackRow): TrackRowUi = TrackRowUi(
+    id = row.persistentId,
+    title = row.title,
+    mark = when (row.state) {
+        TrackState.Done -> TrackMark.Done
+        TrackState.Transferring -> TrackMark.Transferring
+        TrackState.Waiting -> TrackMark.Waiting
+        TrackState.Failed -> TrackMark.Failed
+    },
+    highlighted = row.state == TrackState.Transferring,
+    dimmed = row.state == TrackState.Done,
+    sizeText = if (row.state == TrackState.Transferring) "${formatBytes(row.receivedBytes)} / ${formatBytes(row.size)}" else formatBytes(row.size),
+    fraction = fraction(row.receivedBytes, row.size).takeIf { row.state == TrackState.Transferring },
+    reason = row.errorNumber.takeIf { row.state == TrackState.Failed }?.let { errorWord("E$it") },
+)
+
+/** 棒の割合。全体が 0 なら 0、超えても 1 で切る。 */
+fun fraction(done: Long, total: Long): Float = if (total <= 0) 0f else (done.toDouble() / total).coerceIn(0.0, 1.0).toFloat()
+
+private val logTimeFormat = DateTimeFormatter.ofPattern("HH:mm:ss")
+
+/** ログの欄の時刻（端末の地方時の `HH:mm:ss`。X7-1-4）。 */
+fun logTime(entry: LogEntry, zone: ZoneId = ZoneId.systemDefault()): String =
+    logTimeFormat.format(Instant.ofEpochMilli(entry.at).atZone(zone))
+
+/** ログの欄のメッセージ。E の番号があれば添える。 */
+fun logMessage(entry: LogEntry): String = entry.errorNumber?.let { "${entry.message}（E$it）" } ?: entry.message
 
 fun stageHeading(stage: SyncStage): String = when (stage) {
     SyncStage.Connecting -> "PC に接続しています"
@@ -55,6 +111,9 @@ fun progressUi(progress: SyncProgress) = ProgressUiState(
     shortageBytes = progress.shortageBytes,
     nearLimitNote = "実行時間の上限が近づいています。残りは次の同期で続けます".takeIf { progress.nearLimit },
     notice = progress.errorDetail?.let(::noticeOf),
+    fraction = fraction(progress.doneBytes, progress.totalBytes),
+    failedCount = progress.tracks.count { it.state == TrackState.Failed },
+    tracks = progress.tracks.map(::trackRowUi),
 )
 
 /** 一覧の 1 項目。 */

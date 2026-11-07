@@ -8,6 +8,8 @@ import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.encodeResult
 import playlistsyncfox.android.sync.SyncProgress
 import playlistsyncfox.android.sync.SyncStage
+import playlistsyncfox.android.sync.TrackRow
+import playlistsyncfox.android.sync.TrackState
 import playlistsyncfox.shared.result.Capacity
 import playlistsyncfox.shared.result.Counts
 import playlistsyncfox.shared.result.ErrorDetail
@@ -93,6 +95,38 @@ private fun finishedRun(
 
 private fun issue(kind: String, n: Int, errorKind: String? = null) =
     RunIssue(runId = 1, title = "Song $n", artist = "Artist", reason = "protected", format = "m4p", kind = kind, errorKind = errorKind)
+
+class TrackRowUiTest {
+    private fun row(state: TrackState, received: Long = 0, errorNumber: Int? = null) =
+        TrackRow("0000000000000001", "Song 1", 10L shl 20, state, received, errorNumber)
+
+    @Test
+    fun `TA-135 行の印と地の色と大きさの文字と理由は状態ごとに決まる`() {
+        val done = trackRowUi(row(TrackState.Done))
+        val transferring = trackRowUi(row(TrackState.Transferring, received = 5L shl 20))
+        val waiting = trackRowUi(row(TrackState.Waiting))
+        val failed = trackRowUi(row(TrackState.Failed, errorNumber = 9))
+
+        assertEquals(listOf(TrackMark.Done, TrackMark.Transferring, TrackMark.Waiting, TrackMark.Failed), listOf(done, transferring, waiting, failed).map { it.mark })
+        // 地の色が付くのは転送中だけ。薄い文字は完了だけ
+        assertEquals(listOf(false, true, false, false), listOf(done, transferring, waiting, failed).map { it.highlighted })
+        assertEquals(listOf(true, false, false, false), listOf(done, transferring, waiting, failed).map { it.dimmed })
+        assertEquals("10.0 MiB", done.sizeText)
+        assertEquals("5.0 MiB / 10.0 MiB", transferring.sizeText)
+        assertEquals(0.5f, transferring.fraction)
+        assertNull(waiting.fraction)
+        assertEquals("端末への保存に失敗しました", failed.reason)
+        assertNull(done.reason)
+    }
+
+    @Test
+    fun `TA-135 全体の割合は total が 0 なら 0 で done が total を超えても 100 で切れる`() {
+        assertEquals(0f, fraction(0, 0))
+        assertEquals(0f, fraction(100, 0))
+        assertEquals(0.53f, fraction(53, 100))
+        assertEquals(1f, fraction(150, 100))
+    }
+}
 
 class ResultUiTest {
     @Test

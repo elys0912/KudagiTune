@@ -51,7 +51,7 @@ class TrackResponse(
     val source: TrackSource,
 )
 
-/** 接続先 1 件に対する P1〜P4、P7。実体は [PsfoxClient]、試験では偽物。 */
+/** 接続先 1 件に対する P1〜P4、P7、P8。実体は [PsfoxClient]、試験では偽物。 */
 interface SyncApi : AutoCloseable {
     /** P3：`content_digest`。[playlistIds] は端末が選んだプレイリストの ID（本文で渡す。D15）。 */
     suspend fun digest(playlistIds: List<String>): ApiResult<String>
@@ -73,6 +73,9 @@ interface SyncApi : AutoCloseable {
 
     /** P4：要約の報告。 */
     suspend fun report(body: String): ApiResult<Unit>
+
+    /** P8：進み具合の知らせ（D22）。応答の待ちは V29。 */
+    suspend fun progress(body: String): ApiResult<Unit>
 }
 
 /** 保存した接続先と固定した SPKI から [SyncApi] を作る。 */

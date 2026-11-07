@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import playlistsyncfox.android.AppGraph
 import playlistsyncfox.android.discovery.checkManualEndpoint
+import playlistsyncfox.android.log.LogEntry
 import playlistsyncfox.android.notify.SyncNotifications
 import playlistsyncfox.android.storage.MediaWriter
 import playlistsyncfox.android.storage.ResolverMediaStoreFiles
@@ -72,6 +73,9 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     val result = MutableStateFlow(ResultScreen(null, emptyList()))
     val settings = MutableStateFlow<SettingsUiState?>(null)
     val logLines = MutableStateFlow<List<String>>(emptyList())
+
+    /** S3 のログの欄（X7-1-4）。同期のワーカーと同じ `AppLog` の流れ。 */
+    val logPane: StateFlow<List<LogEntry>> = graph.log.recent
 
     val pairing = PairingPresenter(
         scope = viewModelScope,

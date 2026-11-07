@@ -39,7 +39,7 @@ private val rangeStart = Regex("bytes ([0-9]+)-")
 private val json = Json { ignoreUnknownKeys = true }
 
 /**
- * 接続先 1 件に対する P1〜P4、P7（X6-5）。要求ごとに署名ヘッダを付ける。再開のたびに新しい nonce と時刻で署名し直す。
+ * 接続先 1 件に対する P1〜P4、P7、P8（X6-5）。要求ごとに署名ヘッダを付ける。再開のたびに新しい nonce と時刻で署名し直す。
  * 鍵、署名、nonce はログにも例外の文にも入れない。
  */
 class PsfoxClient(
@@ -131,9 +131,19 @@ class PsfoxClient(
         }
     }
 
+    override suspend fun progress(body: String): ApiResult<Unit> {
+        val bytes = body.encodeToByteArray()
+        return send(HttpMethod.Post, "/v1/progress", bytes, Timeouts.Progress, config = {
+            contentType(ContentType.Application.Json)
+            setBody(bytes)
+        }) { response ->
+            if (response.status.value == 204 || response.status.value == 200) Ok(Unit) else failure(response, false)
+        }
+    }
+
     override fun close() = http.close()
 
-    private enum class Timeouts { Digest, Body }
+    private enum class Timeouts { Digest, Body, Progress }
 
     private class BlockFailure(val original: Exception) : Exception()
 
@@ -177,7 +187,12 @@ class PsfoxClient(
                 timeout {
                     connectTimeoutMillis = SyncValues.CONNECT_WAIT_MS
                     // P3 の応答の待ちは V53。接続の確立の待ち（V29）と合わせた全体の上限にする
-                    requestTimeoutMillis = if (timeouts == Timeouts.Digest) SyncValues.CONNECT_WAIT_MS + SyncValues.DIGEST_RESPONSE_WAIT_MS else null
+                    requestTimeoutMillis = when (timeouts) {
+                        Timeouts.Digest -> SyncValues.CONNECT_WAIT_MS + SyncValues.DIGEST_RESPONSE_WAIT_MS
+                        // P8 の応答の待ちは V29（D22）
+                        Timeouts.Progress -> SyncValues.CONNECT_WAIT_MS
+                        Timeouts.Body -> null
+                    }
                     socketTimeoutMillis = SyncValues.DIGEST_RESPONSE_WAIT_MS
                 }
                 config()

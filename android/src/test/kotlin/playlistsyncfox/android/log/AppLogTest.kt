@@ -88,4 +88,46 @@ class AppLogTest {
         assertTrue(lines.last().contains("行 1199"))
         assertTrue(lines.first().contains("行 0700"))
     }
+
+    @Test
+    fun `TA-136 画面の欄は直近 200 行までで 1 行超えると古い行から消える`() {
+        val log = log(tempDir())
+
+        repeat(AppLog.SCREEN_LINES) { log.log(LogLevel.Info, "m", "行 $it") }
+        assertEquals(AppLog.SCREEN_LINES, log.recent.value.size)
+        assertEquals("行 0", log.recent.value.first().message)
+        log.log(LogLevel.Info, "m", "行 ${AppLog.SCREEN_LINES}")
+
+        assertEquals(AppLog.SCREEN_LINES, log.recent.value.size)
+        assertEquals("行 1", log.recent.value.first().message)
+        assertEquals("行 ${AppLog.SCREEN_LINES}", log.recent.value.last().message)
+    }
+
+    @Test
+    fun `TA-136 ログが無効なら画面の欄にもファイルにも入らない`() {
+        val dir = tempDir()
+
+        val log = AppLog(dir, enabled = { false }, now = { 0L }, executor = direct)
+
+        log.log(LogLevel.Error, "m", "入らない行")
+
+        assertTrue(log.recent.value.isEmpty())
+        assertFalse(File(dir, "app.log").exists())
+    }
+
+    @Test
+    fun `TA-136 パスは伏せた後の行が画面の欄に入り ファイルに書けなくても入る`() {
+        // 置き場にしたい場所が普通のファイルなので、ファイルへの書き込みは失敗する
+        val blocker = File(tempDir(), "blocked").also { it.writeText("x") }
+        val log = log(File(blocker, "logs"))
+
+        log.log(LogLevel.Warn, "sync", "保存先 Music/playlist-sync-fox/a/b.mp3 の曲 Song 1", errorNumber = 9)
+
+        val entry = log.recent.value.single()
+        assertFalse(entry.message.contains("Music/playlist-sync-fox"))
+        assertTrue(entry.message.contains("Song 1"))
+        assertEquals(9, entry.errorNumber)
+        assertEquals(LogLevel.Warn, entry.level)
+        assertFalse(File(blocker, "logs").exists())
+    }
 }

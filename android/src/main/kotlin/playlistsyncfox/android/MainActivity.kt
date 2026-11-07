@@ -4,25 +4,32 @@ import android.Manifest
 import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.storage.StorageManager
 import android.provider.MediaStore
 import android.provider.Settings
+import android.view.WindowInsetsController
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import playlistsyncfox.android.notify.SyncNotifications
 import playlistsyncfox.android.storage.StoredFile
 import playlistsyncfox.android.ui.AppScreen
 import playlistsyncfox.android.ui.AppViewModel
+import playlistsyncfox.android.ui.DarkColors
+import playlistsyncfox.android.ui.LightColors
 import playlistsyncfox.android.ui.PermissionStep
 import playlistsyncfox.android.ui.Screen
 import playlistsyncfox.android.ui.ScreenActions
@@ -75,9 +82,18 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             val screen by model.screen.collectAsState()
+            // ダークのとき白い地が出ないよう、窓の地の色とステータスバーの文字色を配色に合わせる（D20）
+            val dark = isSystemInDarkTheme()
+            SideEffect { applySystemBars(dark) }
             BackHandler(enabled = screen != Screen.Home) { model.back() }
             AppScreen(model, actions, ::notificationsAllowed, ::readGranted)
         }
+    }
+
+    private fun applySystemBars(dark: Boolean) {
+        window.setBackgroundDrawable(ColorDrawable((if (dark) DarkColors else LightColors).background.toArgb()))
+        val light = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+        window.insetsController?.setSystemBarsAppearance(if (dark) 0 else light, light)
     }
 
     override fun onNewIntent(intent: Intent) {
