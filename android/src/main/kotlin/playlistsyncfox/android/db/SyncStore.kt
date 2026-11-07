@@ -1,5 +1,6 @@
 package playlistsyncfox.android.db
 
+import kotlinx.coroutines.flow.Flow
 import playlistsyncfox.android.sync.SyncValues
 
 /** X6-1 の「アクセスの単位」。同期の手順と MediaWriter はここを通して T1〜T7 を読み書きする。 */
@@ -45,6 +46,19 @@ interface SyncStore {
 
     suspend fun updatePairing(row: Pairing)
 
+    /** ペアリングの完了で T4 の行を作る（X6-6）。 */
+    suspend fun savePairing(row: Pairing)
+
+    /** 解除。T1、T2 は残す。 */
+    suspend fun deletePairing(deviceId: String)
+
+    // 画面の購読（X7-1-1 の 2）。書き込みの完了で自動に流れる
+    fun observePairing(): Flow<Pairing?>
+
+    fun observeRuns(): Flow<List<SyncRun>>
+
+    fun observePlaylists(): Flow<List<WrittenPlaylist>>
+
     suspend fun setting(key: String): String?
 
     suspend fun putSetting(key: String, value: String)
@@ -86,6 +100,16 @@ class RoomSyncStore(private val dao: SyncDao) : SyncStore {
     override suspend fun pairing() = dao.pairing()
 
     override suspend fun updatePairing(row: Pairing) = dao.updatePairing(row)
+
+    override suspend fun savePairing(row: Pairing) = dao.upsertPairing(row)
+
+    override suspend fun deletePairing(deviceId: String) = dao.deletePairing(deviceId)
+
+    override fun observePairing() = dao.observePairing()
+
+    override fun observeRuns() = dao.observeRuns()
+
+    override fun observePlaylists() = dao.observePlaylists()
 
     override suspend fun setting(key: String) = dao.setting(key)
 

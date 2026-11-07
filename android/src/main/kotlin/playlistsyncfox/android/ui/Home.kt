@@ -1,0 +1,117 @@
+package playlistsyncfox.android.ui
+
+import playlistsyncfox.android.db.Pairing
+import playlistsyncfox.android.db.SyncRun
+import playlistsyncfox.android.db.WrittenPlaylist
+import playlistsyncfox.android.sync.ManualStart
+import playlistsyncfox.android.sync.RemovalCheck
+import playlistsyncfox.android.sync.SyncProgress
+import playlistsyncfox.android.sync.SyncStage
+
+// S1 一覧（X7-1-2）。
+
+enum class HomeKind { Unpaired, NotRun, Done, Syncing }
+
+/** 最後の同期。[interruptedTrace] は `ended_at` が NULL の行を「中断」として出すもの（日時は `started_at`）。 */
+data class LastRun(val run: SyncRun, val word: String, val atMillis: Long, val interruptedTrace: Boolean)
+
+data class PlaylistRow(val name: String, val trackCount: Int)
+
+data class HomeUiState(
+    val kind: HomeKind,
+    val pcName: String? = null,
+    val endpoint: String? = null,
+    val last: LastRun? = null,
+    val playlists: List<PlaylistRow> = emptyList(),
+) {
+    /** 同期ボタンの遷移先。未ペアリングだけ S2 で、同期中は S3 へ「進み具合を見る」。 */
+    val syncButtonGoesToPairing get() = kind == HomeKind.Unpaired
+}
+
+/** 同期が動いているか。`finished` を過ぎた状態は動いていない。 */
+fun isSyncing(progress: SyncProgress?): Boolean = progress != null && progress.stage != SyncStage.Finished
+
+/**
+ * 最後の同期の行（S1 と S4 で共通）。`ended_at` が NULL でない最新の行。NULL の行は、同期中なら出さず
+ * （その前の行が無ければ無し）、同期中でなければ「中断」として出す。[runs] は新しい順。
+ */
+fun latestRun(runs: List<SyncRun>, syncing: Boolean): LastRun? {
+    val row = (if (syncing) runs.firstOrNull { it.endedAt != null } else runs.firstOrNull()) ?: return null
+    val ended = row.endedAt
+    return if (ended == null) {
+        LastRun(row, resultWord(SyncRun.RESULT_INTERRUPTED), row.startedAt, interruptedTrace = true)
+    } else {
+        LastRun(row, resultWord(row.result), ended, interruptedTrace = false)
+    }
+}
+
+/** T4 の `last_endpoint` が指す方式の値。空なら「未接続」（J30）。 */
+fun endpointText(pairing: Pairing): String {
+    val value = when (pairing.lastEndpoint) {
+        "lan" -> pairing.endpointLan
+        "tailscale" -> pairing.endpointTailscale
+        "usb" -> pairing.endpointUsb
+        else -> null
+    }
+    return value?.takeIf { it.isNotEmpty() } ?: "未接続"
+}
+
+fun homeState(pairing: Pairing?, runs: List<SyncRun>, playlists: List<WrittenPlaylist>, syncing: Boolean): HomeUiState {
+    if (pairing == null) return HomeUiState(HomeKind.Unpaired)
+    val last = latestRun(runs, syncing)
+    return HomeUiState(
+        kind = when {
+            syncing -> HomeKind.Syncing
+            last == null -> HomeKind.NotRun
+            else -> HomeKind.Done
+        },
+        pcName = pairing.pcName,
+        endpoint = endpointText(pairing),
+        last = last,
+        playlists = playlists.map { PlaylistRow(it.name, it.trackCount) },
+    )
+}
+
+sealed interface PressOutcome {
+    data object ToPairing : PressOutcome
+
+    /** S3 へ進む。[notice] は S3 に出す案内。 */
+    data class ToProgress(val notice: String? = null) : PressOutcome
+
+    data class Confirm(val toRemove: Int) : PressOutcome
+}
+
+const val APPROVAL_UNUSED_NOTICE = "承認は使われなかった。終わった後にもう一度押す"
+
+/**
+ * 手動の同期の開始（X7-1-2）。確認の要否は画面側が決め、ワーカーの起動は [start] に任せる。
+ * [start] の引数は、承認した件数（承認しないなら null）と `reach_failed`。
+ */
+class ManualSyncFlow(
+    private val autoRunning: suspend () -> Boolean,
+    private val check: suspend () -> RemovalCheck,
+    private val start: suspend (approvedCount: Int?, reachFailed: Boolean) -> ManualStart,
+) {
+    suspend fun press(paired: Boolean): PressOutcome {
+        if (!paired) return PressOutcome.ToPairing
+        // 実行中の自動があれば、確認を出さずに S3 へ入る。自動は自動のまま（J34）
+        if (autoRunning()) return PressOutcome.ToProgress()
+        return when (val result = check()) {
+            RemovalCheck.Allowed -> started(null, reachFailed = false)
+            is RemovalCheck.NeedsConfirmation -> PressOutcome.Confirm(result.toRemove)
+            is RemovalCheck.Failed -> started(null, result.reachFailed)
+        }
+    }
+
+    /** 承認なら件数を添えて開始する。取り消しは「消す」だけ飛ばして同期を始める（J26）。 */
+    suspend fun answer(confirm: PressOutcome.Confirm, approved: Boolean): PressOutcome {
+        val count = if (approved) confirm.toRemove else null
+        return started(count, reachFailed = false)
+    }
+
+    private suspend fun started(approvedCount: Int?, reachFailed: Boolean): PressOutcome {
+        val result = start(approvedCount, reachFailed)
+        val unused = approvedCount != null && result == ManualStart.AutoRunning
+        return PressOutcome.ToProgress(APPROVAL_UNUSED_NOTICE.takeIf { unused })
+    }
+}

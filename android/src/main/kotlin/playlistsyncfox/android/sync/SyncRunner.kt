@@ -479,7 +479,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             if (input.reachFailed) return Reach.Unreachable(mismatch = false)
 
             var mismatch = false
-            for (kind in endpointOrder()) {
+            for (kind in endpointOrder(pairing)) {
                 val endpoint = endpointFor(kind) ?: continue
                 val candidate = env.apis.open(endpoint).also { opened += it }
                 when (val result = candidate.digest()) {
@@ -506,14 +506,6 @@ class SyncRunner(private val env: SyncEnvironment) {
             return Reach.Unreachable(mismatch)
         }
 
-        /** `last_endpoint` を先頭に、残りは LAN、Tailscale、USB。 */
-        private fun endpointOrder(): List<String> {
-            val saved = listOf(LAN to pairing.endpointLan, TAILSCALE to pairing.endpointTailscale, USB to pairing.endpointUsb)
-                .filter { it.second != null }.map { it.first }
-            val last = pairing.lastEndpoint
-            return if (last != null && last in saved) listOf(last) + saved.filter { it != last } else saved
-        }
-
         private suspend fun endpointFor(kind: String): Endpoint? = when (kind) {
             LAN -> resolveLan()
             TAILSCALE -> parseHostPort(Transport.Tailscale, pairing.endpointTailscale)
@@ -533,12 +525,6 @@ class SyncRunner(private val env: SyncEnvironment) {
                 env.store.updatePairing(pairing)
             }
             return Endpoint(Transport.Lan, service.host, service.port)
-        }
-
-        private fun parseHostPort(transport: Transport, text: String?): Endpoint? {
-            val host = text?.substringBeforeLast(':', "")?.takeIf { it.isNotEmpty() }
-            val port = text?.substringAfterLast(':', "")?.toIntOrNull()
-            return if (host != null && port != null) Endpoint(transport, host, port) else null
         }
 
         /** P3 が通った後に、`reported`＝0 の行を古い順に全部、1 回の同期で 1 度ずつ再送する。 */
@@ -807,11 +793,6 @@ class SyncRunner(private val env: SyncEnvironment) {
         }
     }
 
-    private companion object {
-        const val LAN = "lan"
-        const val TAILSCALE = "tailscale"
-        const val USB = "usb"
-    }
 }
 
 private fun SyncRun.isAfterRun(other: SyncRun) =
