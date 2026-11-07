@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -21,8 +22,8 @@ import playlistsyncfox.android.sync.SyncValues
 import playlistsyncfox.android.sync.SyncStage
 
 const val NO_SELECTION_NOTICE = "同期するプレイリストを選んでください"
-const val STORAGE_MISSING_NOTICE = "保存先の SD が見つからない。SD を確かめるか、設定で保存先を替える"
-const val STORAGE_CHANGED_NOTICE = "保存先を替えた。次の同期で新しい場所へ全曲を取り直す"
+const val STORAGE_MISSING_NOTICE = "保存先の SD カードが見つかりません。SD カードを確認するか、設定で保存先を変更してください"
+const val STORAGE_CHANGED_NOTICE = "保存先を変更しました。次の同期で、新しい保存先へ全曲を転送し直します"
 
 /** 画面の遷移は S1 を起点にする（X7-1-1 の 4）。 */
 sealed interface Screen {
@@ -99,6 +100,8 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     )
 
     init {
+        // 画面の下の知らせは、その画面にいる間だけ出す。移ったら消す
+        viewModelScope.launch { screen.drop(1).collect { message.value = null } }
         // S3 の自動の遷移（finished で S4、動いていなければ S1）
         viewModelScope.launch {
             SyncServices.progress.combine(screen) { progress, current -> progress to current }.collect { (progress, current) ->
@@ -204,7 +207,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     fun toggleAuto(enabled: Boolean) {
         viewModelScope.launch {
             val ok = graph.scheduler.setAutoEnabled(enabled)
-            if (!ok) message.value = "自動起動の登録に失敗した"
+            if (!ok) message.value = "自動同期の設定に失敗しました"
             settings.update { it?.copy(autoEnabled = store.setting(playlistsyncfox.android.sync.SyncScheduler.AUTO_ENABLED_KEY) == "true") }
         }
     }
@@ -221,7 +224,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     fun deleteRelocated() {
         viewModelScope.launch {
             val deleted = withContext(Dispatchers.IO) { cleanRelocated(writer(), isSyncing(SyncServices.progress.value)) }
-            message.value = if (deleted == null) "同期が動いている間は消せない" else "以前の場所の曲を $deleted 件消した"
+            message.value = if (deleted == null) "同期中は削除できません" else "前の保存先から $deleted 件を削除しました"
             settings.update { it?.copy(relocatedCount = store.relocatedUris().size) }
         }
     }
@@ -240,7 +243,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
             if (graph.keeper.unpair()) {
                 screen.value = Screen.Home
             } else {
-                message.value = "鍵の削除に失敗したため、解除は済んでいない"
+                message.value = "鍵の削除に失敗したため、解除できませんでした"
             }
         }
     }

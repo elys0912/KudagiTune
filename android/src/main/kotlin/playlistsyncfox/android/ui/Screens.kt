@@ -87,11 +87,11 @@ private fun Field(value: String, onChange: (String) -> Unit) =
     )
 
 @Composable
-private fun Confirm(text: String, ok: String, onOk: () -> Unit, onCancel: () -> Unit) {
+private fun Confirm(text: String, ok: String, onOk: () -> Unit, onCancel: () -> Unit, cancel: String = "取り消す") {
     Column(Modifier.border(2.dp, Color.Black).padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Label(text)
         Action(ok, onOk)
-        Action("取り消す", onCancel)
+        Action(cancel, onCancel)
     }
 }
 
@@ -102,16 +102,15 @@ private fun Back(model: AppViewModel) = Action("戻る", model::back)
 private fun HomeScreen(model: AppViewModel, actions: ScreenActions, notificationsAllowed: () -> Boolean, readGranted: () -> Boolean) {
     val state by model.home.collectAsState()
     when (state.kind) {
-        HomeKind.Unpaired -> Label("ペアリングしてください")
+        HomeKind.Unpaired -> Label("PC とペアリングしてください")
         else -> {
             Label(state.pcName.orEmpty(), bold = true)
-            Label("接続先：${state.endpoint}")
             val last = state.last
             if (state.kind == HomeKind.Syncing) Label("同期中")
             if (last == null) {
                 Label("まだ同期していません")
             } else {
-                Label("最後の同期：${formatTime(last.atMillis)} ${last.word}")
+                Label("前回の同期：${formatTime(last.atMillis)} ${last.word}")
             }
             if (state.selectedCount == 0) {
                 Label("同期するプレイリストを選んでください")
@@ -123,8 +122,8 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions, notification
         }
     }
     when (state.kind) {
-        HomeKind.Syncing -> Action("進み具合を見る", model::showProgress)
-        HomeKind.Unpaired -> Action("ペアリング", actions.onSyncButton)
+        HomeKind.Syncing -> Action("進行状況を見る", model::showProgress)
+        HomeKind.Unpaired -> Action("ペアリングする", actions.onSyncButton)
         else -> Action("同期", actions.onSyncButton)
     }
     if (state.kind != HomeKind.Unpaired) Action("プレイリストを選ぶ") { model.openSelection() }
@@ -139,8 +138,9 @@ private fun RemovalConfirm(model: AppViewModel) {
     val confirm by model.confirm.collectAsState()
     confirm?.let {
         Confirm(
-            text = "${it.toRemove} 曲を端末から消す。続けるか",
-            ok = "消して同期する",
+            text = "PC のプレイリストにない ${it.toRemove} 曲を、この端末から削除します。よろしいですか？",
+            ok = "削除して同期する",
+            cancel = "削除せずに同期する",
             onOk = { model.answerConfirm(true) },
             onCancel = { model.answerConfirm(false) },
         )
@@ -154,22 +154,22 @@ private fun PairingScreen(model: AppViewModel) {
     var code by remember { mutableStateOf("") }
     when (val stage = state.stage) {
         PairingStage.Discovering -> {
-            Label("PC を探している", bold = true)
+            Label("PC を探しています", bold = true)
             state.found.forEach { pc -> Action(pc.serviceName) { model.pairing.select(pc) } }
-            if (state.notFound) Label("見つからない。宛先を入力してほしい", bold = true)
-            Label("宛先（IP、または名前。ポートは省略できる）")
+            if (state.notFound) Label("PC が見つかりません。PC のアドレスを入力してください", bold = true)
+            Label("PC のアドレス（IP アドレスかホスト名。ポート番号は省略できます）")
             Field(manual) { manual = it }
             state.manualError?.let { Label(it) }
-            Action("宛先を決める") { model.pairing.submitManual(manual) }
+            Action("接続する") { model.pairing.submitManual(manual) }
         }
         is PairingStage.Target -> {
-            Label("宛先：${stage.target.name}", bold = true)
-            stage.fingerprint?.let { Label("PC の確認コード：$it") }
-            Label("PC に出ているペアリングコード（$CODE_LENGTH 桁）")
+            Label("接続先：${stage.target.name}", bold = true)
+            stage.fingerprint?.let { Label("PC の確認コード：$it（PC の画面と同じか確かめてください）") }
+            Label("PC に表示されている $CODE_LENGTH 桁のペアリングコード")
             Field(code) { code = it }
             stage.codeError?.let { Label(it) }
             if (!state.sending) {
-                Action("ペアリングコードを送る") {
+                Action("ペアリングする") {
                     val sent = code
                     code = ""
                     model.pairing.submitCode(sent)
@@ -177,20 +177,20 @@ private fun PairingScreen(model: AppViewModel) {
             }
         }
         is PairingStage.Done -> {
-            Label("ペアリングが済んだ：${stage.pcName}", bold = true)
-            Label("違うと思えば、PC の窓の「端末」とこのアプリの設定の両方で解除する")
-            if (stage.showCleanupHint) Label("以前このアプリを使っていたなら、先に以前の曲の整理を")
+            Label("ペアリングしました：${stage.pcName}", bold = true)
+            Label("接続先が違う場合は、PC の画面の「端末」とこのアプリの設定の両方で解除してください")
+            if (stage.showCleanupHint) Label("以前このアプリを使っていた場合は、先に設定の「以前のインストールで保存した曲の整理」で古い曲を整理してください")
         }
-        PairingStage.AttemptsExhausted -> Label("試行の上限に達した。PC でコードを作り直してほしい")
-        PairingStage.Waiting -> Label("しばらく待ってからやり直してほしい")
-        PairingStage.DeviceExists -> Label("PC に登録が残っている。PC の窓の「端末」で解除してから")
+        PairingStage.AttemptsExhausted -> Label("入力できる回数を超えました。PC でペアリングコードを作り直してください")
+        PairingStage.Waiting -> Label("しばらく待ってからやり直してください")
+        PairingStage.DeviceExists -> Label("この端末の登録が PC に残っています。PC の画面の「端末」で解除してから、やり直してください")
         is PairingStage.Failed -> {
             Label(stage.notice.title, bold = true)
             Label(stage.notice.guidance)
             Action("やり直す", model.pairing::retry)
         }
     }
-    if (state.stage is PairingStage.Done) Action("一覧へ", model::back) else Back(model)
+    if (state.stage is PairingStage.Done) Action("ホームへ", model::back) else Back(model)
 }
 
 @Composable
@@ -198,11 +198,11 @@ private fun SelectionScreen(model: AppViewModel, current: Screen.Selection) {
     val stage by model.selection.stage.collectAsState()
     current.notice?.let { Label(it, bold = true) }
     when (val s = stage) {
-        SelectionStage.Loading -> Label("読み込み中")
+        SelectionStage.Loading -> Label("読み込んでいます")
         is SelectionStage.Loaded -> {
             s.nodes.forEach { NodeRow(model, s, it, 0) }
             s.missing.forEach { row ->
-                Label("見つからない：${row.name}")
+                Label("PC に見つかりません：${row.name}")
                 Action("外す") { model.selection.remove(row.playlistId) }
             }
         }
@@ -231,7 +231,7 @@ private fun NodeRow(model: AppViewModel, stage: SelectionStage.Loaded, node: Pla
         val all = leaves.isNotEmpty() && leaves.all { it in stage.selectedIds }
         Label("${"　".repeat(depth)}${if (open) "▼" else "▶"} ${node.name}")
         Action(if (open) "閉じる：${node.name}" else "開く：${node.name}") { open = !open }
-        Action(if (all) "配下をすべて外す：${node.name}" else "配下をすべて選ぶ：${node.name}") { model.selection.setFolder(node, !all) }
+        Action(if (all) "フォルダ内をすべて外す：${node.name}" else "フォルダ内をすべて選ぶ：${node.name}") { model.selection.setFolder(node, !all) }
         if (open) children.forEach { NodeRow(model, stage, it, depth + 1) }
     }
 }
@@ -242,22 +242,22 @@ private fun ProgressScreen(model: AppViewModel, current: Screen.Progress, action
     current.notice?.let { Label(it, bold = true) }
     val ui = progress
     if (ui == null) {
-        Label("開始を待っている")
+        Label("開始を待っています")
     } else {
         Label(ui.heading, bold = true)
         Label("${ui.doneCount} / ${ui.totalCount} 曲　${formatBytes(ui.doneBytes)} / ${formatBytes(ui.totalBytes)}")
         ui.currentTitle?.let { Label(it) }
         ui.nearLimitNote?.let { Label(it, bold = true) }
         ui.shortageBytes?.let {
-            Label("空き容量が ${formatBytes(it)} 足りない", bold = true)
-            Action("空きを作る画面を開く", actions.onOpenStorageSettings)
+            Label("空き容量が ${formatBytes(it)} 足りません", bold = true)
+            Action("ストレージの設定を開く", actions.onOpenStorageSettings)
         }
         ui.notice?.let {
             Label(it.title, bold = true)
             Label(it.guidance)
         }
     }
-    Action("中断", model::cancelSync)
+    Action("中断する", model::cancelSync)
 }
 
 @Composable
@@ -265,23 +265,23 @@ private fun ResultScreen(model: AppViewModel, actions: ScreenActions) {
     val screen by model.result.collectAsState()
     val state = screen.current
     if (state == null) {
-        Label("結果がまだ無い")
+        Label("まだ結果がありません")
     } else {
         Label("${state.word}（${state.trigger}）　${formatTime(state.atMillis)}", bold = true)
         state.removalNote?.let { Label(it, bold = true) }
-        if (state.notRemoved > 0) Label("消さなかった：${state.notRemoved} 件")
-        state.counts?.let { Label("追加 ${it.added}　置き換え ${it.replaced}　削除 ${it.removed}　失敗 ${it.failed}") }
-        state.bytes?.let { Label("転送 ${formatBytes(it)}") }
+        if (state.notRemoved > 0) Label("削除しなかった曲：${state.notRemoved} 件")
+        state.counts?.let { Label("追加 ${it.added}　更新 ${it.replaced}　削除 ${it.removed}　失敗 ${it.failed}") }
+        state.bytes?.let { Label("転送量 ${formatBytes(it)}") }
         state.errorWord?.let { Label("原因：$it") }
-        state.noticeLabel?.let { Label("E2 の内容：$it") }
-        Issues("除外", state.excluded)
-        Issues("再生できない", state.unplayable)
-        Issues("失敗", state.failed)
+        state.noticeLabel?.let { Label("詳細：$it") }
+        Issues("同期しなかった曲", state.excluded)
+        Issues("再生できない曲", state.unplayable)
+        Issues("失敗した曲", state.failed)
     }
     Action("もう一度同期する", actions.onSyncButton)
     RemovalConfirm(model)
     if (screen.past.size > 1) {
-        Label("過去の実行", bold = true)
+        Label("過去の同期", bold = true)
         screen.past.forEach { Action("${formatTime(it.atMillis)} ${it.word}") { model.openResult(it.runId) } }
     }
     Back(model)
@@ -303,59 +303,59 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     val syncing = isSyncing(SyncServices.progress.collectAsState().value)
     val ui = state
     if (ui == null) {
-        Label("読み込み中")
+        Label("読み込んでいます")
         Back(model)
         return
     }
-    Label("自動起動：${if (ui.autoEnabled) "入" else "切"}（Wi-Fi など従量制でない回線で、約 6 時間ごと）")
-    Action(if (ui.autoEnabled) "切る" else "入れる") { model.toggleAuto(!ui.autoEnabled) }
-    Label("PC に無い曲を端末から消す：${if (ui.deleteMissing) "入" else "切"}（プレイリストから外した曲も含む。既定は切）")
-    Action(if (ui.deleteMissing) "切る" else "入れる") { model.setDeleteMissing(!ui.deleteMissing) }
-    Label("保存先：${ui.saveFolder}")
+    Label("自動同期：${if (ui.autoEnabled) "オン" else "オフ"}（Wi-Fi など従量制でない回線のとき、約 6 時間ごと）")
+    Action(if (ui.autoEnabled) "オフにする" else "オンにする") { model.toggleAuto(!ui.autoEnabled) }
+    Label("PC にない曲を端末から削除する：${if (ui.deleteMissing) "オン" else "オフ"}（プレイリストから外した曲も対象です）")
+    Action(if (ui.deleteMissing) "オフにする" else "オンにする") { model.setDeleteMissing(!ui.deleteMissing) }
+    Label("保存先のフォルダ：${ui.saveFolder}")
     ui.storage.options.forEach { option ->
         val chosen = option.volume == ui.storage.selected
         Label("${if (chosen) "[x]" else "[ ]"} ${option.label}")
-        if (!chosen && option.available) Action("${option.label}にする") { model.setStorage(option.volume) }
+        if (!chosen && option.available) Action("${option.label}に変更する") { model.setStorage(option.volume) }
     }
-    Label("保存先を替えると、次の同期で新しい場所へ全曲を取り直す。前の場所の曲は自動では消えない")
+    Label("保存先を変更すると、次の同期で新しい保存先へ全曲を転送し直します。前の保存先の曲は自動では削除されません")
     if (ui.relocatedCount > 0) {
-        Label("以前の場所に残る曲とプレイリスト：${ui.relocatedCount} 件")
-        if (syncing) Label("同期が動いている間は消せない") else Action("以前の場所の曲を消す") { confirmRelocated = true }
+        Label("前の保存先に残っている曲とプレイリスト：${ui.relocatedCount} 件")
+        if (syncing) Label("同期中は削除できません") else Action("前の保存先の曲を削除する") { confirmRelocated = true }
         if (confirmRelocated) {
-            Confirm("以前の場所の、このアプリが書いた ${ui.relocatedCount} 件を消す。続けるか", "消す", { confirmRelocated = false; model.deleteRelocated() }, { confirmRelocated = false })
+            Confirm("前の保存先から、このアプリが保存した ${ui.relocatedCount} 件を削除します。よろしいですか？", "削除する", { confirmRelocated = false; model.deleteRelocated() }, { confirmRelocated = false })
         }
     }
     if (ui.notificationsOff) {
-        Label("通知が出ない")
-        Action("通知の許可", actions.onNotificationHelp)
+        Label("通知がオフになっています")
+        Action("通知を許可する", actions.onNotificationHelp)
     }
     if (ui.pcName != null) {
-        Label("ペアリング：${ui.pcName}", bold = true)
+        Label("ペアリング中の PC：${ui.pcName}", bold = true)
         ui.fingerprint?.let { Label("確認コード：$it") }
-        Action("解除") { confirmUnpair = true }
+        Action("解除する") { confirmUnpair = true }
         if (confirmUnpair) {
-            Confirm("ペアリングを解除する。曲とプレイリストは端末に残る。PC の窓の「端末」でも解除してほしい", "解除する", { confirmUnpair = false; model.unpair() }, { confirmUnpair = false })
+            Confirm("ペアリングを解除します。曲とプレイリストは端末に残ります。PC の画面の「端末」でも解除してください", "解除する", { confirmUnpair = false; model.unpair() }, { confirmUnpair = false })
         }
     }
-    Label("以前の曲の整理", bold = true)
+    Label("以前のインストールで保存した曲の整理", bold = true)
     when (val cleanup = ui.cleanup) {
         CleanupState.NeedsPermission -> {
-            Label("権限が要る")
-            Action("権限を許可して一覧を出す", actions.onRequestRead)
+            Label("一覧を出すには、音楽ファイルの読み取りの許可が必要です")
+            Action("許可して一覧を出す", actions.onRequestRead)
         }
-        CleanupState.Denied -> Label("権限が無いため整理できない")
+        CleanupState.Denied -> Label("読み取りが許可されていないため、整理できません")
         is CleanupState.Found -> Cleanup(cleanup.items, actions)
     }
-    Label("ログ：${formatBytes(ui.logBytes)}", bold = true)
+    Label("ログ（${formatBytes(ui.logBytes)}）", bold = true)
     Action("ログを見る", model::openLog)
     Action("ライセンス", model::openLicenses)
-    Action("一覧へ", model::back)
+    Action("ホームへ", model::back)
 }
 
 @Composable
 private fun Cleanup(items: List<StoredFile>, actions: ScreenActions) {
     if (items.isEmpty()) {
-        Label("整理するものは無い")
+        Label("整理する曲はありません")
         return
     }
     var selected by remember { mutableStateOf(emptySet<String>()) }
@@ -366,7 +366,7 @@ private fun Cleanup(items: List<StoredFile>, actions: ScreenActions) {
             selected = if (on) selected - file.uri else selected + file.uri
         }
     }
-    Action("選んだものを削除する（同意の画面が出る）") { actions.onDeleteLeftovers(items.filter { it.uri in selected }) }
+    Action("選んだ曲を削除する（確認の画面が出ます）") { actions.onDeleteLeftovers(items.filter { it.uri in selected }) }
 }
 
 @Composable
@@ -374,13 +374,13 @@ private fun LogScreen(model: AppViewModel, actions: ScreenActions) {
     val lines by model.logLines.collectAsState()
     var confirmShare by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
-    Action("共有") { confirmShare = true }
-    Action("消去") { confirmClear = true }
+    Action("共有する") { confirmShare = true }
+    Action("消去する") { confirmClear = true }
     if (confirmShare) {
-        Confirm("ログには曲名が含まれる。共有するか", "共有する", { confirmShare = false; actions.onShareLog(model.logText()) }, { confirmShare = false })
+        Confirm("ログには曲名が含まれます。共有しますか？", "共有する", { confirmShare = false; actions.onShareLog(model.logText()) }, { confirmShare = false })
     }
     if (confirmClear) {
-        Confirm("ログを全部消す", "消す", { confirmClear = false; model.clearLog() }, { confirmClear = false })
+        Confirm("ログをすべて消去します。よろしいですか？", "消去する", { confirmClear = false; model.clearLog() }, { confirmClear = false })
     }
     Back(model)
     lines.forEach { Label(it) }
@@ -393,7 +393,7 @@ private fun LicensesScreen(model: AppViewModel, actions: ScreenActions) {
     Back(model)
     val chosen = open
     when {
-        entries == null -> Label("読み込めない")
+        entries == null -> Label("ライセンスの一覧を読み込めません")
         chosen != null -> {
             Label("${chosen.name} ${chosen.version}", bold = true)
             Label(chosen.body)

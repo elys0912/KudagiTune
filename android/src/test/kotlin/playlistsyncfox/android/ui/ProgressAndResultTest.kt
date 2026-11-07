@@ -50,7 +50,7 @@ class ProgressTest {
         assertEquals("Song 1", transfer.currentTitle)
         assertNull(diff.currentTitle)
         assertEquals(100, finished.shortageBytes)
-        assertEquals("端末と PC の時計が違う", finished.notice?.title)
+        assertEquals("端末と PC の時刻がずれています", finished.notice?.title)
     }
 }
 
@@ -113,8 +113,8 @@ class ResultUiTest {
             listOf(issue(RunIssue.KIND_EXCLUDED, 1), issue(RunIssue.KIND_UNPLAYABLE, 2), issue(RunIssue.KIND_FAILED, 3, "E5")),
         )
 
-        assertEquals(IssueLine("Song 1", "Artist / 保護された曲"), state.excluded.lines.single())
-        assertEquals(IssueLine("Song 2", "m4p / 保護された曲"), state.unplayable.lines.single())
+        assertEquals(IssueLine("Song 1", "Artist / 著作権保護された曲"), state.excluded.lines.single())
+        assertEquals(IssueLine("Song 2", "m4p / 著作権保護された曲"), state.unplayable.lines.single())
         assertEquals(IssueLine("Song 3", "E5"), state.failed.lines.single())
     }
 
@@ -131,9 +131,9 @@ class ResultUiTest {
         val kept = resultUi(finishedRun(1, json = resultJson(removalSkipped = false)), emptyList())
         val auto = resultUi(finishedRun(2, trigger = SyncRun.TRIGGER_AUTO, json = resultJson(removalSkipped = true)), emptyList())
 
-        assertEquals("確認が要る消す処理を行っていない。もう一度同期して確認する", skipped.removalNote)
+        assertEquals("削除の確認が済んでいないため、削除しませんでした。もう一度同期すると確認が出ます", skipped.removalNote)
         assertNull(kept.removalNote)
-        assertEquals("消す処理は手動の同期で行う", auto.removalNote)
+        assertEquals("削除が必要な曲があります。手動で同期すると、確認のうえ削除します", auto.removalNote)
     }
 
     @Test

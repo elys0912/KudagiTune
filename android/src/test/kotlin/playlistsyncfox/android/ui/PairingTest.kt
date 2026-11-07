@@ -90,7 +90,7 @@ class PairingPresenterTest {
         runCurrent()
 
         val stage = assertIs<PairingStage.Failed>(presenter.state.value.stage)
-        assertEquals("端末と PC の時計が違う", stage.notice.title)
+        assertEquals("端末と PC の時刻がずれています", stage.notice.title)
         assertNull(store.pairingRow)
     }
 
@@ -157,7 +157,7 @@ class PairingPresenterTest {
         repeat(CODE_ATTEMPTS - 1) {
             presenter.submitCode("123456")
             runCurrent()
-            assertEquals("コードが違う", assertIs<PairingStage.Target>(presenter.state.value.stage).codeError)
+            assertEquals("ペアリングコードが違います", assertIs<PairingStage.Target>(presenter.state.value.stage).codeError)
         }
         presenter.submitCode("123456")
         runCurrent()
@@ -208,12 +208,12 @@ class PairingPresenterTest {
 class NoticeTest {
     @Test
     fun `TA-121 E2 の detail ごとに表示と再ペアリングの誘導が表のとおりになる`() {
-        assertEquals("端末と PC の時計が違う", noticeOf(ErrorDetail.ClockSkew).title)
-        assertEquals("通信が重複した", noticeOf(ErrorDetail.Replay).title)
-        assertEquals("要求が続いたため PC が一時的に断った", noticeOf(ErrorDetail.RateLimited).title)
-        assertEquals("証明書が変わった", noticeOf(ErrorDetail.PinMismatch).title)
+        assertEquals("端末と PC の時刻がずれています", noticeOf(ErrorDetail.ClockSkew).title)
+        assertEquals("同じ通信が重複して届きました", noticeOf(ErrorDetail.Replay).title)
+        assertEquals("短い間に接続が続いたため、PC が一時的に断りました", noticeOf(ErrorDetail.RateLimited).title)
+        assertEquals("PC の証明書が変わりました", noticeOf(ErrorDetail.PinMismatch).title)
         assertEquals("ペアリングをやり直してください", noticeOf(ErrorDetail.NoDetail).title)
-        assertEquals("PC がコードを表示していない", PairingClosedNotice.title)
+        assertEquals("PC にペアリングコードが表示されていません", PairingClosedNotice.title)
     }
 
     @Test
@@ -223,6 +223,6 @@ class NoticeTest {
         assertFalse(noticeOf(ErrorDetail.RateLimited).rePair)
         assertFalse(noticeOf(ErrorDetail.ClockSkew).rePair)
         assertFalse(noticeOf(ErrorDetail.Replay).rePair)
-        assertTrue(noticeOf(ErrorDetail.RateLimited).guidance.contains("再ペアリングは要らない"))
+        assertTrue(noticeOf(ErrorDetail.RateLimited).guidance.contains("ペアリングのやり直しは不要です"))
     }
 }

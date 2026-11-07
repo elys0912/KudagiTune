@@ -118,9 +118,9 @@ fun main(args: Array<String>) {
             AlertDialog(
                 onDismissRequest = { confirmExit = false },
                 title = { Text("同期中です") },
-                text = { Text("終了すると同期が途中で止まる。続けて終了する？") },
+                text = { Text("終了すると、同期が途中で止まります。終了しますか？") },
                 confirmButton = { Button(onClick = { shutdown(app, ::exitApplication) }) { Text("終了する") } },
-                dismissButton = { Button(onClick = { confirmExit = false }) { Text("やめる") } },
+                dismissButton = { Button(onClick = { confirmExit = false }) { Text("終了しない") } },
             )
         }
     }
