@@ -2,9 +2,12 @@ package playlistsyncfox.desktop.ui
 
 import playlistsyncfox.desktop.server.ActivityTracker
 import playlistsyncfox.desktop.server.PairingView
+import playlistsyncfox.desktop.server.ProgressBoard
+import playlistsyncfox.desktop.server.SendingTrack
 import playlistsyncfox.desktop.settings.LastSync
 import playlistsyncfox.desktop.settings.Settings
 import playlistsyncfox.desktop.watch.XmlStatus
+import playlistsyncfox.shared.result.ProgressReport
 import java.time.Instant
 
 // 画面の状態は 1 つの「PC の状態」にまとめ、画面はそれを写すだけにする（X5-5）。
@@ -39,6 +42,10 @@ class PcState(
     /** W4 の接続先（IPv4 とポート）。 */
     val endpoints: List<String>,
     val fingerprint: String?,
+    /** P8 の最後の値（V56 で消える）。D22。 */
+    val progress: ProgressReport?,
+    /** P2 の送信中の曲。D22。 */
+    val sending: SendingTrack?,
 )
 
 /** W1 のトレイの表示。優先順は上から。 */
@@ -62,6 +69,7 @@ class PcInputs(
     val keyMissing: Set<String>,
     val pairing: PairingView,
     val activity: ActivityTracker,
+    val progress: ProgressBoard,
     val certificateRegenerated: Boolean,
     val settingsReset: Boolean,
     val endpoints: List<String>,
@@ -90,5 +98,7 @@ fun buildPcState(inputs: PcInputs, now: Instant): PcState {
         warnings = warnings,
         endpoints = inputs.endpoints,
         fingerprint = inputs.fingerprint,
+        progress = inputs.progress.current(),
+        sending = inputs.activity.sendingTrack(),
     )
 }

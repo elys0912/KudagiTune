@@ -4,6 +4,7 @@ import playlistsyncfox.desktop.MutableClock
 import playlistsyncfox.desktop.T0
 import playlistsyncfox.desktop.server.ActivityTracker
 import playlistsyncfox.desktop.server.PairingView
+import playlistsyncfox.desktop.server.ProgressBoard
 import playlistsyncfox.desktop.settings.PairedDevice
 import playlistsyncfox.desktop.settings.Settings
 import playlistsyncfox.desktop.watch.XmlStatus
@@ -28,7 +29,7 @@ class PcStateTest {
         settings: Settings = settings(),
         keyMissing: Set<String> = emptySet(),
     ) = buildPcState(
-        PcInputs(server, xml, settings, keyMissing, PairingView.Closed, activity, false, false, emptyList(), null),
+        PcInputs(server, xml, settings, keyMissing, PairingView.Closed, activity, ProgressBoard(clock), false, false, emptyList(), null),
         clock.instant(),
     )
 

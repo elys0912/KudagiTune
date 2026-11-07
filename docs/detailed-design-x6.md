@@ -230,11 +230,16 @@ T9 `relocated_files`：列は B3-4 のとおり。主キー `media_uri`。保存
 11. P4 で要約を報告する（`SyncReport`。X3-5）。失敗しても結果に影響しない。報告できたら T3 の `reported` を 1 にする。報告できなかった実行は、次回の手順 2 の 5 で再送する。再送の本文は T3 の列と `result_json` から作る。`outcome` は P4 の 4 値（`success`、`partial`、`interrupted`、`failed`）で、T3 の `result` から写し、`not_started` は `failed` に畳む（X3-5 の対応表）。畳みは M4 が行い、T3 の `result` から P4 を作るとき（初回の報告も再送も）に畳む。M1 の `toReport` は `SyncResult` の 4 値をそのまま写し、畳まない
 12. 終了の通知を出す（結果と件数。タップで S4。自動は静かな通知）
 
+- 進み具合の知らせ（P8。B4-4 の 5b。D22）：手順 2 の 2 の P3 が通った後から、手順 11 の P4 の前まで、SyncProgress を更新したときに、P3 が通った接続先へ P8 を送る。間隔は V28 以上で、`stage` が変わったときは待たない。送っている途中なら、その回は送らない。同期の手順は P8 の応答を待たない（別の流れで送る）。失敗しても同期は止めず、再送せず、T3 に残さない。応答の待ちは V29。本文は SyncProgress の `stage`、`done_count`、`total_count`、`done_bytes`、`total_bytes` から作る（曲名を含めない）
+- 画面の欄（D21）に流すため、手順 7 で 1 曲ごとに次の行を診断のログに書く：転送を始めた（曲名）、保存した（曲名）、保存に失敗した（曲名と E の番号）
+
 #### 進行の状態（SyncProgress）
 
-- X6 が公開する読み取りの状態。型は X7-1-4 の表のとおり（`stage`、`done_count`、`total_count`、`done_bytes`、`total_bytes`、`current_title`、`shortage_bytes`、`near_limit`、`outcome`、`error_detail`）。ワーカーが更新し、画面（S3）と通知（X7-3）が購読する。DB には持たない（T3 は終了後の記録）
+- X6 が公開する読み取りの状態。型は X7-1-4 の表のとおり（`stage`、`done_count`、`total_count`、`done_bytes`、`total_bytes`、`current_title`、`shortage_bytes`、`near_limit`、`outcome`、`error_detail`、`tracks`）。ワーカーが更新し、画面（S3）と通知（X7-3）が購読する。DB には持たない（T3 は終了後の記録）
 - `stage` は手順に対応する：`connecting`（手順 1 の始めの整理と、手順 2 の到達確認）、`manifest`（手順 4 の P1）、`diff`（差分の計算）、`capacity`（手順 5。足りないとき `shortage_bytes` を入れる）、`transfer`（手順 7）、`playlist`（手順 8）、`finished`（手順 10 の後。手順 2 の 1b、3、4、4b で閉じるときは閉じた後。`outcome` に T3 の `result`。E2 のときは `error_detail` に E2 の `detail` を入れる。T3 の `result_json` にも同じ値を持つ。X7-1-3 の表で表示する）
 - `near_limit` は、ワーカーが前面へ昇格してからの経過が V17 に達したときに真にする（時間の上限に当たる前の注意。V17 以外の値は置かない）。V17 で同期を区切らない。注意を出すだけで、時間切れは E7 で止めて次回に再開する（J33）。更新は V28 の間隔以上
+- `tracks`（D22。2026-11-07）：手順 7 の対象（「足す」「置き換える」の順）の曲ごとの行。項目は `persistent_id`、`title`（曲名。無ければファイル名）、`size`、`state`（`waiting`、`transferring`、`done`、`failed`）、`received_bytes`（`transferring` のとき、曲の頭から数えて書き込んだ量。再開は再開の位置を初めの値にする）、`error_number`（`failed` のとき E の番号）。手順 7 の始めに全部を `waiting` で作り、1 曲の始めに `transferring`、終わりに `done` か `failed` にする。手順 7 の 5 の取り直しで再び試す曲は、その時に `transferring` へ戻す。E6 などで同期を止めたときは、転送中だった行を `waiting` に戻し（次の同期で再開する曲のため）、残りの行も `waiting` のまま `finished` へ進む。`received_bytes` の更新は書き込みの 1 区切り（V27）ごと
+- `done_bytes` は、この実行で終えた曲の転送量に、転送中の曲のこの実行での転送量（`received_bytes` から再開の位置を引いた値）を足した値（全体の棒を滑らかにするため。T3 の `bytes_transferred` は従来どおり終えた曲だけ）
 
 #### 中断と時間の上限
 
@@ -367,6 +372,8 @@ T9 `relocated_files`：列は B3-4 のとおり。主キー `media_uri`。保存
 | 保存先の切り替え | 単体（`MediaStore` を差し替え） | `placed_volume` が `storage_volume` と違えば、T1、T2 が T9 へ移り、差分が全曲の「足す」になる。完了で終えても古い場所のファイルと T9 は残り、`relocating` が `false` になる。S5 の操作で確認の後に T9 のファイルが消え、持ち主が違う行は残り、同期が動いている間は何もしない。容量は新しい場所の空きで判定する |
 | 「PC に無い曲を端末から消す」 | 単体 | OFF：`toRemove` があっても消さず、手動の確認が出ず、結果に消さなかった件数が残る。ON：手動は確認の後に消え、確認を断れば消えない |
 | 同期の進捗 | 単体（時刻は引数） | 経過が V17 に達したら `near_limit` が真になる。V17 では同期を区切らない（J33） |
+| 曲ごとの行（`tracks`。D22） | 単体（HTTP と `MediaWriter` を差し替え） | 手順 7 の始めに全部が `waiting`。1 曲の間は `transferring` で `received_bytes` が進み、終わりに `done`、E5・E8・E9 は `failed` と E の番号。E6 で止めたとき残りは `waiting`。`done_bytes` は転送中の分を含み、T3 の `bytes_transferred` は含まない |
+| P8 の送信（D22） | 単体（HTTP を差し替え、時刻は引数） | P3 が通るまで送らない。同じ `stage` の更新は V28 に満たなければ送らない。`stage` が変われば間隔を待たず送る。送っている途中は次を送らない。P8 の失敗（切断、400、500）で同期の結果が変わらない。P4 の後は送らない |
 | HTTP クライアント | 単体（偽のサーバー） | SPKI が一致しないと切断。206 の `Content-Range` の不一致、200 への変化、409・416・401・403・429・400・500 の扱い。署名ヘッダの付与と、再開ごとの nonce の更新 |
 | 鍵の保管 | 実機 | Keystore への HMAC の取り込みと署名。別名の削除。別名が無いときの動作（C-12 へ） |
 | WorkManager の登録 | 薄い統合（WorkManager の試験用の部品。CI は要確認＝試験用の部品が JVM で動くか） | 手動と自動の排他。V19 の抑止はワーカーの手順の行で確かめる。一意な名前の重複は WorkManager の動作なので確かめない。解除は T7 の更新との整合として確かめる |

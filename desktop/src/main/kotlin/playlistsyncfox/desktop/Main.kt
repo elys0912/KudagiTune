@@ -10,9 +10,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,6 +29,7 @@ import playlistsyncfox.desktop.vault.DpapiCipher
 import playlistsyncfox.desktop.vault.FileSecretStore
 import playlistsyncfox.desktop.server.NettyServerLauncher
 import playlistsyncfox.desktop.ui.MainWindowContent
+import playlistsyncfox.desktop.ui.PsfoxTheme
 import playlistsyncfox.desktop.ui.TrayStatus
 import playlistsyncfox.desktop.ui.trayStatus
 import playlistsyncfox.desktop.ui.trayText
@@ -110,18 +114,23 @@ fun main(args: Array<String>) {
                     windowOpen = false
                 },
                 title = "playlist-sync-fox",
+                state = rememberWindowState(size = DpSize(1120.dp, 780.dp)),
             ) {
-                MainWindowContent(app, state)
+                PsfoxTheme {
+                    MainWindowContent(app, state) { Desktop.getDesktop().open(paths.logDir.toFile()) }
+                }
             }
         }
         if (confirmExit) {
-            AlertDialog(
-                onDismissRequest = { confirmExit = false },
-                title = { Text("同期中です") },
-                text = { Text("終了すると、同期が途中で止まります。終了しますか？") },
-                confirmButton = { Button(onClick = { shutdown(app, ::exitApplication) }) { Text("終了する") } },
-                dismissButton = { Button(onClick = { confirmExit = false }) { Text("終了しない") } },
-            )
+            PsfoxTheme {
+                AlertDialog(
+                    onDismissRequest = { confirmExit = false },
+                    title = { Text("同期中です") },
+                    text = { Text("終了すると、同期が途中で止まります。終了しますか？") },
+                    confirmButton = { Button(onClick = { shutdown(app, ::exitApplication) }) { Text("終了する") } },
+                    dismissButton = { Button(onClick = { confirmExit = false }) { Text("終了しない") } },
+                )
+            }
         }
     }
 }

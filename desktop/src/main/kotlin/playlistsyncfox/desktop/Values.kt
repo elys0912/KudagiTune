@@ -33,4 +33,10 @@ object DesktopValues {
 
     /** V46：終了時の送信中の接続の猶予。 */
     val SHUTDOWN_GRACE: Duration = Duration.ofSeconds(5)
+
+    /** V55：画面のログの欄がメモリに持つ行数。超えたら古い行から捨てる（X5-4）。 */
+    const val LOG_LINES = 200
+
+    /** V56：P8 の進み具合を持ち続ける期限。最後の P8 からこの時間だけ更新が無ければ消す（X5-1）。 */
+    val PROGRESS_TTL: Duration = Duration.ofSeconds(30)
 }

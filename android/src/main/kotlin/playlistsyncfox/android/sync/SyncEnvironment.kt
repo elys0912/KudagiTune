@@ -21,6 +21,9 @@ fun interface LanResolver {
 /** 診断のログに 1 行書く。鍵、コード、MAC、実 IP は入れない。 */
 fun interface SyncLogger {
     fun line(text: String)
+
+    /** 曲の保存の失敗（E の番号つき。X6-3 の手順 7）。既定は番号を文に添えて [line] に書く。 */
+    fun failure(text: String, errorNumber: Int) = line("$text（E$errorNumber）")
 }
 
 /** 手動の入力データ（X6-3 の入口）。[rerun] は OS が止めた仕事の走り直し。 */

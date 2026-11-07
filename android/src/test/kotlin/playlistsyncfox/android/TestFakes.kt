@@ -358,6 +358,7 @@ class FakeApi(val name: String) : SyncApi {
     var digestResult: ApiResult<String> = ApiResult.Ok("digest-1")
     val manifestResults = ArrayDeque<ApiResult<String>>()
     var reportResult: ApiResult<Unit> = ApiResult.Ok(Unit)
+    var progressResult: ApiResult<Unit> = ApiResult.Ok(Unit)
     var playlistsResult: ApiResult<String> = ApiResult.Ok("""{"playlists":[]}""")
     var trackScript: (TrackRequest) -> TrackScript = { TrackScript.Fail(ApiFailure.FileMissing) }
 
@@ -369,6 +370,9 @@ class FakeApi(val name: String) : SyncApi {
     val manifestIds = mutableListOf<List<String>>()
     val trackRequests = mutableListOf<TrackRequest>()
     val reports = mutableListOf<String>()
+
+    /** P8 の本文（送った順）。 */
+    val progressBodies = mutableListOf<String>()
 
     override suspend fun digest(playlistIds: List<String>): ApiResult<String> {
         digestCalls++
@@ -414,6 +418,11 @@ class FakeApi(val name: String) : SyncApi {
     override suspend fun report(body: String): ApiResult<Unit> {
         reports += body
         return reportResult
+    }
+
+    override suspend fun progress(body: String): ApiResult<Unit> {
+        progressBodies += body
+        return progressResult
     }
 
     override fun close() = Unit

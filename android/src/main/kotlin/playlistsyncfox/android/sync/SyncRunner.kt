@@ -1,8 +1,14 @@
 package playlistsyncfox.android.sync
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import playlistsyncfox.android.db.Pairing
@@ -16,6 +22,7 @@ import playlistsyncfox.android.net.Endpoint
 import playlistsyncfox.android.net.SyncApi
 import playlistsyncfox.android.storage.PlaylistWriteResult
 import playlistsyncfox.android.storage.TrackBody
+import playlistsyncfox.android.storage.TrackSource
 import playlistsyncfox.android.storage.TrackWriteResult
 import playlistsyncfox.android.storage.WritePlan
 import playlistsyncfox.shared.diff.Diff
@@ -37,6 +44,8 @@ import playlistsyncfox.shared.result.ErrorDetail
 import playlistsyncfox.shared.result.ErrorScope
 import playlistsyncfox.shared.result.FileMissingReason
 import playlistsyncfox.shared.result.KeyMismatchCause
+import playlistsyncfox.shared.result.ProgressReport
+import playlistsyncfox.shared.result.ProgressStage
 import playlistsyncfox.shared.result.StoragePhase
 import playlistsyncfox.shared.result.SyncError
 import playlistsyncfox.shared.result.SyncOutcome
@@ -48,6 +57,7 @@ import playlistsyncfox.shared.result.hasMore
 import playlistsyncfox.shared.result.mayRemove
 import playlistsyncfox.shared.result.toUnplayable
 import playlistsyncfox.shared.result.WriteStep
+import playlistsyncfox.shared.result.writeProgressReport
 
 /**
  * 同期の実行（X6-3 の手順）。判断は shared の関数、OS の呼び出しは [MediaWriter]・[SyncApi] に任せ、
@@ -60,9 +70,12 @@ class SyncRunner(private val env: SyncEnvironment) {
             return null
         }
         val opened = mutableListOf<SyncApi>()
+        // P8 は同期の手順とは別の流れで送る（X6-3）。実行の終わりで必ず片付ける
+        val sender = CoroutineScope(currentCoroutineContext() + SupervisorJob())
         try {
-            return Execution(input, opened).start()
+            return Execution(input, opened, sender).start()
         } finally {
+            sender.cancel()
             opened.forEach { runCatching { it.close() } }
             env.gate.unlock()
         }
@@ -99,7 +112,11 @@ class SyncRunner(private val env: SyncEnvironment) {
         class Wrote(val result: TrackWriteResult) : Attempt
     }
 
-    private inner class Execution(private val input: RunInput, private val opened: MutableList<SyncApi>) {
+    private inner class Execution(
+        private val input: RunInput,
+        private val opened: MutableList<SyncApi>,
+        private val sender: CoroutineScope,
+    ) {
         private val trigger = input.trigger
         private val triggerText = if (trigger == SyncTrigger.Manual) SyncRun.TRIGGER_MANUAL else SyncRun.TRIGGER_AUTO
         private val startedAt = env.now()
@@ -134,6 +151,17 @@ class SyncRunner(private val env: SyncEnvironment) {
         private var baseLibraryId: String? = null
         private var freeBefore: Long? = null
         private var skippedUnchanged = false
+
+        // 曲ごとの行と、転送中の曲のこの実行での転送量（done_bytes に足す。X6-3 の SyncProgress）
+        private var rows: List<TrackRow> = emptyList()
+        private var inFlightBytes = 0L
+        private var trackBase = 0L
+
+        // P8 の送信の状態（X6-3。同じ stage は V28 以上あけ、送っている途中は送らない）
+        private var progressSentAt: Long? = null
+        private var progressSentStage: ProgressStage? = null
+        @Volatile private var progressSending = false
+        private var progressClosed = false
 
         // 端末が選んだプレイリストの ID。P3・P1 の本文で渡す（D15）。実行の始めに 1 回読み、実行の間は変えない
         private var selectedIds: List<String> = emptyList()
@@ -366,15 +394,26 @@ class SyncRunner(private val env: SyncEnvironment) {
                 maxBytes = SyncValues.MAX_ELEMENT_BYTES,
             )
 
+            // 手順 7 の始めに全部を waiting で作る。取り直しでは、まだ無い行だけ足す
+            val known = rows.mapTo(HashSet()) { it.persistentId }
+            rows = rows + targets.map { it.first }.filter { it.persistentId !in known }
+                .map { TrackRow(it.persistentId, it.name ?: it.fileName, it.size) }
             publish(SyncStage.Transfer)
             val stale = mutableListOf<String>()
             for ((track, replace) in targets) {
                 val step = transferOne(api, track, replace, paths.getValue(track.persistentId), placedById[track.persistentId], retried)
+                inFlightBytes = 0
                 when (step) {
-                    TrackStep.Done -> if (replace) replaced++ else added++
+                    TrackStep.Done -> {
+                        if (replace) replaced++ else added++
+                        updateRow(track.persistentId) { it.copy(state = TrackState.Done, receivedBytes = it.size) }
+                        env.log.line("保存した：${track.name ?: track.fileName}")
+                    }
                     is TrackStep.Failed -> {
                         errors += step.error
                         if (step.error is SyncError.ManifestStale) stale += track.persistentId
+                        updateRow(track.persistentId) { it.copy(state = TrackState.Failed, errorNumber = step.error.number) }
+                        env.log.failure("保存に失敗した：${track.name ?: track.fileName}", step.error.number)
                     }
                     is TrackStep.Stop -> {
                         applyStop(step)
@@ -398,6 +437,9 @@ class SyncRunner(private val env: SyncEnvironment) {
             val name = track.name ?: track.fileName
             var failures = 0
             var fromScratch = false
+            var baseKnown = false
+            updateRow(track.persistentId) { it.copy(state = TrackState.Transferring, receivedBytes = 0, errorNumber = null) }
+            env.log.line("転送を始めた：$name")
 
             while (true) {
                 val plan = env.writer.plan(track, path, placed, replace, fromScratch)
@@ -408,6 +450,12 @@ class SyncRunner(private val env: SyncEnvironment) {
                     Attempt.Wrote(env.writer.write(plan, null))
                 } else {
                     transferStarted = true
+                    // 再開の位置が初めの値。切断からの再開でも、この実行の初めの位置から数える
+                    if (!baseKnown) {
+                        trackBase = plan.resumeFrom
+                        baseKnown = true
+                    }
+                    updateRow(track.persistentId) { it.copy(receivedBytes = plan.resumeFrom) }
                     publish(SyncStage.Transfer, title = name)
                     val expectedSize = (plan as? WritePlan.Resume)?.pending?.expectedSize ?: track.size
                     val expectedModified = (plan as? WritePlan.Resume)?.pending?.sourceModified ?: track.modifiedAt
@@ -415,7 +463,7 @@ class SyncRunner(private val env: SyncEnvironment) {
                         if (body.sizeHeader != expectedSize || body.modifiedAtHeader != expectedModified) {
                             Attempt.Stale
                         } else {
-                            val written = env.writer.write(plan, TrackBody(body.startAt, body.source))
+                            val written = env.writer.write(plan, TrackBody(body.startAt, counting(track.persistentId, name, body.startAt, body.source)))
                             if (written is TrackWriteResult.Placed) bytesTransferred += track.size - body.startAt
                             Attempt.Wrote(written)
                         }
@@ -477,6 +525,26 @@ class SyncRunner(private val env: SyncEnvironment) {
                         env.wait(SyncValues.RETRY_WAITS_MS[failures - 1])
                     }
                 }
+            }
+        }
+
+        private fun updateRow(id: String, change: (TrackRow) -> TrackRow) {
+            rows = rows.map { if (it.persistentId == id) change(it) else it }
+        }
+
+        /** 受け取った量を数える（MediaWriter は変えない）。書き込みの 1 区切りごとに行を更新する。 */
+        private fun counting(id: String, name: String, startAt: Long, inner: TrackSource) = object : TrackSource {
+            private var position = startAt
+
+            override suspend fun read(buffer: ByteArray): Int {
+                val count = inner.read(buffer)
+                if (count > 0) {
+                    position += count
+                    inFlightBytes = (position - trackBase).coerceAtLeast(0)
+                    updateRow(id) { it.copy(receivedBytes = position) }
+                    publish(SyncStage.Transfer, title = name)
+                }
+                return count
             }
         }
 
@@ -600,6 +668,10 @@ class SyncRunner(private val env: SyncEnvironment) {
         private suspend fun conclude(userInterrupted: Boolean, afterCancel: Boolean, skipPlaylists: Boolean = false): SyncRun {
             val loaded = manifest
             val finalDiff = diff
+
+            // 止めたとき転送中だった行は waiting に戻す（次の同期で再開する曲のため）
+            rows = rows.map { if (it.state == TrackState.Transferring) it.copy(state = TrackState.Waiting, receivedBytes = 0) else it }
+            inFlightBytes = 0
 
             // 8. m3u8。止まった後は時間があれば書く（数秒以内に戻る必要がある）
             if (loaded != null && !skipPlaylists && !skippedUnchanged) {
@@ -728,6 +800,9 @@ class SyncRunner(private val env: SyncEnvironment) {
 
             // 11. P4 で報告する。失敗しても結果に影響しない。報告できなかった行は次回の同期で再送する
             var saved = finished
+            // P8 は P4 の前まで。送っている途中のものも片付ける
+            progressClosed = true
+            sender.cancel()
             val client = api
             if (client != null) {
                 val body = reportBody(finished)
@@ -788,15 +863,49 @@ class SyncRunner(private val env: SyncEnvironment) {
             stage = stage,
             doneCount = doneCount,
             totalCount = plannedAdd + plannedReplace,
-            doneBytes = bytesTransferred,
+            doneBytes = bytesTransferred + inFlightBytes,
             totalBytes = plannedBytes,
             currentTitle = title,
             shortageBytes = shortage,
             nearLimit = foregroundSince?.let { isNearLimit(it, env.now()) } ?: false,
+            tracks = rows,
         )
 
         private fun publish(stage: SyncStage, title: String? = null, shortage: Long? = null) {
-            env.progress.value = progressNow(stage, title, shortage)
+            val progress = progressNow(stage, title, shortage)
+            env.progress.value = progress
+            offerProgress(progress)
+        }
+
+        /** P8 を送る候補（X6-3）。P3 が通った後から P4 の前まで。失敗は無視し、再送せず、T3 に残さない。 */
+        private fun offerProgress(progress: SyncProgress) {
+            val client = api ?: return
+            if (progressClosed || progressSending) return
+            val stage = when (progress.stage) {
+                SyncStage.Connecting -> ProgressStage.Connecting
+                SyncStage.Manifest -> ProgressStage.Manifest
+                SyncStage.Diff -> ProgressStage.Diff
+                SyncStage.Capacity -> ProgressStage.Capacity
+                SyncStage.Transfer -> ProgressStage.Transfer
+                SyncStage.Playlist -> ProgressStage.Playlist
+                SyncStage.Finished -> return
+            }
+            val now = env.now()
+            val last = progressSentAt
+            if (stage == progressSentStage && last != null && now - last < SyncValues.NOTIFICATION_INTERVAL_MS) return
+            progressSentAt = now
+            progressSentStage = stage
+            progressSending = true
+            val body = writeProgressReport(ProgressReport(stage, progress.doneCount, progress.totalCount, progress.doneBytes, progress.totalBytes))
+            sender.launch(start = CoroutineStart.UNDISPATCHED) {
+                try {
+                    client.progress(body)
+                } catch (_: Exception) {
+                    // 失敗しても同期は止めない
+                } finally {
+                    progressSending = false
+                }
+            }
         }
 
         private fun transportOf(kind: String?): Transport? = when (kind) {

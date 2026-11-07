@@ -17,6 +17,22 @@ import java.time.format.DateTimeFormatter
 /** 進行の段（X6-3）。X7-1-4 の `stage` と同じ語。 */
 enum class SyncStage { Connecting, Manifest, Diff, Capacity, Transfer, Playlist, Finished }
 
+/** 曲ごとの行の状態（X6-3 の `tracks`。D22）。 */
+enum class TrackState { Waiting, Transferring, Done, Failed }
+
+/**
+ * S3 の曲ごとの行（X6-3 の `tracks`。D22）。[receivedBytes] は `Transferring` のとき、曲の頭から数えて書き込んだ量。
+ * [errorNumber] は `Failed` のときの E の番号。
+ */
+data class TrackRow(
+    val persistentId: String,
+    val title: String,
+    val size: Long,
+    val state: TrackState = TrackState.Waiting,
+    val receivedBytes: Long = 0,
+    val errorNumber: Int? = null,
+)
+
 /** ワーカーが更新し、画面と通知が購読する読み取りの状態。DB には持たない。[outcome] は終了時の T3 の `result`。 */
 data class SyncProgress(
     val stage: SyncStage,
@@ -29,6 +45,7 @@ data class SyncProgress(
     val nearLimit: Boolean = false,
     val outcome: String? = null,
     val errorDetail: ErrorDetail? = null,
+    val tracks: List<TrackRow> = emptyList(),
 )
 
 /** 前面へ昇格してからの経過が V17 に達したら真。V17 で同期は区切らず、注意を出すだけ（J33）。 */

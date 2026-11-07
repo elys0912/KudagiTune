@@ -3,7 +3,6 @@ package playlistsyncfox.desktop.server
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.http.content.LocalFileContent
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.ApplicationCallPipeline
@@ -22,6 +21,7 @@ import io.ktor.server.request.receiveChannel
 import io.ktor.server.request.uri
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
+import io.ktor.http.isSuccess
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -50,6 +50,7 @@ import playlistsyncfox.shared.manifest.PlaylistIdsResult
 import playlistsyncfox.shared.manifest.parsePlaylistIds
 import playlistsyncfox.shared.manifest.writeManifest
 import playlistsyncfox.shared.manifest.writePlaylistTree
+import playlistsyncfox.shared.result.readProgressReport
 import java.nio.file.Files
 import java.time.Clock
 import java.time.Instant
@@ -70,6 +71,7 @@ class ServerEnv(
     val manifests: ManifestService,
     val tracks: TrackTable,
     val activity: ActivityTracker,
+    val progress: ProgressBoard,
     val log: AppLog,
     val clientAddress: (ApplicationCall) -> String = { it.request.origin.remoteAddress },
 )
@@ -89,6 +91,7 @@ private const val PATH_MANIFEST = "/v1/manifest"
 private const val PATH_DIGEST = "/v1/digest"
 private const val PATH_PLAYLISTS = "/v1/playlists"
 private const val PATH_REPORTS = "/v1/reports"
+private const val PATH_PROGRESS = "/v1/progress"
 private const val PATH_PAIRING_START = "/v1/pairing/start"
 private const val PATH_PAIRING_CONFIRM = "/v1/pairing/confirm"
 private const val PATH_TRACKS = "/v1/tracks/"
@@ -120,6 +123,7 @@ fun Application.psfoxModule(env: ServerEnv) {
             val ids = selectedIds(call) ?: return@post
             val manifest = env.manifests.forManifest(ids) ?: return@post call.fail(HttpStatusCode.ServiceUnavailable, 4)
             call.respondText(writeManifest(manifest), ContentType.Application.Json)
+            env.log.info("server", "P1 を返した tracks=${manifest.tracks.size}")
         }
         post(PATH_DIGEST) {
             val ids = selectedIds(call) ?: return@post
@@ -132,12 +136,13 @@ fun Application.psfoxModule(env: ServerEnv) {
         }
         get("$PATH_TRACKS{id}") { sendTrack(env, call) }
         post(PATH_REPORTS) { saveReport(env, call) }
+        post(PATH_PROGRESS) { saveProgress(env, call) }
         post(PATH_PAIRING_START) { pairingStart(env, call) }
         post(PATH_PAIRING_CONFIRM) { pairingConfirm(env, call) }
     }
 }
 
-/** 検査 1〜7（P1〜P4、P7）と、P5・P6 の前段。通ればルートへ進めるため真を返す。 */
+/** 検査 1〜7（P1〜P4、P7、P8）と、P5・P6 の前段。通ればルートへ進めるため真を返す。 */
 private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean {
     // 1. 本文の大きさ
     val body = call.receiveChannel().readRemaining(DesktopValues.MAX_BODY_BYTES + 1L).readByteArray()
@@ -151,7 +156,7 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
     val path = call.request.path()
     val needsSignature = when {
         path == PATH_PAIRING_START || path == PATH_PAIRING_CONFIRM -> false
-        path == PATH_MANIFEST || path == PATH_DIGEST || path == PATH_PLAYLISTS || path == PATH_REPORTS -> true
+        path == PATH_MANIFEST || path == PATH_DIGEST || path == PATH_PLAYLISTS || path == PATH_REPORTS || path == PATH_PROGRESS -> true
         path.startsWith(PATH_TRACKS) && path.length > PATH_TRACKS.length && '/' !in path.substring(PATH_TRACKS.length) -> true
         else -> {
             call.respond(HttpStatusCode.NotFound)
@@ -258,7 +263,18 @@ private suspend fun sendTrack(env: ServerEnv, call: ApplicationCall) {
 
         call.response.header("X-Psfox-Size", entry.size.toString())
         call.response.header("X-Psfox-Modified-At", entry.modifiedAt.toString())
-        call.respond(LocalFileContent(entry.path.toFile(), ContentType.Application.OctetStream))
+
+        // 表示名は実ファイル名から拡張子を除いたもの。送ったバイト数は ActivityTracker が数える（D22）
+        val file = entry.path.toFile()
+        val name = file.nameWithoutExtension
+        val content = CountingFileContent(file, ContentType.Application.OctetStream, env.activity.trackSendStarted(name, entry.size))
+        try {
+            call.respond(content)
+        } catch (e: Throwable) {
+            env.log.info("server", "P2 を途中で切られた name=$name")
+            throw e
+        }
+        if (call.response.status()?.isSuccess() == true) env.log.info("server", "P2 を送り終えた name=$name size=${entry.size}")
     } finally {
         env.activity.trackRequestFinished()
     }
@@ -287,6 +303,15 @@ private suspend fun saveReport(env: ServerEnv, call: ApplicationCall) {
             },
         )
     }
+    env.progress.clear()
+    env.log.info("server", "P4 を受けた outcome=${report.outcome.name.lowercase()}")
+    call.respond(HttpStatusCode.NoContent)
+}
+
+/** P8（B4-4 の 5b）。境界で検査し、メモリの [ProgressBoard] に置く。保存しない。 */
+private suspend fun saveProgress(env: ServerEnv, call: ApplicationCall) {
+    val report = readProgressReport(call.attributes[BodyKey].decodeToString()) ?: return call.respond(HttpStatusCode.BadRequest)
+    env.progress.update(report)
     call.respond(HttpStatusCode.NoContent)
 }
 

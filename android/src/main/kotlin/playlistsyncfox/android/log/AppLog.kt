@@ -1,12 +1,18 @@
 package playlistsyncfox.android.log
 
 import playlistsyncfox.android.sync.SyncLogger
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import java.io.File
 import java.time.Instant
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
 enum class LogLevel(val text: String) { Info("情報"), Warn("警告"), Error("エラー") }
+
+/** 画面のログの欄に流す 1 行（X7-5-1）。ファイルへ書く行と同じ、伏せた後の内容。[at] は UTC のエポックミリ秒。 */
+data class LogEntry(val at: Long, val level: LogLevel, val module: String, val message: String, val errorNumber: Int?)
 
 /**
  * 端末のログ（X7-5）。1 行 1 件、項目はタブ区切りで 日時（UTC）、レベル、モジュール、メッセージ、E の番号。
@@ -19,15 +25,28 @@ class AppLog(
     private val maxBytes: Long = MAX_FILE_BYTES,
     private val executor: Executor = Executors.newSingleThreadExecutor(),
 ) {
+    private val screenLines = MutableStateFlow<List<LogEntry>>(emptyList())
+
+    /** 画面の欄（D21）：直近 V55 行。新しい行が後ろ。起動の前の行はファイルから読み戻さない。 */
+    val recent: StateFlow<List<LogEntry>> = screenLines
+
     fun log(level: LogLevel, module: String, message: String, errorNumber: Int? = null) {
         if (!enabled()) return
-        val line = listOf(Instant.ofEpochMilli(now()).toString(), level.text, module, clean(message), errorNumber?.let { "E$it" }.orEmpty())
+        val at = now()
+        val text = clean(message)
+        val line = listOf(Instant.ofEpochMilli(at).toString(), level.text, module, text, errorNumber?.let { "E$it" }.orEmpty())
             .joinToString("\t")
+        // ファイルの書き込みに失敗しても、画面の欄には入れる
+        screenLines.update { (it + LogEntry(at, level, module, text, errorNumber)).takeLast(SCREEN_LINES) }
         executor.execute { runCatching { append(line) } }
     }
 
     /** 同期の診断のログ（`SyncLogger`）として使う。 */
-    fun asSyncLogger() = SyncLogger { log(LogLevel.Info, "sync", it) }
+    fun asSyncLogger() = object : SyncLogger {
+        override fun line(text: String) = log(LogLevel.Info, "sync", text)
+
+        override fun failure(text: String, errorNumber: Int) = log(LogLevel.Warn, "sync", text, errorNumber)
+    }
 
     /** 古い世代から新しい世代の順で、末尾の [maxLines] 行まで（閲覧と共有で共通。V51）。 */
     fun tail(maxLines: Int = MAX_VIEW_LINES): List<String> {
@@ -81,6 +100,9 @@ class AppLog(
 
         /** V51 閲覧と共有で読む行数の上限。 */
         const val MAX_VIEW_LINES = 500
+
+        /** V55 画面のログの欄がメモリに持つ行数。 */
+        const val SCREEN_LINES = 200
     }
 }
 
