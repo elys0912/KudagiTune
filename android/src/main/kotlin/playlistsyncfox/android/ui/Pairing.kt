@@ -6,7 +6,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import playlistsyncfox.android.db.SyncStore
@@ -39,19 +38,11 @@ sealed interface PairingEvent {
 
     /** 接続、検査、鍵の導出の失敗。 */
     data class Failed(val notice: Notice) : PairingEvent
-
-    /** P5・P6 の実体が未接続。何も送らず、何も保存しない。 */
-    data object Unavailable : PairingEvent
 }
 
 /** P5・P6、鍵の導出、保存（X6-6）への入口。購読を止める（キャンセル）と、接続を切り、一時の鍵を捨てる。 */
 fun interface PairingGateway {
     fun pair(target: PairingTarget, code: String): Flow<PairingEvent>
-}
-
-/** 実体ができるまでの入口。利用者に「まだ使えない」と分かる状態にする。 */
-object UnavailablePairingGateway : PairingGateway {
-    override fun pair(target: PairingTarget, code: String): Flow<PairingEvent> = flowOf(PairingEvent.Unavailable)
 }
 
 sealed interface PairingStage {
@@ -70,8 +61,6 @@ sealed interface PairingStage {
     data class Failed(val notice: Notice) : PairingStage
 
     data object DeviceExists : PairingStage
-
-    data object Unavailable : PairingStage
 }
 
 data class PairingUiState(
@@ -183,7 +172,6 @@ class PairingPresenter(
             PairingEvent.Waiting -> PairingStage.Waiting
             PairingEvent.DeviceExists -> PairingStage.DeviceExists
             is PairingEvent.Failed -> PairingStage.Failed(event.notice)
-            PairingEvent.Unavailable -> PairingStage.Unavailable
         }
         mutableState.update { it.copy(stage = stage) }
     }

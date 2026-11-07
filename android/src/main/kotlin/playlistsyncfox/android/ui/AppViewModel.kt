@@ -181,15 +181,9 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
-    /** 解除。Keystore の実体が無いうちは何も消さず、できない旨を出す。 */
     fun unpair() {
         viewModelScope.launch {
-            val keeper = graph.keeper
-            if (keeper == null) {
-                message.value = "解除はまだ使えない"
-                return@launch
-            }
-            if (keeper.unpair()) {
+            if (graph.keeper.unpair()) {
                 screen.value = Screen.Home
             } else {
                 message.value = "鍵の削除に失敗したため、解除は済んでいない"

@@ -25,10 +25,11 @@ android {
     }
 }
 
-// 依存の許諾を `artifacts.json` にして資産へ入れる（X7-6）。許す許諾は Apache-2.0 と、SPDX の無い MIT（slf4j-api）
+// 依存の許諾を `artifacts.json` にして資産へ入れる（X7-6）。許す許諾は Apache-2.0 と、SPDX の無い MIT（slf4j-api）、Bouncy Castle の許諾（MIT 相当）
 licensee {
     allow("Apache-2.0")
     allowUrl("https://opensource.org/license/mit")
+    allowUrl("https://www.bouncycastle.org/licence.html")
     bundleAndroidAsset.set(true)
 }
 
@@ -51,6 +52,8 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
+    // 点演算の実体（J16、X4-1）
+    implementation(libs.bouncycastle.bcprov)
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlin.test.junit)

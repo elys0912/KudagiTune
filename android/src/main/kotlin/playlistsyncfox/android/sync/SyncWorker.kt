@@ -36,8 +36,9 @@ fun interface SyncEnvironmentFactory {
 object SyncServices {
     val progress = MutableStateFlow<SyncProgress?>(null)
 
+    /** Application が起動時に必ず設定する。未設定のまま [SyncWorker] が走ったら、成功にせず例外にする。 */
     @Volatile
-    var factory: SyncEnvironmentFactory? = null
+    lateinit var factory: SyncEnvironmentFactory
 }
 
 /**
@@ -46,7 +47,7 @@ object SyncServices {
  */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val factory = SyncServices.factory ?: return Result.success()
+        val factory = SyncServices.factory
         val trigger = if (inputData.getString(KEY_TRIGGER) == TRIGGER_MANUAL) SyncTrigger.Manual else SyncTrigger.Auto
         // OS が止めた仕事とプロセスが落ちた仕事の走り直しでは、「消す」の承認を捨てる（V48）
         val rerun = runAttemptCount > 0
