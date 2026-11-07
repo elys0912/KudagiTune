@@ -93,6 +93,12 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             }
             try {
                 SyncRunner(environment).run(input)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 想定外の例外では終了の進み具合が出ず、S3 が途中の段階のまま止まる。消して S1 へ戻す（T3 の行は中断として出る）
+                SyncServices.progress.value = null
+                throw e
             } finally {
                 updates.cancel()
             }
