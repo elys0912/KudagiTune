@@ -136,7 +136,21 @@ data class RunIssue(
     }
 }
 
-/** T7 設定。既知の `key` は auto_sync_enabled、log_enabled、device_id。 */
+/** T8 選んだプレイリスト（D15）。葉だけ。[name] は選んだ時点の名前で、PC の一覧から消えたとき「見つからない」に出す。 */
+@Entity(tableName = "selected_playlists")
+data class SelectedPlaylist(
+    @PrimaryKey @ColumnInfo(name = "playlist_id") val playlistId: String,
+    val name: String,
+    @ColumnInfo(name = "selected_at") val selectedAt: Long,
+)
+
+/** T9 保存先を切り替える前の場所に残る自分のファイル（D16）。取り直しが完了で終わったときだけ消す。 */
+@Entity(tableName = "relocated_files")
+data class RelocatedFile(
+    @PrimaryKey @ColumnInfo(name = "media_uri") val mediaUri: String,
+)
+
+/** T7 設定。既知の `key` は auto_sync_enabled、log_enabled、device_id、storage_volume、placed_volume。 */
 @Entity(tableName = "app_settings")
 data class AppSetting(
     @PrimaryKey val key: String,

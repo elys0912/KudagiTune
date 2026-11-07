@@ -16,6 +16,9 @@ object DesktopValues {
     /** V31：要求の本文の上限。 */
     const val MAX_BODY_BYTES = 4 * 1024 * 1024
 
+    /** V54：P1・P3 の本文に置ける Persistent ID の個数の上限。 */
+    const val MAX_PLAYLIST_IDS = 5000
+
     /** V32：署名失敗の待ち時間。 */
     val SIGNATURE_BLOCK: Duration = Duration.ofSeconds(60)
 

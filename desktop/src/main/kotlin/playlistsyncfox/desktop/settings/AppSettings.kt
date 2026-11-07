@@ -18,12 +18,11 @@ const val DEFAULT_STALE_DAYS = 7
 /** V16：サーバーの既定のポート。 */
 const val DEFAULT_PORT = 47800
 
-/** settings.json の全体（X5-4）。必須の項目が欠けた JSON は読めない扱いにする。 */
+/** settings.json の全体（X5-4）。必須の項目が欠けた JSON は読めない扱いにする。古い版の `selected_playlist_ids` は未知のキーとして読み捨てる。 */
 @Serializable
 data class Settings(
     @SerialName("schema_version") val schemaVersion: Int,
     @SerialName("xml_path") val xmlPath: String? = null,
-    @SerialName("selected_playlist_ids") val selectedPlaylistIds: List<String>,
     @SerialName("stale_days") val staleDays: Int,
     @SerialName("launch_on_login") val launchOnLogin: Boolean,
     val port: Int,
@@ -101,7 +100,6 @@ class SettingsStore(private val file: Path, private val newPcId: () -> String = 
 
     private fun defaults() = Settings(
         schemaVersion = SETTINGS_SCHEMA_VERSION,
-        selectedPlaylistIds = emptyList(),
         staleDays = DEFAULT_STALE_DAYS,
         launchOnLogin = true,
         port = DEFAULT_PORT,

@@ -1,6 +1,7 @@
 package playlistsyncfox.android.ui
 
 import playlistsyncfox.android.db.SyncRun
+import playlistsyncfox.android.sync.CatalogResult
 import playlistsyncfox.shared.result.ErrorDetail
 import java.time.Instant
 import java.time.ZoneId
@@ -74,5 +75,14 @@ private val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 fun formatTime(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String =
     dateFormat.format(Instant.ofEpochMilli(epochMillis).atZone(zone))
 
-/** T4 の `spki_hash`（小文字の 16 進 64 桁）から、画面に出す指紋を作る。X4-4 の表示形式（先頭 12 バイトを 4 桁ごと）。 */
+/** T4 の `spki_hash`（小文字の 16 進 64 桁）から、画面に出す確認コード（旧称「指紋」。D18）を作る。X4-4 の表示形式（先頭 12 バイトを 4 桁ごと）。 */
 fun fingerprintOf(spkiHash: String): String = spkiHash.take(24).chunked(4).joinToString(" ")
+
+/** S6 で一覧を取れなかった理由の表示語。 */
+fun catalogWord(result: CatalogResult): String = when (result) {
+    is CatalogResult.Loaded -> ""
+    CatalogResult.Unreachable -> "PC に届かない"
+    CatalogResult.KeyMismatch -> "ペアリングし直す必要がある"
+    CatalogResult.XmlUnavailable -> "PC の XML が読めない"
+    CatalogResult.Other -> "一覧を取れなかった"
+}

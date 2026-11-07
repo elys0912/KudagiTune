@@ -40,12 +40,6 @@ class LibraryHolder(private val clock: Clock, private val staleDays: () -> Int) 
         }
     }
 
-    /** 古さの日数の設定が変わったときに、読めている状態だけ判定し直す。 */
-    fun recomputeStale() {
-        val held = heldFlow.value ?: return
-        if (statusFlow.value is XmlStatus.Normal || statusFlow.value is XmlStatus.Stale) statusFlow.value = judge(held)
-    }
-
     // V5 ちょうどは正常。超えたら古い。0 は警告しない
     private fun judge(held: HeldLibrary): XmlStatus {
         val age = Duration.between(held.xmlModified, clock.instant())

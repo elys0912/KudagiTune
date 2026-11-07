@@ -5,6 +5,7 @@ import playlistsyncfox.android.db.PendingTransfer
 import playlistsyncfox.android.db.PlacedTrack
 import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.db.RunIssue
+import playlistsyncfox.android.db.SelectedPlaylist
 import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.SyncStore
 import playlistsyncfox.android.db.WrittenPlaylist
@@ -47,6 +48,9 @@ import java.io.ByteArrayOutputStream
 const val DEVICE = "00000000-0000-4000-8000-000000000001"
 const val PC_ID = "0123456789abcdef0123456789abcdef"
 const val ROOT = SyncValues.MEDIA_ROOT
+
+/** 試験の既定の選択（T8）。 */
+const val SELECTED_ID = "00000000000000AA"
 
 fun id(n: Int) = "%016X".format(n)
 
@@ -108,6 +112,8 @@ class InMemoryStore : SyncStore {
     val issueRows = mutableListOf<RunIssue>()
     var pairingRow: Pairing? = null
     val settings = LinkedHashMap<String, String>()
+    var selected = listOf<SelectedPlaylist>()
+    val relocatedRows = mutableListOf<String>()
     private var nextRunId = 1L
 
     override suspend fun placedTracks(deviceId: String) = placed.values.filter { it.deviceId == deviceId }
@@ -186,6 +192,29 @@ class InMemoryStore : SyncStore {
     override fun observeRuns() = kotlinx.coroutines.flow.flow { emit(runs()) }
 
     override fun observePlaylists() = kotlinx.coroutines.flow.flow { emit(playlistRows.values.toList()) }
+
+    override suspend fun selectedPlaylists() = selected
+
+    override fun observeSelectedPlaylists() = kotlinx.coroutines.flow.flow { emit(selected) }
+
+    override suspend fun replaceSelection(rows: List<SelectedPlaylist>) {
+        selected = rows
+    }
+
+    override suspend fun relocate(deviceId: String, volume: String) {
+        relocatedRows += placed.values.map { it.mediaUri } + playlistRows.values.map { it.mediaUri }
+        placed.clear()
+        playlistRows.clear()
+        pendingRows.clear()
+        settings[SyncValues.PLACED_VOLUME_KEY] = volume
+        settings[SyncValues.RELOCATING_KEY] = "true"
+    }
+
+    override suspend fun relocatedUris() = relocatedRows.toList()
+
+    override suspend fun removeRelocated(mediaUri: String) {
+        relocatedRows.remove(mediaUri)
+    }
 
     override suspend fun setting(key: String) = settings[key]
 
@@ -329,20 +358,29 @@ class FakeApi(val name: String) : SyncApi {
     var digestResult: ApiResult<String> = ApiResult.Ok("digest-1")
     val manifestResults = ArrayDeque<ApiResult<String>>()
     var reportResult: ApiResult<Unit> = ApiResult.Ok(Unit)
+    var playlistsResult: ApiResult<String> = ApiResult.Ok("""{"playlists":[]}""")
     var trackScript: (TrackRequest) -> TrackScript = { TrackScript.Fail(ApiFailure.FileMissing) }
 
     var digestCalls = 0
     var manifestCalls = 0
+
+    /** P3・P1 の本文として受け取った ID の配列（呼ぶたびに追加）。 */
+    val digestIds = mutableListOf<List<String>>()
+    val manifestIds = mutableListOf<List<String>>()
     val trackRequests = mutableListOf<TrackRequest>()
     val reports = mutableListOf<String>()
 
-    override suspend fun digest(): ApiResult<String> {
+    override suspend fun digest(playlistIds: List<String>): ApiResult<String> {
         digestCalls++
+        digestIds += playlistIds
         return digestResult
     }
 
-    override suspend fun manifest(): ApiResult<String> {
+    override suspend fun playlists(): ApiResult<String> = playlistsResult
+
+    override suspend fun manifest(playlistIds: List<String>): ApiResult<String> {
         manifestCalls++
+        manifestIds += playlistIds
         return if (manifestResults.size > 1) manifestResults.removeFirst() else manifestResults.first()
     }
 
@@ -392,7 +430,10 @@ class FakeProvider : ApiProvider {
 }
 
 class Harness(val trigger: SyncTrigger = SyncTrigger.Manual) {
-    val store = InMemoryStore().also { it.pairingRow = pairing() }
+    val store = InMemoryStore().also {
+        it.pairingRow = pairing()
+        it.selected = listOf(SelectedPlaylist(SELECTED_ID, "選んだ一覧", 0))
+    }
     val media = FakeMediaStore()
     var clock = 1_000_000_000L
     val writer = MediaWriter(store, media, DEVICE, now = { clock }, io = Dispatchers.Unconfined)
@@ -413,6 +454,9 @@ class Harness(val trigger: SyncTrigger = SyncTrigger.Manual) {
     val events = mutableListOf<String>()
     var promoteResult = true
     var aliasExists = true
+    var deleteMissing = true
+    var volume = SyncValues.VOLUME_PRIMARY
+    var volumeAvailable = true
     var freeBytes: Long? = Long.MAX_VALUE / 4
     var manualActive = false
     var stopCause = StopCause.UserCancel
@@ -446,6 +490,9 @@ class Harness(val trigger: SyncTrigger = SyncTrigger.Manual) {
             lanServices
         },
         aliasExists = { aliasExists },
+        deleteMissing = deleteMissing,
+        volume = volume,
+        volumeAvailable = volumeAvailable,
         freeBytes = { freeBytes },
         promote = {
             events += "promote"

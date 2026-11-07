@@ -2,13 +2,13 @@
 
 Windows の iTunes（12.x）のプレイリストを、曲ごと Android 端末へ同期するツール。PC がサーバー、端末が取りに行く一方向の同期。接続は同一 LAN、Tailscale、USB テザリングの 3 方式。
 
-状態：設計と実装まで完了。実機の確認は未（PC の C-13、端末の C-1〜C-14）。
+状態：設計と実装まで完了。実機の確認は未（PC の C-13、端末の C-1〜C-17）。
 
 ## 文書
 
 | 文書 | 内容 |
 |---|---|
-| [docs/design-overview.md](docs/design-overview.md) | 概要設計。動機、範囲、決定 D1〜D14、用語 |
+| [docs/design-overview.md](docs/design-overview.md) | 概要設計。動機、範囲、決定 D1〜D18、用語 |
 | [docs/requirements.md](docs/requirements.md) | 要件 F1〜F6、N1〜N5 |
 | [docs/open-questions.md](docs/open-questions.md) | 論点 Q1〜Q12 と結論 |
 | [docs/basic-design.md](docs/basic-design.md) | 基本設計の索引（B1）。B2〜B4 は同じフォルダの `basic-design-*.md` |

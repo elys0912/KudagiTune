@@ -90,6 +90,49 @@ class MediaWriter(
         }
     }
 
+    /**
+     * 保存先の切り替え（D16、X6-3 の手順 3b）。T1、T2 のあるボリュームが [volume] と違えば、行を T9 へ移して T5 を捨てる
+     * （差分が全曲の「足す」になる）。戻り値は、取り直しが完了で終わっていないか（T7 の `relocating`）。
+     */
+    suspend fun relocateTo(volume: String): Boolean = withContext(io) {
+        if (placedVolume() != volume) {
+            // 取得の途中は切り替え前のボリュームに書きかけている。全部捨てる
+            for (row in store.expiredPending(Long.MAX_VALUE)) discardPending(row)
+            store.relocate(deviceId, volume)
+        }
+        isRelocating()
+    }
+
+    /** 保存先が変わった、または前の切り替えの取り直しが完了で終わっていない。真のとき、自動の「内容が同じ」の省略をしない。 */
+    suspend fun relocationNeeded(volume: String): Boolean = withContext(io) {
+        placedVolume() != volume || isRelocating()
+    }
+
+    private suspend fun isRelocating() = store.setting(SyncValues.RELOCATING_KEY) == "true"
+
+    /** 取り直しが完了で終わった。 */
+    suspend fun finishRelocation() = withContext(io) { store.putSetting(SyncValues.RELOCATING_KEY, "false") }
+
+    private suspend fun placedVolume() = store.setting(SyncValues.PLACED_VOLUME_KEY) ?: SyncValues.VOLUME_PRIMARY
+
+    /**
+     * 切り替え前の場所に残る、この端末のアプリが書いたファイル（T9）を消す。S5 の操作で、確認の後に呼ぶ。
+     * 持ち主が違うなどで消せない行（`SecurityException`）は T9 に残す。消した件数を返す。
+     */
+    suspend fun deleteRelocated(): Int = withContext(io) {
+        var deleted = 0
+        for (uri in store.relocatedUris()) {
+            try {
+                files.delete(uri)
+            } catch (_: SecurityException) {
+                continue
+            }
+            store.removeRelocated(uri)
+            deleted++
+        }
+        deleted
+    }
+
     /** 整理 3：T2 に無い、自分の pending の m3u8（新規の insert の途中で落ちた残り）を消す。 */
     suspend fun deleteOrphanPendingPlaylists() = withContext(io) {
         val known = store.playlists(deviceId).mapTo(HashSet()) { it.mediaUri }

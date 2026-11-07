@@ -2,6 +2,8 @@ package playlistsyncfox.desktop.server
 
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.request
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readRawBytes
@@ -10,6 +12,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import playlistsyncfox.desktop.DesktopValues
 import playlistsyncfox.desktop.settings.LastSync
+import playlistsyncfox.shared.auth.SignatureHeaderNames
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Duration
@@ -34,10 +37,10 @@ class ServerRoutesTest {
     private fun trackUri(id: String = TRACK_ID, size: Long = TRACK_BYTES.size.toLong(), modified: Long = trackModified) =
         "/v1/tracks/$id?size=$size&modified_at=$modified"
 
-    private suspend fun io.ktor.client.HttpClient.manifest() = signed(fixture, HttpMethod.Get, RAW_PATHS_MANIFEST)
+    private suspend fun io.ktor.client.HttpClient.manifest() = signed(fixture, HttpMethod.Post, RAW_PATHS_MANIFEST, SELECTION)
 
     private suspend fun io.ktor.client.HttpClient.badSignature(count: Int) = repeat(count) {
-        signed(fixture, HttpMethod.Get, RAW_PATHS_MANIFEST, key = ByteArray(32) { 9 })
+        signed(fixture, HttpMethod.Post, RAW_PATHS_MANIFEST, SELECTION, key = ByteArray(32) { 9 })
     }
 
     // ---- 要求の検査の順（TD-01〜TD-04） ----
@@ -61,14 +64,14 @@ class ServerRoutesTest {
 
     @Test
     fun `TD-01 タイムスタンプが 10 進の整数でない要求は 400`() = withServer(fixture) { client ->
-        val response = client.signed(fixture, HttpMethod.Get, "/v1/digest") { headers.remove("X-Psfox-Timestamp"); header("X-Psfox-Timestamp", "12ab") }
+        val response = client.signed(fixture, HttpMethod.Post, "/v1/digest", SELECTION) { headers.remove("X-Psfox-Timestamp"); header("X-Psfox-Timestamp", "12ab") }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 
     @Test
     fun `TD-02 未登録の端末は時刻が許容の内なら 401 で detail を付けない`() = withServer(fixture) { client ->
-        val response = client.signed(fixture, HttpMethod.Get, "/v1/manifest", device = OTHER_DEVICE)
+        val response = client.signed(fixture, HttpMethod.Post, "/v1/manifest", SELECTION, device = OTHER_DEVICE)
 
         assertEquals(HttpStatusCode.Unauthorized, response.status)
         assertEquals("""{"error":"E2"}""", response.bodyAsText())
@@ -76,8 +79,8 @@ class ServerRoutesTest {
 
     @Test
     fun `TD-02 署名の誤りは未登録の端末と同じ応答になる`() = withServer(fixture) { client ->
-        val unregistered = client.signed(fixture, HttpMethod.Get, "/v1/manifest", device = OTHER_DEVICE).bodyAsText()
-        val wrongKey = client.signed(fixture, HttpMethod.Get, "/v1/manifest", key = ByteArray(32) { 9 }).bodyAsText()
+        val unregistered = client.signed(fixture, HttpMethod.Post, "/v1/manifest", SELECTION, device = OTHER_DEVICE).bodyAsText()
+        val wrongKey = client.signed(fixture, HttpMethod.Post, "/v1/manifest", SELECTION, key = ByteArray(32) { 9 }).bodyAsText()
 
         assertEquals(wrongKey, unregistered)
     }
@@ -86,8 +89,8 @@ class ServerRoutesTest {
     fun `TD-02 未登録の端末も時刻が許容の外なら登録済みと同じ clock_skew`() = withServer(fixture) { client ->
         val late = fixture.clock.instant().epochSecond - 301
 
-        val unregistered = client.signed(fixture, HttpMethod.Get, "/v1/manifest", device = OTHER_DEVICE, timestamp = late)
-        val registered = client.signed(fixture, HttpMethod.Get, "/v1/manifest", timestamp = late)
+        val unregistered = client.signed(fixture, HttpMethod.Post, "/v1/manifest", SELECTION, device = OTHER_DEVICE, timestamp = late)
+        val registered = client.signed(fixture, HttpMethod.Post, "/v1/manifest", SELECTION, timestamp = late)
 
         assertEquals(HttpStatusCode.Unauthorized, unregistered.status)
         assertEquals("clock_skew", unregistered.detail())
@@ -175,8 +178,8 @@ class ServerRoutesTest {
 
     @Test
     fun `TD-50 読めない状態の P1 と P3 は 503 の E4`() = withServer(fixture) { client ->
-        val p1 = client.signed(fixture, HttpMethod.Get, "/v1/manifest")
-        val p3 = client.signed(fixture, HttpMethod.Get, "/v1/digest")
+        val p1 = client.signed(fixture, HttpMethod.Post, "/v1/manifest", SELECTION)
+        val p3 = client.signed(fixture, HttpMethod.Post, "/v1/digest", SELECTION)
 
         assertEquals(HttpStatusCode.ServiceUnavailable, p1.status)
         assertEquals("""{"error":"E4"}""", p1.bodyAsText())
@@ -188,7 +191,7 @@ class ServerRoutesTest {
     fun `TD-14 P1 は gzip を受けるときだけ圧縮する`() = withServer(fixture) { client ->
         fixture.useLibrary(trackFile)
 
-        val gzip = client.signed(fixture, HttpMethod.Get, "/v1/manifest") { header(HttpHeaders.AcceptEncoding, "gzip") }
+        val gzip = client.signed(fixture, HttpMethod.Post, "/v1/manifest", SELECTION) { header(HttpHeaders.AcceptEncoding, "gzip") }
         val plain = client.manifest()
 
         assertEquals("gzip", gzip.headers[HttpHeaders.ContentEncoding])
@@ -361,10 +364,10 @@ class ServerRoutesTest {
     @Test
     fun `TD-59 P3 は content_digest だけを返し、再計測の値を反映する`() = withServer(fixture) { client ->
         client.prepareTable()
-        val p1Digest = fixture.manifests.forManifest()!!.contentDigest
+        val p1Digest = fixture.manifests.forManifest(listOf(PLAYLIST_ID))!!.contentDigest
         trackFile.writeBytes(ByteArray(150))
 
-        val response = client.signed(fixture, HttpMethod.Get, "/v1/digest")
+        val response = client.signed(fixture, HttpMethod.Post, "/v1/digest", SELECTION)
 
         assertEquals(setOf("content_digest"), response.json().keys)
         assertTrue(response.json().getValue("content_digest").toString().trim('"') != p1Digest)
@@ -375,7 +378,7 @@ class ServerRoutesTest {
         client.prepareTable()
         val query = trackUri()
         trackFile.writeBytes(ByteArray(150))
-        client.signed(fixture, HttpMethod.Get, "/v1/digest")
+        client.signed(fixture, HttpMethod.Post, "/v1/digest", SELECTION)
         // 実ファイルを P1 の時の大きさに戻す。P3 の再計測の値が表を置き換えていれば、P1 の size では 409 になる
         trackFile.writeBytes(TRACK_BYTES)
         Files.setLastModifiedTime(trackFile, java.nio.file.attribute.FileTime.fromMillis(trackModified))
@@ -383,6 +386,75 @@ class ServerRoutesTest {
         val response = client.signed(fixture, HttpMethod.Get, query)
 
         assertEquals(HttpStatusCode.OK, response.status)
+    }
+
+    // ---- 選択（TD-78〜TD-80） ----
+
+    private fun ids(vararg id: String) = """{"playlist_ids":[${id.joinToString(",") { "\"$it\"" }}]}""".encodeToByteArray()
+
+    @Test
+    fun `TD-78 P1 は本文の ID の曲だけを配り、選んでいない曲は P2 で 404`() = withServer(fixture) { client ->
+        fixture.useLibrary(trackFile)
+
+        val selected = client.signed(fixture, HttpMethod.Post, "/v1/manifest", ids(PLAYLIST_ID))
+        assertTrue(selected.bodyAsText().contains(TRACK_ID))
+        assertEquals(HttpStatusCode.OK, client.signed(fixture, HttpMethod.Get, trackUri()).status)
+
+        val none = client.signed(fixture, HttpMethod.Post, "/v1/manifest", ids())
+        assertEquals(HttpStatusCode.OK, none.status)
+        assertTrue(!none.bodyAsText().contains(TRACK_ID))
+        val response = client.signed(fixture, HttpMethod.Get, trackUri())
+        assertEquals(HttpStatusCode.NotFound, response.status)
+        assertEquals("""{"error":"E5"}""", response.bodyAsText())
+    }
+
+    @Test
+    fun `TD-79 P1 と P3 の本文の形と ID の誤りは 400 で、空の配列と上限ちょうどは通る`() = withServer(fixture) { client ->
+        fixture.useLibrary(trackFile)
+        val bad = listOf(
+            "not json", "{}", """{"playlist_ids":"x"}""", """{"playlist_ids":[1]}""",
+            """{"playlist_ids":["a000000000000001"]}""", """{"playlist_ids":["${PLAYLIST_ID.dropLast(1)}"]}""",
+        )
+        for (path in listOf("/v1/manifest", "/v1/digest")) {
+            for (body in bad) {
+                assertEquals(HttpStatusCode.BadRequest, client.signed(fixture, HttpMethod.Post, path, body.encodeToByteArray()).status, "$path $body")
+            }
+            assertEquals(HttpStatusCode.OK, client.signed(fixture, HttpMethod.Post, path, ids()).status, path)
+        }
+        val atLimit = ids(*Array(DesktopValues.MAX_PLAYLIST_IDS) { "%016X".format(it) })
+        val overLimit = ids(*Array(DesktopValues.MAX_PLAYLIST_IDS + 1) { "%016X".format(it) })
+        assertEquals(HttpStatusCode.OK, client.signed(fixture, HttpMethod.Post, "/v1/digest", atLimit).status)
+        assertEquals(HttpStatusCode.BadRequest, client.signed(fixture, HttpMethod.Post, "/v1/digest", overLimit).status)
+    }
+
+    @Test
+    fun `TD-79 署名の後に本文を差し替えた P1 は 401`() = withServer(fixture) { client ->
+        fixture.useLibrary(trackFile)
+        val headers = sign(fixture, HttpMethod.Post, "/v1/manifest", ids(PLAYLIST_ID))
+
+        val response = client.request("/v1/manifest") {
+            method = HttpMethod.Post
+            header(SignatureHeaderNames.DEVICE, headers.device)
+            header(SignatureHeaderNames.TIMESTAMP, headers.timestamp)
+            header(SignatureHeaderNames.NONCE, headers.nonce)
+            header(SignatureHeaderNames.SIGNATURE, headers.signature)
+            setBody(ids())
+        }
+
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `TD-80 P7 は木を返し、読めない状態は 503 の E4、曲の表は置き換えない`() = withServer(fixture) { client ->
+        assertEquals(HttpStatusCode.ServiceUnavailable, client.signed(fixture, HttpMethod.Get, "/v1/playlists").status)
+
+        client.prepareTable()
+        val response = client.signed(fixture, HttpMethod.Get, "/v1/playlists")
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertTrue(response.bodyAsText().contains(PLAYLIST_ID))
+        // P1 の表のまま P2 が通る
+        assertEquals(HttpStatusCode.OK, client.signed(fixture, HttpMethod.Get, trackUri()).status)
     }
 
     // ---- P4（TD-60） ----

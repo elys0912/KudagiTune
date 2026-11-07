@@ -2,17 +2,11 @@ package playlistsyncfox.desktop.ui
 
 import playlistsyncfox.desktop.MutableClock
 import playlistsyncfox.desktop.T0
-import playlistsyncfox.desktop.emptyLibrary
 import playlistsyncfox.desktop.server.ActivityTracker
 import playlistsyncfox.desktop.server.PairingView
 import playlistsyncfox.desktop.settings.PairedDevice
 import playlistsyncfox.desktop.settings.Settings
 import playlistsyncfox.desktop.watch.XmlStatus
-import playlistsyncfox.itunes.library.LibraryPlaylist
-import playlistsyncfox.itunes.library.LibraryReadResult
-import playlistsyncfox.itunes.library.PlaylistExclusion
-import playlistsyncfox.itunes.library.PlaylistKind
-import playlistsyncfox.itunes.library.TrackRef
 import java.time.Duration
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,8 +15,8 @@ import kotlin.test.assertTrue
 
 private const val DEVICE = "00000000-0000-4000-8000-000000000001"
 
-private fun settings(devices: List<PairedDevice> = listOf(PairedDevice(DEVICE, "端末", "2026-01-01T00:00:00.000Z")), selected: List<String> = listOf("A")) =
-    Settings(1, null, selected, 7, true, 47800, "pc", null, devices)
+private fun settings(devices: List<PairedDevice> = listOf(PairedDevice(DEVICE, "端末", "2026-01-01T00:00:00.000Z"))) =
+    Settings(1, null, 7, true, 47800, "pc", null, devices)
 
 class PcStateTest {
     private val clock = MutableClock(T0)
@@ -33,9 +27,8 @@ class PcStateTest {
         xml: XmlStatus = XmlStatus.Normal,
         settings: Settings = settings(),
         keyMissing: Set<String> = emptySet(),
-        library: LibraryReadResult? = emptyLibrary(),
     ) = buildPcState(
-        PcInputs(server, xml, library, settings, keyMissing, PairingView.Closed, activity, false, false, emptyList(), null),
+        PcInputs(server, xml, settings, keyMissing, PairingView.Closed, activity, false, false, emptyList(), null),
         clock.instant(),
     )
 
@@ -63,7 +56,7 @@ class PcStateTest {
     @Test
     fun `TD-35 警告の印は warnings が 1 件以上で付く`() {
         assertFalse(hasWarningMark(state()))
-        assertTrue(hasWarningMark(state(settings = settings(selected = emptyList()))))
+        assertTrue(hasWarningMark(state(xml = XmlStatus.Stale(8))))
         assertTrue(hasWarningMark(state(keyMissing = setOf(DEVICE))))
     }
 
@@ -111,54 +104,5 @@ class PcStateTest {
 
         assertTrue(s.device!!.keyMissing)
         assertTrue(Warning.KeyMissing in s.warnings)
-    }
-
-    // ---- W2 の選択（TD-74） ----
-
-    private fun playlist(id: String, parent: String? = null, kind: PlaylistKind = PlaylistKind.Normal) =
-        LibraryPlaylist(id, "名前$id", parent, kind, listOf(TrackRef.Identified("AAAAAAAAAAAAAAAA")))
-
-    private val folder = PlaylistKind.Excluded(PlaylistExclusion.Folder)
-
-    private fun tree() = buildPlaylistTree(
-        listOf(
-            playlist("F1", kind = folder),
-            playlist("L1", parent = "F1"),
-            playlist("L2", parent = "F1"),
-            playlist("L3"),
-            playlist("MASTER", kind = PlaylistKind.Excluded(PlaylistExclusion.Master)),
-        ),
-    )
-
-    @Test
-    fun `TD-74 フォルダのチェックは配下の葉を一括で選び、フォルダ自身は保存しない`() {
-        val f1 = tree().first { it.id == "F1" }
-
-        val selected = withFolderChecked(listOf("L3"), f1, checked = true)
-
-        assertEquals(listOf("L3", "L1", "L2"), selected)
-        assertFalse("F1" in selected)
-    }
-
-    @Test
-    fun `TD-74 フォルダのチェックを外すと配下の葉だけが外れる`() {
-        val f1 = tree().first { it.id == "F1" }
-
-        assertEquals(listOf("L3"), withFolderChecked(listOf("L1", "L2", "L3"), f1, checked = false))
-    }
-
-    @Test
-    fun `TD-74 組み込みの一覧は木に出さない`() {
-        assertEquals(listOf("F1", "L3"), tree().map { it.id })
-    }
-
-    @Test
-    fun `TD-74 保存した ID が XML に無くても自動では消えず、外す操作で除かれる`() {
-        val library = LibraryReadResult(null, emptyList(), emptyList(), listOf(playlist("L1")), emptyLibrary().diagnostics)
-        val s = state(settings = settings(selected = listOf("L1", "GONE")), library = library)
-
-        assertEquals(listOf("L1", "GONE"), s.selectedIds)
-        assertEquals(listOf("GONE"), s.missingIds)
-        assertEquals(listOf("L1"), withLeafChecked(s.selectedIds, "GONE", checked = false))
     }
 }

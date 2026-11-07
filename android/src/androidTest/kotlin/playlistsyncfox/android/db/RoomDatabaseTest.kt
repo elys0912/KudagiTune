@@ -61,12 +61,15 @@ class RoomDatabaseTest {
         }
         val context: Context = InstrumentationRegistry.getInstrumentation().targetContext
         // 破壊的な再作成は指定しない。版を上げるときは Migration を渡す
-        val reopened = Room.databaseBuilder(context, AppDatabase::class.java, name).build()
+        val reopened = Room.databaseBuilder(context, AppDatabase::class.java, name).addMigrations(MIGRATION_1_2).build()
         try {
             runBlocking {
                 assertEquals(3, reopened.syncDao().placedTracks(DEVICE).size)
                 assertEquals("replacing", reopened.syncDao().placedTracks(DEVICE).first { it.persistentId.endsWith("3") }.state)
                 assertEquals(40, reopened.syncDao().pending("0000000000000009")?.receivedBytes)
+                // 版 1 → 2 で足した T8、T9 は空で作られる（TA-225）
+                assertEquals(0, reopened.syncDao().selectedPlaylists().size)
+                assertEquals(0, reopened.syncDao().relocatedFiles().size)
             }
         } finally {
             reopened.close()

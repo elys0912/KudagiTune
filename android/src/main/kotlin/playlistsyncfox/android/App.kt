@@ -3,12 +3,12 @@ package playlistsyncfox.android
 import android.app.Application
 import android.content.Context
 import android.os.Build
-import android.os.storage.StorageManager
 import androidx.room.Room
 import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import playlistsyncfox.android.db.AppDatabase
+import playlistsyncfox.android.db.MIGRATION_1_2
 import playlistsyncfox.android.db.RoomSyncStore
 import playlistsyncfox.android.discovery.NsdLanResolver
 import playlistsyncfox.android.discovery.PcDiscovery
@@ -18,7 +18,13 @@ import playlistsyncfox.android.net.PairingClient
 import playlistsyncfox.android.net.PinnedApiProvider
 import playlistsyncfox.android.storage.MediaWriter
 import playlistsyncfox.android.storage.ResolverMediaStoreFiles
+import playlistsyncfox.android.storage.StorageVolumes
+import playlistsyncfox.android.sync.CatalogResult
 import playlistsyncfox.android.sync.PairingKeeper
+import playlistsyncfox.android.sync.PlaylistCatalog
+import playlistsyncfox.android.sync.StartBlock
+import playlistsyncfox.android.sync.SyncValues
+import playlistsyncfox.android.sync.startBlock
 import playlistsyncfox.android.sync.RemovalCheck
 import playlistsyncfox.android.sync.StopCause
 import playlistsyncfox.android.sync.SyncPreview
@@ -48,7 +54,10 @@ class PsfoxApp : Application() {
 /** 部品の組み立て（本番）。 */
 class AppGraph(val application: Application) {
     private val app = application
-    val store = RoomSyncStore(Room.databaseBuilder(app, AppDatabase::class.java, "playlist-sync-fox.db").build().syncDao())
+    val store = RoomSyncStore(
+        Room.databaseBuilder(app, AppDatabase::class.java, "playlist-sync-fox.db").addMigrations(MIGRATION_1_2).build().syncDao(),
+    )
+    val volumes = StorageVolumes(app)
     val log = AppLog(File(app.filesDir, "logs"), enabled = { true }, now = System::currentTimeMillis)
     val discovery = PcDiscovery(app)
     val scheduler = SyncScheduler(WorkManager.getInstance(app), store)
@@ -58,12 +67,23 @@ class AppGraph(val application: Application) {
     val keeper = PairingKeeper(store, vault, System::currentTimeMillis)
     val pairingGateway: PairingGateway = DevicePairingGateway(store, keeper, crypto, Build.MODEL) { host, port -> PairingClient.open(host, port) }
 
-    /** 手動の同期の前に、画面側で P1 と差分から「消す」の確認の要否を得る。 */
-    suspend fun checkRemoval(): RemovalCheck {
-        val factory = environmentFactory()
+    // 画面側が同期の前の確認に使う環境。ワーカーの部品は使わない
+    private fun idleEnvironment(): SyncEnvironment {
         val idle = WorkerHooks(promote = { true }, stopCause = { StopCause.UserCancel }, manualActive = { false }, notifyFinished = { _, _, _ -> })
-        return SyncPreview(factory.create(app, idle)).check()
+        return environmentFactory().create(app, idle)
     }
+
+    /** 手動の同期の前に、画面側で P1 と差分から「消す」の確認の要否を得る。 */
+    suspend fun checkRemoval(): RemovalCheck = SyncPreview(idleEnvironment()).check()
+
+    /** 手動の同期の前に、選択が空か保存先が無いかを確かめる（D15、D16）。 */
+    suspend fun startBlock(): StartBlock? = idleEnvironment().startBlock()
+
+    /** S6：PC のプレイリストの一覧を取る（P7）。 */
+    suspend fun fetchPlaylists(): CatalogResult = PlaylistCatalog(idleEnvironment()).fetch()
+
+    /** 保存先のボリューム名。T7 に無ければ本体。 */
+    suspend fun storageVolume(): String = store.setting(SyncValues.STORAGE_VOLUME_KEY) ?: SyncValues.VOLUME_PRIMARY
 
     fun environmentFactory() = SyncEnvironmentFactory { context, hooks -> environment(context, hooks) }
 
@@ -71,14 +91,17 @@ class AppGraph(val application: Application) {
         val pairing = runBlocking(Dispatchers.IO) { store.pairing() }
         val apis = pairing?.let { PinnedApiProvider(it.spkiHash, it.keyAlias, it.deviceId, crypto, nowSeconds = { System.currentTimeMillis() / 1000 }) }
             ?: ApiProvider { error("ペアリングが無い") }
-        val storage = context.getSystemService(StorageManager::class.java)
+        val volume = runBlocking(Dispatchers.IO) { storageVolume() }
         return SyncEnvironment(
             store = store,
-            writer = MediaWriter(store, ResolverMediaStoreFiles(context), pairing?.deviceId.orEmpty(), System::currentTimeMillis),
+            writer = MediaWriter(store, ResolverMediaStoreFiles(context, volume), pairing?.deviceId.orEmpty(), System::currentTimeMillis),
             apis = apis,
             lan = NsdLanResolver(discovery),
             aliasExists = { vault.exists(it) },
-            freeBytes = { runCatching { storage.getAllocatableBytes(StorageManager.UUID_DEFAULT) }.getOrNull() },
+            deleteMissing = runBlocking(Dispatchers.IO) { store.setting(SyncValues.DELETE_MISSING_KEY) } == "true",
+            volume = volume,
+            volumeAvailable = volume == SyncValues.VOLUME_PRIMARY || volume in volumes.mounted(),
+            freeBytes = { volumes.freeBytes(volume) },
             promote = hooks.promote,
             manualActive = hooks.manualActive,
             onFinished = hooks.notifyFinished,

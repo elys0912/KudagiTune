@@ -40,7 +40,7 @@ desktop ──▶ itunes ──▶ shared ◀── android
 | shared | `shared.m3u8` | m3u8 の生成 |
 | shared | `shared.result` | エラーの種類と同期の結果の型 |
 | shared | `shared.auth` | ペアリングの手順、署名、再送防止 |
-| shared | `shared.crypto` | `CryptoProvider` の定義、指紋の表示形式 |
+| shared | `shared.crypto` | `CryptoProvider` の定義、確認コードの表示形式 |
 | shared | `shared.api` | API の要求と応答の型 |
 | itunes | `itunes.plist` | plist XML の読み手 |
 | itunes | `itunes.location` | `file://` の復号 |
@@ -58,7 +58,7 @@ desktop ──▶ itunes ──▶ shared ◀── android
 | android | `android.net` | Ktor のクライアント、証明書の固定 |
 | android | `android.vault` | Keystore による鍵の保管、`CryptoProvider` の端末側の実体 |
 | android | `android.discovery` | NSD の発見、手入力の検査 |
-| android | `android.ui` | 画面 S1〜S5、権限の要求 |
+| android | `android.ui` | 画面 S1〜S6、権限の要求 |
 | android | `android.notify` | 通知 |
 | android | `android.log` | ログの書き込み、閲覧、共有 |
 
@@ -106,7 +106,7 @@ desktop ──▶ itunes ──▶ shared ◀── android
 
 ### 実機の確認の表
 
-- 実機でしか確かめられない項目は、C-1〜C-14 の表にまとめる
+- 実機でしか確かめられない項目は、C-1〜C-17 の表にまとめる
 - 表は repo の `docs/` に別ファイルとして置く。各項目に結果と日付を記録する
 - 項目の概要は次のとおり。状態はいずれも設計の時点のもの。C-6・C-10 は今後対応（Android 14 で確認するため）
 
@@ -190,8 +190,8 @@ GitHub Actions で動かす。細部は変わりうる。
 | S | Android の画面 |
 | W | PC の画面 |
 | K | 鍵と保管場所 |
-| P | API のルート（P1〜P6） |
-| C | 実機の確認の表（C-1〜C-14） |
+| P | API のルート（P1〜P7） |
+| C | 実機の確認の表（C-1〜C-17） |
 | H | PC 側のペアリングの状態（H0〜H3。詳細設計の X4） |
 | TS、TD、TA | テスト計画のケースの番号（shared と itunes、desktop、android）。束ごとの範囲は `docs/test-plan.md` |
 | J | レビューの決定の印。定義は repo の外にあり、取り込んだ先の設計書の節に書いてある |

@@ -29,6 +29,7 @@ import playlistsyncfox.shared.auth.SignedRequest
 import playlistsyncfox.shared.auth.signRequest
 import playlistsyncfox.shared.crypto.CryptoProvider
 import playlistsyncfox.shared.crypto.SigningKeyRef
+import playlistsyncfox.shared.manifest.writePlaylistIds
 import playlistsyncfox.shared.result.ErrorDetail
 import java.io.ByteArrayInputStream
 import java.util.zip.GZIPInputStream
@@ -38,7 +39,7 @@ private val rangeStart = Regex("bytes ([0-9]+)-")
 private val json = Json { ignoreUnknownKeys = true }
 
 /**
- * 接続先 1 件に対する P1〜P4（X6-5）。要求ごとに署名ヘッダを付ける。再開のたびに新しい nonce と時刻で署名し直す。
+ * 接続先 1 件に対する P1〜P4、P7（X6-5）。要求ごとに署名ヘッダを付ける。再開のたびに新しい nonce と時刻で署名し直す。
  * 鍵、署名、nonce はログにも例外の文にも入れない。
  */
 class PsfoxClient(
@@ -50,15 +51,29 @@ class PsfoxClient(
     private val nowSeconds: () -> Long,
     private val pinMismatched: () -> Boolean = { false },
 ) : SyncApi {
-    override suspend fun digest(): ApiResult<String> =
-        send(HttpMethod.Get, "/v1/digest", byteArrayOf(), Timeouts.Digest) { response ->
+    override suspend fun digest(playlistIds: List<String>): ApiResult<String> {
+        val body = writePlaylistIds(playlistIds).encodeToByteArray()
+        return send(HttpMethod.Post, "/v1/digest", body, Timeouts.Digest, config = {
+            contentType(ContentType.Application.Json)
+            setBody(body)
+        }) { response ->
             if (response.status.value == 200) parse(response) { it.jsonObject.getValue("content_digest").jsonPrimitive.content } else failure(response, false)
         }
+    }
 
-    override suspend fun manifest(): ApiResult<String> =
-        send(HttpMethod.Get, "/v1/manifest", byteArrayOf(), Timeouts.Body, config = {
+    override suspend fun manifest(playlistIds: List<String>): ApiResult<String> {
+        val body = writePlaylistIds(playlistIds).encodeToByteArray()
+        return send(HttpMethod.Post, "/v1/manifest", body, Timeouts.Body, config = {
             header(HttpHeaders.AcceptEncoding, "gzip")
+            contentType(ContentType.Application.Json)
+            setBody(body)
         }) { response ->
+            if (response.status.value == 200) Ok(decodeBody(response)) else failure(response, false)
+        }
+    }
+
+    override suspend fun playlists(): ApiResult<String> =
+        send(HttpMethod.Get, "/v1/playlists", byteArrayOf(), Timeouts.Body) { response ->
             if (response.status.value == 200) Ok(decodeBody(response)) else failure(response, false)
         }
 

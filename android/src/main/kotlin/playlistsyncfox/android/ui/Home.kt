@@ -5,6 +5,7 @@ import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.WrittenPlaylist
 import playlistsyncfox.android.sync.ManualStart
 import playlistsyncfox.android.sync.RemovalCheck
+import playlistsyncfox.android.sync.StartBlock
 import playlistsyncfox.android.sync.SyncProgress
 import playlistsyncfox.android.sync.SyncStage
 
@@ -23,6 +24,8 @@ data class HomeUiState(
     val endpoint: String? = null,
     val last: LastRun? = null,
     val playlists: List<PlaylistRow> = emptyList(),
+    /** 選んだプレイリストの数（T8）。0 なら同期ボタンは S6 へ案内する。 */
+    val selectedCount: Int = 0,
 ) {
     /** 同期ボタンの遷移先。未ペアリングだけ S2 で、同期中は S3 へ「進み具合を見る」。 */
     val syncButtonGoesToPairing get() = kind == HomeKind.Unpaired
@@ -56,7 +59,7 @@ fun endpointText(pairing: Pairing): String {
     return value?.takeIf { it.isNotEmpty() } ?: "未接続"
 }
 
-fun homeState(pairing: Pairing?, runs: List<SyncRun>, playlists: List<WrittenPlaylist>, syncing: Boolean): HomeUiState {
+fun homeState(pairing: Pairing?, runs: List<SyncRun>, playlists: List<WrittenPlaylist>, selectedCount: Int, syncing: Boolean): HomeUiState {
     if (pairing == null) return HomeUiState(HomeKind.Unpaired)
     val last = latestRun(runs, syncing)
     return HomeUiState(
@@ -69,6 +72,7 @@ fun homeState(pairing: Pairing?, runs: List<SyncRun>, playlists: List<WrittenPla
         endpoint = endpointText(pairing),
         last = last,
         playlists = playlists.map { PlaylistRow(it.name, it.trackCount) },
+        selectedCount = selectedCount,
     )
 }
 
@@ -79,6 +83,12 @@ sealed interface PressOutcome {
     data class ToProgress(val notice: String? = null) : PressOutcome
 
     data class Confirm(val toRemove: Int) : PressOutcome
+
+    /** 選択が空。同期を始めず S6 へ案内する（D15）。 */
+    data object ToSelection : PressOutcome
+
+    /** 保存先の SD が見つからない。同期を始めず案内する。本体へ切り替えない（D16）。 */
+    data object StorageMissing : PressOutcome
 }
 
 const val APPROVAL_UNUSED_NOTICE = "承認は使われなかった。終わった後にもう一度押す"
@@ -89,6 +99,7 @@ const val APPROVAL_UNUSED_NOTICE = "承認は使われなかった。終わっ�
  */
 class ManualSyncFlow(
     private val autoRunning: suspend () -> Boolean,
+    private val block: suspend () -> StartBlock?,
     private val check: suspend () -> RemovalCheck,
     private val start: suspend (approvedCount: Int?, reachFailed: Boolean) -> ManualStart,
 ) {
@@ -96,6 +107,11 @@ class ManualSyncFlow(
         if (!paired) return PressOutcome.ToPairing
         // 実行中の自動があれば、確認を出さずに S3 へ入る。自動は自動のまま（J34）
         if (autoRunning()) return PressOutcome.ToProgress()
+        when (block()) {
+            StartBlock.NoSelection -> return PressOutcome.ToSelection
+            StartBlock.StorageMissing -> return PressOutcome.StorageMissing
+            null -> Unit
+        }
         return when (val result = check()) {
             RemovalCheck.Allowed -> started(null, reachFailed = false)
             is RemovalCheck.NeedsConfirmation -> PressOutcome.Confirm(result.toRemove)

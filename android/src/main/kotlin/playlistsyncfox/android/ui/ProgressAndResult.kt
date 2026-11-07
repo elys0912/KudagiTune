@@ -75,6 +75,8 @@ data class ResultUiState(
     /** E2 の表示語（`error_detail` から選ぶ）。 */
     val noticeLabel: String?,
     val removalNote: String?,
+    /** 消さなかった件数（差分の「消す」のうち実行しなかった分）。0 なら出さない。 */
+    val notRemoved: Int,
     val excluded: IssueList,
     val unplayable: IssueList,
     val failed: IssueList,
@@ -100,6 +102,7 @@ fun resultUi(run: SyncRun, issues: List<RunIssue>, limit: Int = ISSUE_LIMIT): Re
         errorWord = errorWord(run.errorKind),
         noticeLabel = e2Detail?.let { noticeOf(it).label },
         removalNote = removalNote(run.trigger).takeIf { stored?.removalSkipped == true },
+        notRemoved = if (stored == null) 0 else (stored.counts.toRemove - run.removed).coerceAtLeast(0),
         excluded = issueList(
             issues.filter { it.kind == RunIssue.KIND_EXCLUDED }
                 .map { IssueLine(it.title, listOfNotNull(it.artist, reasonWord(it.reason).takeIf(String::isNotEmpty)).joinToString(" / ")) },

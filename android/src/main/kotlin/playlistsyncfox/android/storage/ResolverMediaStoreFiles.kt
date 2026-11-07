@@ -13,12 +13,12 @@ import playlistsyncfox.android.sync.SyncValues
 import java.io.IOException
 import java.io.OutputStream
 
-/** [MediaStoreFiles] の実体。`ContentResolver` 経由（X6-2）。実機で確かめる項目は C-2、C-7、C-12。 */
-class ResolverMediaStoreFiles(context: Context) : MediaStoreFiles {
+/** [MediaStoreFiles] の実体。`ContentResolver` 経由（X6-2）。[volume] は保存先のボリューム名（D16）。実機で確かめる項目は C-2、C-7、C-12、C-15。 */
+class ResolverMediaStoreFiles(context: Context, volume: String) : MediaStoreFiles {
     private val resolver: ContentResolver = context.contentResolver
     private val packageName: String = context.packageName
-    private val audioUri: Uri = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-    private val filesUri: Uri = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+    private val audioUri: Uri = MediaStore.Audio.Media.getContentUri(volume)
+    private val filesUri: Uri = MediaStore.Files.getContentUri(volume)
 
     override fun insertPendingTrack(displayName: String, mimeType: String, relativePath: String): String? =
         insertPending(audioUri, displayName, mimeType, relativePath)

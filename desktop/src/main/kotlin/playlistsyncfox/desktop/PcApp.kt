@@ -27,8 +27,6 @@ import playlistsyncfox.desktop.server.SignatureFailureCounter
 import playlistsyncfox.desktop.server.TrackTable
 import playlistsyncfox.desktop.settings.AppLog
 import playlistsyncfox.desktop.settings.SettingsStore
-import playlistsyncfox.desktop.settings.isValidPort
-import playlistsyncfox.desktop.settings.isValidStaleDays
 import playlistsyncfox.desktop.ui.PcInputs
 import playlistsyncfox.desktop.ui.PcState
 import playlistsyncfox.desktop.ui.ServerFailureKind
@@ -204,34 +202,9 @@ class PcApp(
 
     // ---- 画面の操作 ----
 
-    fun selectPlaylists(ids: List<String>) {
-        settings.update { it.copy(selectedPlaylistIds = ids) }
-        refreshState()
-    }
-
-    /** 0 以上の整数だけ受ける。 */
-    fun setStaleDays(days: Int): Boolean {
-        if (!isValidStaleDays(days)) return false
-        settings.update { it.copy(staleDays = days) }
-        holder.recomputeStale()
-        refreshState()
-        return true
-    }
-
     fun setLaunchOnLogin(enabled: Boolean) {
         settings.update { it.copy(launchOnLogin = enabled) }
         applyAutostart(enabled)
-    }
-
-    /** 1024〜65535 だけ受ける。使用中なら元の値へ戻さず警告を出し、自動で変えない。 */
-    fun setPort(port: Int): Boolean {
-        if (!isValidPort(port)) return false
-        settings.update { it.copy(port = port) }
-        pcAdvertiser?.stop()
-        running?.stop()
-        running = null
-        launchServer()
-        return true
     }
 
     /** 読めれば保存して読み直す。読めなければ保存しない。 */
@@ -293,7 +266,6 @@ class PcApp(
             PcInputs(
                 server = serverStatus,
                 xml = holder.status.value,
-                library = holder.held.value?.result,
                 settings = settings.current,
                 keyMissing = keyRing.missing,
                 pairing = pairing?.view?.value ?: PairingView.Closed,

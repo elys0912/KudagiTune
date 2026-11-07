@@ -7,6 +7,7 @@ import playlistsyncfox.android.db.WrittenPlaylist
 import playlistsyncfox.android.pairing
 import playlistsyncfox.android.sync.ManualStart
 import playlistsyncfox.android.sync.RemovalCheck
+import playlistsyncfox.android.sync.StartBlock
 import playlistsyncfox.android.sync.SyncProgress
 import playlistsyncfox.android.sync.SyncStage
 import kotlin.test.Test
@@ -28,7 +29,7 @@ private val playlist = WrittenPlaylist(DEVICE, "P1", "Mix", "Mix.m3u8", "content
 class HomeStateTest {
     @Test
     fun `TA-101 T4 が無ければ未ペアリングで、同期ボタンは S2 へ進む`() {
-        val state = homeState(null, runs = listOf(run(1, 100)), playlists = emptyList(), syncing = false)
+        val state = homeState(null, runs = listOf(run(1, 100)), playlists = emptyList(), selectedCount = 0, syncing = false)
 
         assertEquals(HomeKind.Unpaired, state.kind)
         assertTrue(state.syncButtonGoesToPairing)
@@ -36,8 +37,8 @@ class HomeStateTest {
 
     @Test
     fun `TA-101 T4 だけ有れば未実行で、T4 と T3 が有れば実行済みになる`() {
-        val notRun = homeState(pairing(), emptyList(), emptyList(), syncing = false)
-        val done = homeState(pairing(), listOf(run(1, 100)), listOf(playlist), syncing = false)
+        val notRun = homeState(pairing(), emptyList(), emptyList(), selectedCount = 0, syncing = false)
+        val done = homeState(pairing(), listOf(run(1, 100)), listOf(playlist), selectedCount = 1, syncing = false)
 
         assertEquals(HomeKind.NotRun, notRun.kind)
         assertNull(notRun.last)
@@ -51,9 +52,9 @@ class HomeStateTest {
     fun `TA-124 接続先は last_endpoint が指す方式の値で、空なら未接続と出す`() {
         val usb = pairing(lastEndpoint = "usb", usb = "192.0.2.20:47800")
 
-        assertEquals("192.0.2.20:47800", homeState(usb, emptyList(), emptyList(), false).endpoint)
-        assertEquals("pc.example.invalid:47800", homeState(pairing(lastEndpoint = "tailscale"), emptyList(), emptyList(), false).endpoint)
-        assertEquals("未接続", homeState(pairing(lastEndpoint = null), emptyList(), emptyList(), false).endpoint)
+        assertEquals("192.0.2.20:47800", homeState(usb, emptyList(), emptyList(), 0, false).endpoint)
+        assertEquals("pc.example.invalid:47800", homeState(pairing(lastEndpoint = "tailscale"), emptyList(), emptyList(), 0, false).endpoint)
+        assertEquals("未接続", homeState(pairing(lastEndpoint = null), emptyList(), emptyList(), 0, false).endpoint)
     }
 
     @Test
@@ -61,7 +62,7 @@ class HomeStateTest {
         assertTrue(isSyncing(SyncProgress(SyncStage.Transfer)))
         assertFalse(isSyncing(SyncProgress(SyncStage.Finished)))
         assertFalse(isSyncing(null))
-        assertEquals(HomeKind.Syncing, homeState(pairing(), emptyList(), emptyList(), syncing = true).kind)
+        assertEquals(HomeKind.Syncing, homeState(pairing(), emptyList(), emptyList(), selectedCount = 0, syncing = true).kind)
     }
 
     @Test
@@ -92,13 +93,14 @@ class HomeStateTest {
         val runs = listOf(run(1, 1000, endedAt = null))
 
         assertNull(latestRun(runs, syncing = true))
-        assertNull(homeState(pairing(), runs, emptyList(), syncing = true).last)
+        assertNull(homeState(pairing(), runs, emptyList(), selectedCount = 0, syncing = true).last)
     }
 }
 
 class ManualSyncFlowTest {
     private class Calls {
         var autoRunning = false
+        var block: StartBlock? = null
         var check: RemovalCheck = RemovalCheck.Allowed
         var startResult = ManualStart.Started
         var checks = 0
@@ -107,6 +109,7 @@ class ManualSyncFlowTest {
 
     private fun flowOf(calls: Calls) = ManualSyncFlow(
         autoRunning = { calls.autoRunning },
+        block = { calls.block },
         check = {
             calls.checks++
             calls.check
@@ -187,5 +190,29 @@ class ManualSyncFlowTest {
         calls.startResult = ManualStart.AutoRunning
 
         assertEquals(PressOutcome.ToProgress(APPROVAL_UNUSED_NOTICE), flow.answer(confirm, approved = true))
+    }
+
+    @Test
+    fun `TA-222 選択が空なら同期を始めず S6 へ案内し、到達確認もしない`() = runTest {
+        val calls = Calls().also { it.block = StartBlock.NoSelection }
+
+        assertEquals(PressOutcome.ToSelection, flowOf(calls).press(paired = true))
+        assertEquals(0, calls.checks)
+        assertTrue(calls.starts.isEmpty())
+    }
+
+    @Test
+    fun `TA-222 保存先が無いときは同期を始めず案内する`() = runTest {
+        val calls = Calls().also { it.block = StartBlock.StorageMissing }
+
+        assertEquals(PressOutcome.StorageMissing, flowOf(calls).press(paired = true))
+        assertTrue(calls.starts.isEmpty())
+    }
+
+    @Test
+    fun `TA-222 未ペアリングは選択が空でも S2 が先`() = runTest {
+        val calls = Calls().also { it.block = StartBlock.NoSelection }
+
+        assertEquals(PressOutcome.ToPairing, flowOf(calls).press(paired = false))
     }
 }
