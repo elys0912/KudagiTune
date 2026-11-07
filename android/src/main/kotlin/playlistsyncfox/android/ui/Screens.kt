@@ -101,7 +101,6 @@ private fun Back(model: AppViewModel) = Action("戻る", model::back)
 @Composable
 private fun HomeScreen(model: AppViewModel, actions: ScreenActions, notificationsAllowed: () -> Boolean, readGranted: () -> Boolean) {
     val state by model.home.collectAsState()
-    val confirm by model.confirm.collectAsState()
     when (state.kind) {
         HomeKind.Unpaired -> Label("ペアリングしてください")
         else -> {
@@ -131,6 +130,13 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions, notification
     if (state.kind != HomeKind.Unpaired) Action("プレイリストを選ぶ") { model.openSelection() }
     if (state.last != null) Action("結果を見る") { model.openResult(null) }
     Action("設定") { model.openSettings(notificationsAllowed(), readGranted()) }
+    RemovalConfirm(model)
+}
+
+/** 「消す」の確認。同期ボタンは S1 と S4 にあるので、両方に置く。 */
+@Composable
+private fun RemovalConfirm(model: AppViewModel) {
+    val confirm by model.confirm.collectAsState()
     confirm?.let {
         Confirm(
             text = "${it.toRemove} 曲を端末から消す。続けるか",
@@ -273,6 +279,7 @@ private fun ResultScreen(model: AppViewModel, actions: ScreenActions) {
         Issues("失敗", state.failed)
     }
     Action("もう一度同期する", actions.onSyncButton)
+    RemovalConfirm(model)
     if (screen.past.size > 1) {
         Label("過去の実行", bold = true)
         screen.past.forEach { Action("${formatTime(it.atMillis)} ${it.word}") { model.openResult(it.runId) } }
