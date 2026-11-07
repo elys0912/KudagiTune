@@ -65,4 +65,14 @@ class DeleteMissingTest {
         assertEquals(30, declined.store.placed.size)
         assertEquals(28, resultUi(row, emptyList()).notRemoved)
     }
+
+    @Test
+    fun `TA-231 ON のとき手動は 1 件だけ消す場合も確認を出し、断れば消えない`() = runTest {
+        val h = Harness()
+        h.setup(placedCount = 3, keep = 2)
+        assertEquals(RemovalCheck.NeedsConfirmation(1), SyncPreview(h.environment()).check())
+
+        h.run()
+        assertEquals(3, h.store.placed.size)
+    }
 }

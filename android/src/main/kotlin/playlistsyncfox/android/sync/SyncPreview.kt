@@ -5,7 +5,6 @@ import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.net.ApiFailure
 import playlistsyncfox.android.net.ApiResult
 import playlistsyncfox.android.net.Endpoint
-import playlistsyncfox.shared.diff.RemovalGate
 import playlistsyncfox.shared.diff.SyncRecord
 import playlistsyncfox.shared.diff.computeDiff
 import playlistsyncfox.shared.manifest.ManifestReadResult
@@ -88,10 +87,8 @@ class SyncPreview(private val env: SyncEnvironment) {
             removalConfirmThreshold = SyncValues.REMOVAL_CONFIRM_THRESHOLD,
             unresolvedPlaylists = manifest.unresolvedPlaylists,
         )
-        return when {
-            diff.removalGate == RemovalGate.Allowed || diff.toRemove.isEmpty() -> RemovalCheck.Allowed
-            else -> RemovalCheck.NeedsConfirmation(diff.toRemove.size)
-        }
+        // 手動は 1 件でも消すなら確認を出す（D19）。`removalGate` は自動の判定に使う
+        return if (diff.toRemove.isEmpty()) RemovalCheck.Allowed else RemovalCheck.NeedsConfirmation(diff.toRemove.size)
     }
 }
 

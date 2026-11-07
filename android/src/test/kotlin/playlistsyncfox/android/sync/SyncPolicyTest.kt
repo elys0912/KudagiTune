@@ -277,6 +277,8 @@ class SyncPolicyTest {
     fun `TA-021 手動は承認した件数以内なら Allowed でなくても実行し超えたら飛ばす`() {
         assertTrue(mayExecuteRemoval(SyncRun.TRIGGER_MANUAL, gateAllowed = false, removeCount = 2, deleteApproved = true, approvedDeleteCount = 2))
         assertFalse(mayExecuteRemoval(SyncRun.TRIGGER_MANUAL, gateAllowed = false, removeCount = 3, deleteApproved = true, approvedDeleteCount = 2))
+        // Allowed でも承認が無ければ消さない（D19）
+        assertFalse(mayExecuteRemoval(SyncRun.TRIGGER_MANUAL, gateAllowed = true, removeCount = 1, deleteApproved = false, approvedDeleteCount = 0))
     }
 
     @Test
