@@ -207,6 +207,7 @@ class InMemoryStore : SyncStore {
         playlistRows.clear()
         pendingRows.clear()
         settings[SyncValues.PLACED_VOLUME_KEY] = volume
+        settings[SyncValues.RELOCATING_KEY] = "true"
     }
 
     override suspend fun relocatedUris() = relocatedRows.toList()
@@ -453,6 +454,7 @@ class Harness(val trigger: SyncTrigger = SyncTrigger.Manual) {
     val events = mutableListOf<String>()
     var promoteResult = true
     var aliasExists = true
+    var deleteMissing = true
     var volume = SyncValues.VOLUME_PRIMARY
     var volumeAvailable = true
     var freeBytes: Long? = Long.MAX_VALUE / 4
@@ -488,6 +490,7 @@ class Harness(val trigger: SyncTrigger = SyncTrigger.Manual) {
             lanServices
         },
         aliasExists = { aliasExists },
+        deleteMissing = deleteMissing,
         volume = volume,
         volumeAvailable = volumeAvailable,
         freeBytes = { freeBytes },

@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import playlistsyncfox.android.storage.StoredFile
+import playlistsyncfox.android.sync.SyncServices
 import playlistsyncfox.shared.manifest.PlaylistNode
 import playlistsyncfox.shared.manifest.leafIds
 
@@ -262,6 +263,7 @@ private fun ResultScreen(model: AppViewModel, actions: ScreenActions) {
     } else {
         Label("${state.word}（${state.trigger}）　${formatTime(state.atMillis)}", bold = true)
         state.removalNote?.let { Label(it, bold = true) }
+        if (state.notRemoved > 0) Label("消さなかった：${state.notRemoved} 件")
         state.counts?.let { Label("追加 ${it.added}　置き換え ${it.replaced}　削除 ${it.removed}　失敗 ${it.failed}") }
         state.bytes?.let { Label("転送 ${formatBytes(it)}") }
         state.errorWord?.let { Label("原因：$it") }
@@ -290,6 +292,8 @@ private fun Issues(title: String, list: IssueList) {
 private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     val state by model.settings.collectAsState()
     var confirmUnpair by remember { mutableStateOf(false) }
+    var confirmRelocated by remember { mutableStateOf(false) }
+    val syncing = isSyncing(SyncServices.progress.collectAsState().value)
     val ui = state
     if (ui == null) {
         Label("読み込み中")
@@ -298,13 +302,22 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     }
     Label("自動起動：${if (ui.autoEnabled) "入" else "切"}（Wi-Fi など従量制でない回線で、約 6 時間ごと）")
     Action(if (ui.autoEnabled) "切る" else "入れる") { model.toggleAuto(!ui.autoEnabled) }
+    Label("PC に無い曲を端末から消す：${if (ui.deleteMissing) "入" else "切"}（プレイリストから外した曲も含む。既定は切）")
+    Action(if (ui.deleteMissing) "切る" else "入れる") { model.setDeleteMissing(!ui.deleteMissing) }
     Label("保存先：${ui.saveFolder}")
     ui.storage.options.forEach { option ->
         val chosen = option.volume == ui.storage.selected
         Label("${if (chosen) "[x]" else "[ ]"} ${option.label}")
         if (!chosen && option.available) Action("${option.label}にする") { model.setStorage(option.volume) }
     }
-    Label("保存先を替えると、次の同期で新しい場所へ全曲を取り直す")
+    Label("保存先を替えると、次の同期で新しい場所へ全曲を取り直す。前の場所の曲は自動では消えない")
+    if (ui.relocatedCount > 0) {
+        Label("以前の場所に残る曲とプレイリスト：${ui.relocatedCount} 件")
+        if (syncing) Label("同期が動いている間は消せない") else Action("以前の場所の曲を消す") { confirmRelocated = true }
+        if (confirmRelocated) {
+            Confirm("以前の場所の、このアプリが書いた ${ui.relocatedCount} 件を消す。続けるか", "消す", { confirmRelocated = false; model.deleteRelocated() }, { confirmRelocated = false })
+        }
+    }
     if (ui.notificationsOff) {
         Label("通知が出ない")
         Action("通知の許可", actions.onNotificationHelp)

@@ -40,6 +40,8 @@ class SyncEnvironment(
     val lan: LanResolver,
     /** T4 の `key_alias` の別名が Keystore にあるか（X6-6）。 */
     val aliasExists: (String) -> Boolean,
+    /** 設定「PC に無い曲を端末から消す」。OFF なら `toRemove` があっても消さない。 */
+    val deleteMissing: Boolean,
     /** 保存先のボリューム名（T7 の `storage_volume`。D16）。 */
     val volume: String,
     /** [volume] が今つながっているか。つながっていなければ同期を始めない。 */

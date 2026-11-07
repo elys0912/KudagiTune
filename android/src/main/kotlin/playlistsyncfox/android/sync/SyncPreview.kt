@@ -47,6 +47,8 @@ sealed interface RemovalCheck {
  */
 class SyncPreview(private val env: SyncEnvironment) {
     suspend fun check(): RemovalCheck {
+        // 設定が OFF なら消さないので、確認は要らない
+        if (!env.deleteMissing) return RemovalCheck.Allowed
         val pairing = env.store.pairing() ?: return RemovalCheck.Failed(reachFailed = false)
         // 鍵が無いときの E2 はワーカーが記録する。ここでは届かなかったことにしない
         if (!env.aliasExists(pairing.keyAlias)) return RemovalCheck.Failed(reachFailed = false)

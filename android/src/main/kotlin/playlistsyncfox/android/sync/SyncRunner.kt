@@ -612,7 +612,8 @@ class SyncRunner(private val env: SyncEnvironment) {
 
             // 9. 「消す」：同期全体の失敗、利用者の中断、E なしの停止では行わない
             var outcome = classify(userInterrupted)
-            if (loaded != null && finalDiff != null && !skippedUnchanged && !afterCancel && mayRemove(outcome)) {
+            // 設定が OFF のときは、toRemove があっても消さない（件数は counts に残る）
+            if (env.deleteMissing && loaded != null && finalDiff != null && !skippedUnchanged && !afterCancel && mayRemove(outcome)) {
                 val allowed = mayExecuteRemoval(
                     trigger = triggerText,
                     gateAllowed = finalDiff.removalGate == RemovalGate.Allowed,
@@ -633,8 +634,8 @@ class SyncRunner(private val env: SyncEnvironment) {
                 outcome = classify(userInterrupted)
             }
 
-            // 9b. 取り直しがすべて済んだ（完了）ときだけ、切り替え前の場所のファイルを消す（D16）
-            if (relocating && !afterCancel && outcome == SyncOutcome.Completed) env.writer.deleteRelocated()
+            // 9b. 取り直しがすべて済んだ（完了）。古い場所のファイルは消さない（S5 の操作で消す。D16）
+            if (relocating && !afterCancel && outcome == SyncOutcome.Completed) env.writer.finishRelocation()
 
             return record(outcome, loaded, finalDiff, afterCancel)
         }

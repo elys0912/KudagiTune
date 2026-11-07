@@ -25,8 +25,8 @@ import kotlin.test.assertTrue
 class SettingsUiTest {
     @Test
     fun `TA-119 通知の許可が無いときだけ通知が出ない表示を出す`() {
-        val off = settingsUi("true", storageUi(emptySet(), SyncValues.VOLUME_PRIMARY), pairing(), notificationsAllowed = false, logBytes = 0, cleanup = CleanupState.NeedsPermission)
-        val on = settingsUi("true", storageUi(emptySet(), SyncValues.VOLUME_PRIMARY), pairing(), notificationsAllowed = true, logBytes = 0, cleanup = CleanupState.NeedsPermission)
+        val off = settingsUi("true", null, 0, storageUi(emptySet(), SyncValues.VOLUME_PRIMARY), pairing(), notificationsAllowed = false, logBytes = 0, cleanup = CleanupState.NeedsPermission)
+        val on = settingsUi("true", null, 0, storageUi(emptySet(), SyncValues.VOLUME_PRIMARY), pairing(), notificationsAllowed = true, logBytes = 0, cleanup = CleanupState.NeedsPermission)
 
         assertTrue(off.notificationsOff)
         assertFalse(on.notificationsOff)
@@ -34,7 +34,7 @@ class SettingsUiTest {
 
     @Test
     fun `TA-129 保存先は Music の V22 で、ペアリングは PC の名前と指紋を出す`() {
-        val state = settingsUi(null, storageUi(emptySet(), SyncValues.VOLUME_PRIMARY), pairing(), notificationsAllowed = true, logBytes = 0, cleanup = CleanupState.Denied)
+        val state = settingsUi(null, null, 0, storageUi(emptySet(), SyncValues.VOLUME_PRIMARY), pairing(), notificationsAllowed = true, logBytes = 0, cleanup = CleanupState.Denied)
 
         assertEquals("Music/playlist-sync-fox/", state.saveFolder)
         assertEquals("pc.example.invalid", state.pcName)

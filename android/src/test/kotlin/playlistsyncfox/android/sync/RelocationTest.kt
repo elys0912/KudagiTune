@@ -13,6 +13,7 @@ import playlistsyncfox.android.id
 import playlistsyncfox.android.manifestOf
 import playlistsyncfox.android.net.ApiFailure
 import playlistsyncfox.android.track
+import playlistsyncfox.android.ui.cleanRelocated
 import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.result.SyncTrigger
 import kotlin.test.Test
@@ -79,7 +80,7 @@ class RelocationTest {
     }
 
     @Test
-    fun `TA-218 保存先を替えると全曲を取り直し、完了のあとに古い場所のファイルが消える`() = runTest {
+    fun `TA-218 保存先を替えると全曲を取り直し、完了しても古い場所のファイルは消えず T9 に残る`() = runTest {
         val h = Harness()
         h.sync(tracks)
         val old = h.seedOldPlaced(tracks)
@@ -90,10 +91,11 @@ class RelocationTest {
         assertEquals(SyncRun.RESULT_SUCCESS, row.result)
         assertEquals(3, row.added)
         assertEquals(3, h.lanApi.trackRequests.size)
-        assertTrue(old.all { it !in h.media.entries })
-        assertTrue(h.store.relocatedRows.isEmpty())
+        assertTrue(old.all { it in h.media.entries })
+        assertEquals(old.toSet(), h.store.relocatedRows.toSet())
         assertTrue(h.store.placed.values.none { it.mediaUri in old })
         assertEquals(SD, h.store.settings[SyncValues.PLACED_VOLUME_KEY])
+        assertEquals("false", h.store.settings[SyncValues.RELOCATING_KEY])
     }
 
     @Test
@@ -115,7 +117,7 @@ class RelocationTest {
     }
 
     @Test
-    fun `TA-219 取り直しが一部失敗で終わった実行では古い場所のファイルを消さず、次の完了で消す`() = runTest {
+    fun `TA-219 取り直しが一部失敗でも次の完了でも古い場所のファイルは消えず、S5 の操作で消える`() = runTest {
         val h = Harness()
         h.sync(tracks)
         val old = h.seedOldPlaced(tracks)
@@ -134,8 +136,40 @@ class RelocationTest {
 
         h.serveTracks(tracks)
         assertEquals(SyncRun.RESULT_SUCCESS, assertNotNull(h.run()).result)
+        assertTrue(old.all { it in h.media.entries })
+
+        assertEquals(3, cleanRelocated(h.writer, syncing = false))
         assertTrue(old.all { it !in h.media.entries })
         assertTrue(h.store.relocatedRows.isEmpty())
+    }
+
+    @Test
+    fun `TA-219 以前の場所の曲を消す操作は同期が動いている間は何もしない`() = runTest {
+        val h = Harness()
+        val old = h.seedOldPlaced(tracks)
+        h.volume = SD
+        h.sync(tracks)
+        h.run()
+
+        assertNull(cleanRelocated(h.writer, syncing = true))
+
+        assertTrue(old.all { it in h.media.entries })
+        assertEquals(3, h.store.relocatedRows.size)
+    }
+
+    @Test
+    fun `TA-219 以前の場所の曲を消す操作は持ち主が違って消せない行を残す`() = runTest {
+        val h = Harness()
+        val old = h.seedOldPlaced(tracks)
+        h.volume = SD
+        h.sync(tracks)
+        h.run()
+        h.media.deniedDeletes += old[0]
+
+        assertEquals(2, cleanRelocated(h.writer, syncing = false))
+
+        assertTrue(old[0] in h.media.entries)
+        assertEquals(listOf(old[0]), h.store.relocatedRows)
     }
 
     @Test

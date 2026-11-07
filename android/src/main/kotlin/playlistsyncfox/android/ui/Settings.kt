@@ -1,6 +1,7 @@
 package playlistsyncfox.android.ui
 
 import playlistsyncfox.android.db.Pairing
+import playlistsyncfox.android.storage.MediaWriter
 import playlistsyncfox.android.storage.StoredFile
 import playlistsyncfox.android.sync.SyncValues
 
@@ -40,6 +41,10 @@ fun storageUi(mounted: Set<String>, saved: String): StorageUi {
 
 data class SettingsUiState(
     val autoEnabled: Boolean,
+    /** 「PC に無い曲を端末から消す」。既定は OFF。 */
+    val deleteMissing: Boolean,
+    /** 切り替え前の場所に残る、このアプリが書いたファイルの数（T9）。 */
+    val relocatedCount: Int,
     val storage: StorageUi,
     /** `Music/<V22>/`。 */
     val saveFolder: String,
@@ -51,9 +56,11 @@ data class SettingsUiState(
     val cleanup: CleanupState,
 )
 
-fun settingsUi(autoSetting: String?, storage: StorageUi, pairing: Pairing?, notificationsAllowed: Boolean, logBytes: Long, cleanup: CleanupState) =
+fun settingsUi(autoSetting: String?, deleteMissingSetting: String?, relocatedCount: Int, storage: StorageUi, pairing: Pairing?, notificationsAllowed: Boolean, logBytes: Long, cleanup: CleanupState) =
     SettingsUiState(
         autoEnabled = autoSetting == "true",
+        deleteMissing = deleteMissingSetting == "true",
+        relocatedCount = relocatedCount,
         storage = storage,
         saveFolder = SyncValues.MEDIA_ROOT,
         pcName = pairing?.pcName,
@@ -62,3 +69,9 @@ fun settingsUi(autoSetting: String?, storage: StorageUi, pairing: Pairing?, noti
         logBytes = logBytes,
         cleanup = cleanup,
     )
+
+/**
+ * 「以前の場所の曲を消す」（D16）。確認の後に呼ぶ。同期が走っている間は何もせず null を返す。
+ * 消すのは T9 の行（このアプリが書いたもの）だけで、持ち主が違って消せない行は残る。
+ */
+suspend fun cleanRelocated(writer: MediaWriter, syncing: Boolean): Int? = if (syncing) null else writer.deleteRelocated()

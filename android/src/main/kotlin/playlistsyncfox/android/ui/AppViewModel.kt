@@ -190,6 +190,8 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
             }
             settings.value = settingsUi(
                 autoSetting = store.setting(playlistsyncfox.android.sync.SyncScheduler.AUTO_ENABLED_KEY),
+                deleteMissingSetting = store.setting(SyncValues.DELETE_MISSING_KEY),
+                relocatedCount = store.relocatedUris().size,
                 storage = storageUi(graph.volumes.mounted(), graph.storageVolume()),
                 pairing = store.pairing(),
                 notificationsAllowed = notificationsAllowed,
@@ -204,6 +206,23 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
             val ok = graph.scheduler.setAutoEnabled(enabled)
             if (!ok) message.value = "自動起動の登録に失敗した"
             settings.update { it?.copy(autoEnabled = store.setting(playlistsyncfox.android.sync.SyncScheduler.AUTO_ENABLED_KEY) == "true") }
+        }
+    }
+
+    /** 「PC に無い曲を端末から消す」の切り替え。 */
+    fun setDeleteMissing(enabled: Boolean) {
+        viewModelScope.launch {
+            store.putSetting(SyncValues.DELETE_MISSING_KEY, enabled.toString())
+            settings.update { it?.copy(deleteMissing = enabled) }
+        }
+    }
+
+    /** 「以前の場所の曲を消す」。確認は画面が済ませてある。同期が走っている間は消さない。 */
+    fun deleteRelocated() {
+        viewModelScope.launch {
+            val deleted = withContext(Dispatchers.IO) { cleanRelocated(writer(), isSyncing(SyncServices.progress.value)) }
+            message.value = if (deleted == null) "同期が動いている間は消せない" else "以前の場所の曲を $deleted 件消した"
+            settings.update { it?.copy(relocatedCount = store.relocatedUris().size) }
         }
     }
 

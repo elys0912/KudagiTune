@@ -63,6 +63,12 @@ object SyncValues {
     /** T7 のキー：T1、T2 の行があるボリューム名。保存先の切り替えの判定に使う。無ければ本体。 */
     const val PLACED_VOLUME_KEY = "placed_volume"
 
+    /** T7 のキー：「PC に無い曲を端末から消す」（`true`／`false`。無ければ OFF）。 */
+    const val DELETE_MISSING_KEY = "delete_missing_enabled"
+
+    /** T7 のキー：保存先の切り替えの取り直しが完了で終わっていない間 `true`（D16）。 */
+    const val RELOCATING_KEY = "relocating"
+
     /** 本体の MediaStore のボリューム名（`MediaStore.VOLUME_EXTERNAL_PRIMARY`）。 */
     const val VOLUME_PRIMARY = "external_primary"
 
