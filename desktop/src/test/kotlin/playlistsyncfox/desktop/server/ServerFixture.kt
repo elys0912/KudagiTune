@@ -50,6 +50,9 @@ const val TRACK_ID = "1000000000000001"
 val DEVICE_KEY = ByteArray(32) { (it + 1).toByte() }
 val SPKI_HASH = ByteArray(32) { it.toByte() }
 
+/** P1・P3 の本文：[PLAYLIST_ID] だけを選ぶ。 */
+val SELECTION = """{"playlist_ids":["$PLAYLIST_ID"]}""".encodeToByteArray()
+
 /** サーバーのルートを試すための部品一式。実ネットワークは使わず、鍵の保管は記憶の中、時刻は固定。 */
 class ServerFixture(val root: Path, val store: SecretStore = MemorySecretStore(), now: java.time.Instant = T0.plusSeconds(60)) {
     val clock = MutableClock(now)
@@ -71,12 +74,11 @@ class ServerFixture(val root: Path, val store: SecretStore = MemorySecretStore()
 
     fun addDevice(id: String = DEVICE, key: ByteArray = DEVICE_KEY) = check(registry.register(id, "端末の名前", key))
 
-    /** 1 つの曲を持つ XML を読めた状態にし、そのプレイリストを選ぶ。 */
+    /** 1 つの曲を持つ XML を読めた状態にする。そのプレイリストは P1・P3 の本文（[SELECTION]）で選ぶ。 */
     fun useLibrary(trackFile: Path) {
         val track = LibraryTrack(TRACK_ID, TrackLocation.Found(trackFile.toString()), "File", "曲", "歌手", "アルバム", null, 1, 1, 1000, "MPEG", false)
         val playlist = LibraryPlaylist(PLAYLIST_ID, "リスト", null, PlaylistKind.Normal, listOf(TrackRef.Identified(TRACK_ID)))
         library = HeldLibrary(LibraryReadResult("LIB", listOf(track), emptyList(), listOf(playlist), emptyLibrary().diagnostics), T0)
-        settings.update { it.copy(selectedPlaylistIds = listOf(PLAYLIST_ID)) }
     }
 
     fun elapse(duration: Duration) = clock.advance(duration)

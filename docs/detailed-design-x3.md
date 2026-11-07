@@ -1,7 +1,7 @@
 # playlist-sync-fox 詳細設計 X3 shared の同期（M1）
 
 - 索引：detailed-design.md（X1）
-- 稿：第 5 稿（2026-11-06。review-13 を反映）
+- 稿：第 5 稿（2026-11-06。review-13 を反映）。2026-11-07 に X3-1b（選択の本文と P7 の型。D15）を足した
 - 参照：X2 は detailed-design-x2.md、X4 は detailed-design-x4.md、X5 は detailed-design-x5.md、X6 は detailed-design-x6.md、X7 は detailed-design-x7.md。引き受ける基本設計は B2-4・B2-5・B2-8 が basic-design-b2.md、B3-1・B3-3 が basic-design-b3.md、値は basic-design.md の B1-7
 
 ## X3 shared の同期
@@ -91,6 +91,13 @@
 7. 上の全体の SHA-256 を、小文字の 16 進 64 桁の文字列にする
 - 同じ内容なら、一覧の元の並びに関係なく同じ値になる。`tracks` と `playlists` の `persistent_id` 重複は読み込みの手順 4 で除いた後に計算する
 - 端末は受け取った `content_digest` を検算せず、そのまま使う（境界の検査は形式だけ。PC と同じ関数を使うことはテストで保つ。X3-6）
+
+### X3-1b 選択の本文と P7 の型（D15。2026-11-07）
+
+- P1・P3 の要求の本文（`shared.manifest`）：`{"playlist_ids":["…"]}`。`parsePlaylistIds(text)` が検査する純粋な関数で、PC が境界で呼ぶ。個数の上限は引数（V54 を M3 が渡す）。結果は `Ids(list)`（重複を除いた、入力の順）か `Invalid`。次はどれも `Invalid`：JSON でない、`playlist_ids` が無い・配列でない、要素が文字列でない、要素が大文字の 16 桁の 16 進でない、個数が上限を超える。空の配列は有効。ID の値、本文の中身は、結果の文にもログにも入れない
+- 書き出し：`writePlaylistIds(ids)`（端末が使う）
+- P7 の応答（`shared.manifest`）：`PlaylistNode`（`persistent_id`、`name`、`track_count?`、`children?`）。葉は `children` が無く `track_count` を持ち、フォルダは `children` を持つ。`writePlaylistTree`／`readPlaylistTree`（読み取りは JSON でない、形が違う、ID の書式が違うとき null）
+- 選択の操作（端末が使う純粋な関数）：`leafIds(node)`、`withFolderChecked(selected, folder, checked)`、`withLeafChecked(selected, id, checked)`。フォルダは保存せず、配下の葉を一括で選ぶ・外す。旧 W2 の規則を端末へ移したもの
 
 ### X3-2 差分の計算
 
@@ -401,7 +408,7 @@ X1、X4 への依頼は反映済み。未了は次の表のみ。
 | 宛先 | 依頼 |
 |---|---|
 | X2 | `ExcludedTrack` の理由（`no_location`、`undecodable`、`not_found`、`unreadable`、`no_id`）は、M2 の材料（場所の結果、ID 無しの一覧、`kind`）から M3 が導く。保護付きは除外せず `protected` の印で出す |
-| X5 | P1 の応答の本文は `Manifest` の直列化の結果。`content_digest` は X3-1 の関数で PC が計算する。除外の理由の値は M2 の材料から写す |
+| X5 | P1 の要求の本文は `parsePlaylistIds` で検査する（X3-1b）。P7 の応答は `PlaylistNode` の木の直列化の結果。P1 の応答の本文は `Manifest` の直列化の結果。`content_digest` は X3-1 の関数で PC が計算する。除外の理由の値は M2 の材料から写す |
 | X6 | `SyncRecord`、`Diff`、`SyncResult`、`SyncError` を M4 が写す（T1 の列との対応は X3-2）。`presentIds` の作成、MediaStore の既存のパスの問い合わせ（使用中のパスの集合）、読み戻したパスの T1 への保存、`removalGate` の扱い（`LibraryChanged` の承認後は T3 の `library_id` を更新。`NeedsConfirmation` は手動が確認、自動は飛ばして通知）、区分から T3 の `result` への対応（X3-5）、`hasMore` の入力（完了件数）、プレイリストのファイル名の変更時の古い m3u8 の削除、UTF-8（BOM なし）への変換、MIME は X3-3 の表を使う |
 | X7 | 結果の表示は `SyncResult` の項目を使う。除外の理由と再生できない形式の理由の表示の文は X7（S の表示）で決める。版が合わない・壊れたマニフェストの画面の文も同じ。端末は `xml_modified_at` を表示に使わない（古さの警告は PC 側の画面。B2-3） |
 

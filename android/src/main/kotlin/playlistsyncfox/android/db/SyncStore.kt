@@ -59,6 +59,22 @@ interface SyncStore {
 
     fun observePlaylists(): Flow<List<WrittenPlaylist>>
 
+    /** T8。選んだ順。 */
+    suspend fun selectedPlaylists(): List<SelectedPlaylist>
+
+    fun observeSelectedPlaylists(): Flow<List<SelectedPlaylist>>
+
+    /** T8 の全置き換え（1 取引）。 */
+    suspend fun replaceSelection(rows: List<SelectedPlaylist>)
+
+    /** 保存先の切り替え。T1、T2 を T9 へ移し、T5 を消し、`placed_volume` を [volume] にする（1 取引）。 */
+    suspend fun relocate(deviceId: String, volume: String)
+
+    /** T9：切り替え前の場所に残る自分のファイルの URI。 */
+    suspend fun relocatedUris(): List<String>
+
+    suspend fun removeRelocated(mediaUri: String)
+
     suspend fun setting(key: String): String?
 
     suspend fun putSetting(key: String, value: String)
@@ -110,6 +126,18 @@ class RoomSyncStore(private val dao: SyncDao) : SyncStore {
     override fun observeRuns() = dao.observeRuns()
 
     override fun observePlaylists() = dao.observePlaylists()
+
+    override suspend fun selectedPlaylists() = dao.selectedPlaylists()
+
+    override fun observeSelectedPlaylists() = dao.observeSelectedPlaylists()
+
+    override suspend fun replaceSelection(rows: List<SelectedPlaylist>) = dao.replaceSelection(rows)
+
+    override suspend fun relocate(deviceId: String, volume: String) = dao.relocate(deviceId, volume)
+
+    override suspend fun relocatedUris() = dao.relocatedFiles().map { it.mediaUri }
+
+    override suspend fun removeRelocated(mediaUri: String) = dao.deleteRelocated(mediaUri)
 
     override suspend fun setting(key: String) = dao.setting(key)
 

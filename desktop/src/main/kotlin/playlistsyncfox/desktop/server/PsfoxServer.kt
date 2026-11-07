@@ -46,7 +46,10 @@ import playlistsyncfox.shared.auth.SignedRequest
 import playlistsyncfox.shared.auth.encodeBase64Url
 import playlistsyncfox.shared.auth.verifyRequest
 import playlistsyncfox.shared.crypto.CryptoProvider
+import playlistsyncfox.shared.manifest.PlaylistIdsResult
+import playlistsyncfox.shared.manifest.parsePlaylistIds
 import playlistsyncfox.shared.manifest.writeManifest
+import playlistsyncfox.shared.manifest.writePlaylistTree
 import java.nio.file.Files
 import java.time.Clock
 import java.time.Instant
@@ -84,6 +87,7 @@ private val rangeFromPattern = Regex("bytes=([0-9]+)-")
 
 private const val PATH_MANIFEST = "/v1/manifest"
 private const val PATH_DIGEST = "/v1/digest"
+private const val PATH_PLAYLISTS = "/v1/playlists"
 private const val PATH_REPORTS = "/v1/reports"
 private const val PATH_PAIRING_START = "/v1/pairing/start"
 private const val PATH_PAIRING_CONFIRM = "/v1/pairing/confirm"
@@ -112,13 +116,19 @@ fun Application.psfoxModule(env: ServerEnv) {
     }
 
     routing {
-        get(PATH_MANIFEST) {
-            val manifest = env.manifests.forManifest() ?: return@get call.fail(HttpStatusCode.ServiceUnavailable, 4)
+        post(PATH_MANIFEST) {
+            val ids = selectedIds(call) ?: return@post
+            val manifest = env.manifests.forManifest(ids) ?: return@post call.fail(HttpStatusCode.ServiceUnavailable, 4)
             call.respondText(writeManifest(manifest), ContentType.Application.Json)
         }
-        get(PATH_DIGEST) {
-            val digest = env.manifests.forDigest() ?: return@get call.fail(HttpStatusCode.ServiceUnavailable, 4)
+        post(PATH_DIGEST) {
+            val ids = selectedIds(call) ?: return@post
+            val digest = env.manifests.forDigest(ids) ?: return@post call.fail(HttpStatusCode.ServiceUnavailable, 4)
             call.respondText(json.encodeToString(DigestResponse.serializer(), DigestResponse(digest)), ContentType.Application.Json)
+        }
+        get(PATH_PLAYLISTS) {
+            val tree = env.manifests.forPlaylists() ?: return@get call.fail(HttpStatusCode.ServiceUnavailable, 4)
+            call.respondText(writePlaylistTree(tree), ContentType.Application.Json)
         }
         get("$PATH_TRACKS{id}") { sendTrack(env, call) }
         post(PATH_REPORTS) { saveReport(env, call) }
@@ -127,7 +137,7 @@ fun Application.psfoxModule(env: ServerEnv) {
     }
 }
 
-/** 検査 1〜7（P1〜P4）と、P5・P6 の前段。通ればルートへ進めるため真を返す。 */
+/** 検査 1〜7（P1〜P4、P7）と、P5・P6 の前段。通ればルートへ進めるため真を返す。 */
 private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean {
     // 1. 本文の大きさ
     val body = call.receiveChannel().readRemaining(DesktopValues.MAX_BODY_BYTES + 1L).readByteArray()
@@ -141,7 +151,7 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
     val path = call.request.path()
     val needsSignature = when {
         path == PATH_PAIRING_START || path == PATH_PAIRING_CONFIRM -> false
-        path == PATH_MANIFEST || path == PATH_DIGEST || path == PATH_REPORTS -> true
+        path == PATH_MANIFEST || path == PATH_DIGEST || path == PATH_PLAYLISTS || path == PATH_REPORTS -> true
         path.startsWith(PATH_TRACKS) && path.length > PATH_TRACKS.length && '/' !in path.substring(PATH_TRACKS.length) -> true
         else -> {
             call.respond(HttpStatusCode.NotFound)
@@ -215,6 +225,16 @@ private fun decodeBase64Url(text: String): ByteArray? = try {
 
 private suspend fun ApplicationCall.fail(status: HttpStatusCode, errorNumber: Int, detail: String? = null) =
     respondText(json.encodeToString(ErrorBody.serializer(), ErrorBody("E$errorNumber", detail)), ContentType.Application.Json, status)
+
+/** P1・P3 の本文（選んだ ID の配列）の検査。署名の検証の後に、境界で行う。誤りは 400 で、本文の中身は応答にもログにも出さない。 */
+private suspend fun selectedIds(call: ApplicationCall): List<String>? =
+    when (val parsed = parsePlaylistIds(call.attributes[BodyKey].decodeToString(), DesktopValues.MAX_PLAYLIST_IDS)) {
+        is PlaylistIdsResult.Ids -> parsed.ids
+        PlaylistIdsResult.Invalid -> {
+            call.respond(HttpStatusCode.BadRequest)
+            null
+        }
+    }
 
 /** P2（X5-1 の「P2 の検査」）。 */
 private suspend fun sendTrack(env: ServerEnv, call: ApplicationCall) {

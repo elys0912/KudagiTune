@@ -51,13 +51,16 @@ class TrackResponse(
     val source: TrackSource,
 )
 
-/** 接続先 1 件に対する P1〜P4。実体は [PsfoxClient]、試験では偽物。 */
+/** 接続先 1 件に対する P1〜P4、P7。実体は [PsfoxClient]、試験では偽物。 */
 interface SyncApi : AutoCloseable {
-    /** P3：`content_digest`。 */
-    suspend fun digest(): ApiResult<String>
+    /** P3：`content_digest`。[playlistIds] は端末が選んだプレイリストの ID（本文で渡す。D15）。 */
+    suspend fun digest(playlistIds: List<String>): ApiResult<String>
 
-    /** P1：マニフェストの JSON の本文。 */
-    suspend fun manifest(): ApiResult<String>
+    /** P1：マニフェストの JSON の本文。[playlistIds] は P3 と同じ。 */
+    suspend fun manifest(playlistIds: List<String>): ApiResult<String>
+
+    /** P7：プレイリストの木の JSON の本文。 */
+    suspend fun playlists(): ApiResult<String>
 
     /** P2：[rangeFrom] が 0 なら `Range` なし。本文は [block] の中でだけ読める。 */
     suspend fun <T> track(

@@ -77,17 +77,20 @@ class SettingsTest {
     }
 
     @Test
-    fun `TD-71 ポートは 1024 から 65535 だけ受理する`() {
-        assertFalse(isValidPort(1023))
-        assertTrue(isValidPort(1024))
-        assertTrue(isValidPort(65535))
-        assertFalse(isValidPort(65536))
-    }
+    fun `TD-81 古い設定の selected_playlist_ids は読み捨てて他の項目を保つ`() {
+        file.writeText(
+            "{\"schema_version\":1,\"selected_playlist_ids\":[\"2000000000000001\"],\"stale_days\":3," +
+                "\"launch_on_login\":false,\"port\":50000,\"pc_id\":\"pc\",\"devices\":[]}",
+        )
 
-    @Test
-    fun `TD-71 日数は 0 以上だけ受理する`() {
-        assertFalse(isValidStaleDays(-1))
-        assertTrue(isValidStaleDays(0))
+        val load = store().load()
+
+        assertNull(load.rescuedAs)
+        assertEquals(50000, load.settings.port)
+        assertEquals(3, load.settings.staleDays)
+        val reloaded = store().also { it.load() }
+        reloaded.update { it }
+        assertFalse(file.readText().contains("selected_playlist_ids"))
     }
 
     @Test

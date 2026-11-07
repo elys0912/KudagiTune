@@ -11,6 +11,7 @@ import playlistsyncfox.android.sync.PairingDraft
 import playlistsyncfox.android.sync.PairingKeeper
 import playlistsyncfox.android.sync.SavedEndpoint
 import playlistsyncfox.android.sync.SyncScheduler
+import playlistsyncfox.android.sync.SyncValues
 import playlistsyncfox.android.sync.keyAliasOf
 import playlistsyncfox.android.sync.switchAutoSync
 import kotlin.test.Test
@@ -24,8 +25,8 @@ import kotlin.test.assertTrue
 class SettingsUiTest {
     @Test
     fun `TA-119 通知の許可が無いときだけ通知が出ない表示を出す`() {
-        val off = settingsUi("true", pairing(), notificationsAllowed = false, logBytes = 0, cleanup = CleanupState.NeedsPermission)
-        val on = settingsUi("true", pairing(), notificationsAllowed = true, logBytes = 0, cleanup = CleanupState.NeedsPermission)
+        val off = settingsUi("true", storageUi(emptySet(), SyncValues.VOLUME_PRIMARY), pairing(), notificationsAllowed = false, logBytes = 0, cleanup = CleanupState.NeedsPermission)
+        val on = settingsUi("true", storageUi(emptySet(), SyncValues.VOLUME_PRIMARY), pairing(), notificationsAllowed = true, logBytes = 0, cleanup = CleanupState.NeedsPermission)
 
         assertTrue(off.notificationsOff)
         assertFalse(on.notificationsOff)
@@ -33,7 +34,7 @@ class SettingsUiTest {
 
     @Test
     fun `TA-129 保存先は Music の V22 で、ペアリングは PC の名前と指紋を出す`() {
-        val state = settingsUi(null, pairing(), notificationsAllowed = true, logBytes = 0, cleanup = CleanupState.Denied)
+        val state = settingsUi(null, storageUi(emptySet(), SyncValues.VOLUME_PRIMARY), pairing(), notificationsAllowed = true, logBytes = 0, cleanup = CleanupState.Denied)
 
         assertEquals("Music/playlist-sync-fox/", state.saveFolder)
         assertEquals("pc.example.invalid", state.pcName)
@@ -156,5 +157,29 @@ class PairingKeeperTest {
         assertFalse(PairingKeeper(store, vault, now = { 1 }).unpair())
 
         assertNotNull(store.pairingRow)
+    }
+}
+
+class StorageUiTest {
+    private val primary = SyncValues.VOLUME_PRIMARY
+
+    @Test
+    fun `TA-223 本体は常に選べ、SD は本体以外の名前が返ったときだけ選べる`() {
+        val without = storageUi(setOf(primary), primary)
+        val with = storageUi(setOf(primary, "1234-ABCD"), primary)
+
+        assertEquals(listOf("本体"), without.options.map { it.label })
+        assertEquals(listOf("本体", "SD"), with.options.map { it.label })
+        assertTrue(with.options.all { it.available })
+    }
+
+    @Test
+    fun `TA-223 選んだ SD が抜かれていれば見つからないとして残し、本体へ替えない`() {
+        val ui = storageUi(setOf(primary), "1234-ABCD")
+
+        assertEquals("1234-ABCD", ui.selected)
+        val missing = ui.options.single { it.volume == "1234-ABCD" }
+        assertFalse(missing.available)
+        assertEquals("SD（見つからない）", missing.label)
     }
 }

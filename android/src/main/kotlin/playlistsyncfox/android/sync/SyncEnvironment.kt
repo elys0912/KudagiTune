@@ -40,7 +40,11 @@ class SyncEnvironment(
     val lan: LanResolver,
     /** T4 の `key_alias` の別名が Keystore にあるか（X6-6）。 */
     val aliasExists: (String) -> Boolean,
-    /** 共有ストレージの割り当て可能な空き。測れなければ null。worker スレッドで呼ぶ。 */
+    /** 保存先のボリューム名（T7 の `storage_volume`。D16）。 */
+    val volume: String,
+    /** [volume] が今つながっているか。つながっていなければ同期を始めない。 */
+    val volumeAvailable: Boolean,
+    /** 保存先の空き。測れなければ null。worker スレッドで呼ぶ。 */
     val freeBytes: suspend () -> Long?,
     /** `setForeground`。起動の制限などで例外になったら偽。 */
     val promote: suspend () -> Boolean,
@@ -59,3 +63,13 @@ class SyncEnvironment(
 )
 
 val ProcessGate = Mutex()
+
+/** 同期を始められない理由（X6-3 の手順 0）。 */
+enum class StartBlock { NoSelection, StorageMissing }
+
+/** 選択が空、または保存先が無いとき、同期を始めない（D15、D16）。画面側も同じ判定を先に行う。 */
+suspend fun SyncEnvironment.startBlock(): StartBlock? = when {
+    store.selectedPlaylists().isEmpty() -> StartBlock.NoSelection
+    !volumeAvailable -> StartBlock.StorageMissing
+    else -> null
+}

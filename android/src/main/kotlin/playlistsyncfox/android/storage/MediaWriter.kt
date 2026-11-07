@@ -90,6 +90,38 @@ class MediaWriter(
         }
     }
 
+    /**
+     * 保存先の切り替え（D16、X6-3 の手順 3b）。T1、T2 のあるボリュームが [volume] と違えば、行を T9 へ移して T5 を捨てる
+     * （差分が全曲の「足す」になる）。戻り値は、切り替え前の場所のファイルが T9 に残っているか。
+     */
+    suspend fun relocateTo(volume: String): Boolean = withContext(io) {
+        if (placedVolume() != volume) {
+            // 取得の途中は切り替え前のボリュームに書きかけている。全部捨てる
+            for (row in store.expiredPending(Long.MAX_VALUE)) discardPending(row)
+            store.relocate(deviceId, volume)
+        }
+        store.relocatedUris().isNotEmpty()
+    }
+
+    /** 保存先が変わった、または前の切り替えの後始末が済んでいない。真のとき、自動の「内容が同じ」の省略をしない。 */
+    suspend fun relocationNeeded(volume: String): Boolean = withContext(io) {
+        placedVolume() != volume || store.relocatedUris().isNotEmpty()
+    }
+
+    private suspend fun placedVolume() = store.setting(SyncValues.PLACED_VOLUME_KEY) ?: SyncValues.VOLUME_PRIMARY
+
+    /** 取り直しが完了で終わった後に、切り替え前の場所のファイルを消す。権限の例外の行は T9 に残し、次の同期で試す。 */
+    suspend fun deleteRelocated() = withContext(io) {
+        for (uri in store.relocatedUris()) {
+            try {
+                files.delete(uri)
+            } catch (_: SecurityException) {
+                continue
+            }
+            store.removeRelocated(uri)
+        }
+    }
+
     /** 整理 3：T2 に無い、自分の pending の m3u8（新規の insert の途中で落ちた残り）を消す。 */
     suspend fun deleteOrphanPendingPlaylists() = withContext(io) {
         val known = store.playlists(deviceId).mapTo(HashSet()) { it.mediaUri }

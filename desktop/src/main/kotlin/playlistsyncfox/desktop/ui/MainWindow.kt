@@ -47,7 +47,6 @@ private fun warningText(warning: Warning): String = when (warning) {
     Warning.PortInUse -> "ポートが使用中でサーバーを起動できない"
     Warning.KeyStorageFailed -> "鍵を読み出せません。対処は説明書"
     Warning.KeyMissing -> "この端末の鍵が見つかりません。PC と端末の両方で解除して再ペアリング"
-    Warning.SelectionEmpty -> "プレイリストが選ばれていない"
     Warning.CertificateRegenerated -> "証明書を作り直した。端末は再ペアリングが要る"
     Warning.SettingsReset -> "設定を読めず、退避して既定で起動した"
 }
@@ -57,7 +56,7 @@ fun MainWindowContent(app: PcApp, state: PcState) {
     Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text(trayText(trayStatus(state)), style = MaterialTheme.typography.headlineSmall)
         state.warnings.forEach { Text(warningText(it), color = MaterialTheme.colorScheme.error) }
-        PlaylistsSection(app, state)
+        XmlSection(state)
         DeviceSection(app, state)
         PairingSection(app, state)
         SettingsSection(app)
@@ -65,35 +64,14 @@ fun MainWindowContent(app: PcApp, state: PcState) {
 }
 
 @Composable
-private fun PlaylistsSection(app: PcApp, state: PcState) {
-    Text("プレイリスト", style = MaterialTheme.typography.titleMedium)
+private fun XmlSection(state: PcState) {
+    Text("iTunes ライブラリ", style = MaterialTheme.typography.titleMedium)
     when (val xml = state.xml) {
         is XmlStatus.Unreadable ->
             Text("XML を読めない。iTunes の詳細設定「Share iTunes Library XML with other applications」を有効にする", color = MaterialTheme.colorScheme.error)
         is XmlStatus.Stale -> Text("XML の更新が古い（${xml.days} 日）")
-        else -> Unit
+        else -> Text("XML を読めている")
     }
-    // 読めない間は前回の内容を保たず空にする（playlists は読めた結果から作る）
-    if (state.xml !is XmlStatus.Unreadable) state.playlists.forEach { NodeRow(app, state, it, 0) }
-    state.missingIds.forEach { id ->
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("見つからない：$id")
-            Button(onClick = { app.selectPlaylists(withLeafChecked(state.selectedIds, id, false)) }) { Text("外す") }
-        }
-    }
-}
-
-@Composable
-private fun NodeRow(app: PcApp, state: PcState, node: PlaylistNode, depth: Int) {
-    val leaves = leafIds(node)
-    val checked = leaves.isNotEmpty() && leaves.all { it in state.selectedIds }
-    Row(Modifier.padding(start = (depth * 16).dp), verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked = checked, onCheckedChange = { on ->
-            app.selectPlaylists(if (node.children == null) withLeafChecked(state.selectedIds, node.id, on) else withFolderChecked(state.selectedIds, node, on))
-        })
-        Text(if (node.children == null) "${node.name}（${node.trackCount} 曲）" else node.name)
-    }
-    node.children?.forEach { NodeRow(app, state, it, depth + 1) }
 }
 
 @Composable
@@ -119,8 +97,8 @@ private fun PairingSection(app: PcApp, state: PcState) {
     when (val pairing = state.pairing) {
         is PairingView.Open -> {
             val remaining = Duration.between(Instant.now(), pairing.expiresAt).seconds.coerceAtLeast(0)
-            Text("コード：${pairing.code}（残り $remaining 秒、失敗 ${pairing.failedAttempts} 回）", style = MaterialTheme.typography.headlineSmall)
-            state.fingerprint?.let { Text("指紋：$it") }
+            Text("ペアリングコード：${pairing.code}（残り $remaining 秒、失敗 ${pairing.failedAttempts} 回）", style = MaterialTheme.typography.headlineSmall)
+            state.fingerprint?.let { Text("確認コード：$it") }
             state.endpoints.forEach { Text("接続先：$it") }
             Button(onClick = { app.showPairingCode() }) { Text("作り直す") }
             Button(onClick = { app.closePairing() }) { Text("閉じる") }
@@ -142,12 +120,6 @@ private fun SettingsSection(app: PcApp) {
     OutlinedTextField(xmlPath, { xmlPath = it }, label = { Text("XML の場所") }, modifier = Modifier.fillMaxWidth())
     Button(onClick = { xmlMessage = if (app.setXmlPath(xmlPath) == XmlPathResult.Saved) "保存した" else "読めない" }) { Text("確かめて保存") }
     Text(xmlMessage)
-
-    var days by remember { mutableStateOf(settings.staleDays.toString()) }
-    OutlinedTextField(days, { days = it; days.toIntOrNull()?.let(app::setStaleDays) }, label = { Text("古いと警告する日数（0 で警告しない）") })
-
-    var port by remember { mutableStateOf(settings.port.toString()) }
-    OutlinedTextField(port, { port = it; port.toIntOrNull()?.let(app::setPort) }, label = { Text("サーバーのポート（1024〜65535）") })
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         var launch by remember { mutableStateOf(settings.launchOnLogin) }

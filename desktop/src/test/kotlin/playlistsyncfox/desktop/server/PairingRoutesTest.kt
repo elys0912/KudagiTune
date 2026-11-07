@@ -118,7 +118,7 @@ class PairingRoutesTest {
         second.useLibrary(dir.resolve("any.mp3").also { it.writeBytes(ByteArray(1)) })
 
         withServer(second) { client ->
-            assertEquals(HttpStatusCode.OK, client.signed(second, HttpMethod.Get, "/v1/digest", key = key!!).status)
+            assertEquals(HttpStatusCode.OK, client.signed(second, HttpMethod.Post, "/v1/digest", SELECTION, key = key!!).status)
         }
     }
 
@@ -163,7 +163,7 @@ class PairingRoutesTest {
             }
 
             f.addDevice()
-            assertEquals(HttpStatusCode.OK, client.signed(f, HttpMethod.Get, "/v1/digest").status)
+            assertEquals(HttpStatusCode.OK, client.signed(f, HttpMethod.Post, "/v1/digest", SELECTION).status)
         }
     }
 
@@ -215,13 +215,13 @@ class PairingRoutesTest {
         val f = ServerFixture(dir).also { it.addDevice(); it.useLibrary(createTrack()) }
 
         withServer(f) { client ->
-            assertEquals(HttpStatusCode.OK, client.signed(f, HttpMethod.Get, "/v1/digest").status)
+            assertEquals(HttpStatusCode.OK, client.signed(f, HttpMethod.Post, "/v1/digest", SELECTION).status)
 
             f.registry.unpair(DEVICE)
 
             assertNull(f.store.read("device/$DEVICE"))
             assertTrue(f.settings.current.devices.isEmpty())
-            assertEquals(HttpStatusCode.Unauthorized, client.signed(f, HttpMethod.Get, "/v1/digest").status)
+            assertEquals(HttpStatusCode.Unauthorized, client.signed(f, HttpMethod.Post, "/v1/digest", SELECTION).status)
         }
     }
 
@@ -245,7 +245,7 @@ class PairingRoutesTest {
         f.useLibrary(createTrack())
 
         withServer(f) { client ->
-            assertEquals(HttpStatusCode.Unauthorized, client.signed(f, HttpMethod.Get, "/v1/digest").status)
+            assertEquals(HttpStatusCode.Unauthorized, client.signed(f, HttpMethod.Post, "/v1/digest", SELECTION).status)
             assertEquals(setOf(DEVICE), f.keyRing.missing)
         }
     }
@@ -261,7 +261,7 @@ class PairingRoutesTest {
         withServer(f) { client ->
             f.addDevice()
             val wrongKey = ByteArray(32) { 0x42 }
-            val bad = sign(f, HttpMethod.Get, "/v1/digest", key = wrongKey)
+            val bad = sign(f, HttpMethod.Post, "/v1/digest", SELECTION, key = wrongKey)
             secrets += bad.signature
             client.get("/v1/digest") {
                 header(SignatureHeaderNames.DEVICE, bad.device)

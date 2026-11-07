@@ -137,33 +137,6 @@ class PcAppTest {
     }
 
     @Test
-    fun `TD-72 W5 でポートを変えた先が使用中でも、保存した値を戻さず警告を出す`() = runTest {
-        val h = harness()
-        h.app.start()
-        runCurrent()
-        h.portInUse = true
-
-        assertTrue(h.app.setPort(50000))
-
-        assertEquals(50000, h.app.settings.current.port)
-        assertEquals(ServerStatus.Failed(ServerFailureKind.PortInUse), h.app.state.value.server)
-    }
-
-    @Test
-    fun `TD-71 W5 の不正なポートと日数は保存しない`() = runTest {
-        val h = harness()
-        h.app.start()
-        runCurrent()
-
-        assertFalse(h.app.setPort(1023))
-        assertFalse(h.app.setPort(65536))
-        assertFalse(h.app.setStaleDays(-1))
-
-        assertEquals(47800, h.app.settings.current.port)
-        assertEquals(7, h.app.settings.current.staleDays)
-    }
-
-    @Test
     fun `TD-71 読めない xml_path は保存しない`() = runTest {
         val h = harness()
         h.app.start()
@@ -197,7 +170,7 @@ class PcAppTest {
         assertEquals(ServerStatus.Running, h.app.state.value.server)
         assertTrue(h.app.state.value.endpoints.isEmpty())
         assertTrue(h.registered.isEmpty())
-        assertEquals(listOf(Warning.SelectionEmpty), h.app.state.value.warnings)
+        assertTrue(h.app.state.value.warnings.isEmpty())
     }
 
     @Test

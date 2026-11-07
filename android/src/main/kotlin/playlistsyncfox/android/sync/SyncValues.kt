@@ -57,6 +57,15 @@ object SyncValues {
     /** V53 P3 の応答の待ち（仮。C-13 で計る）。 */
     const val DIGEST_RESPONSE_WAIT_MS = 60_000L
 
+    /** T7 のキー：保存先のボリューム名（D16）。無ければ本体。 */
+    const val STORAGE_VOLUME_KEY = "storage_volume"
+
+    /** T7 のキー：T1、T2 の行があるボリューム名。保存先の切り替えの判定に使う。無ければ本体。 */
+    const val PLACED_VOLUME_KEY = "placed_volume"
+
+    /** 本体の MediaStore のボリューム名（`MediaStore.VOLUME_EXTERNAL_PRIMARY`）。 */
+    const val VOLUME_PRIMARY = "external_primary"
+
     /** E7・利用者の中断の後に、m3u8 を書くために待てる時間（「数秒以内」に戻る必要があるため）。 */
     const val PLAYLIST_ON_STOP_WAIT_MS = 3_000L
 }

@@ -50,14 +50,15 @@ class SyncPreview(private val env: SyncEnvironment) {
         val pairing = env.store.pairing() ?: return RemovalCheck.Failed(reachFailed = false)
         // 鍵が無いときの E2 はワーカーが記録する。ここでは届かなかったことにしない
         if (!env.aliasExists(pairing.keyAlias)) return RemovalCheck.Failed(reachFailed = false)
+        val selectedIds = env.store.selectedPlaylists().map { it.playlistId }
 
         var mismatch = false
         for (kind in endpointOrder(pairing)) {
-            val endpoint = endpointFor(pairing, kind) ?: continue
+            val endpoint = env.endpointFor(pairing, kind) ?: continue
             val api = env.apis.open(endpoint)
             try {
-                when (val reach = api.digest()) {
-                    is ApiResult.Ok -> return gateOf(pairing, api)
+                when (val reach = api.digest(selectedIds)) {
+                    is ApiResult.Ok -> return gateOf(pairing, api, selectedIds)
                     is ApiResult.Fail -> when (reach.failure) {
                         ApiFailure.Disconnected -> Unit
                         ApiFailure.PinMismatch -> mismatch = true
@@ -72,8 +73,8 @@ class SyncPreview(private val env: SyncEnvironment) {
         return RemovalCheck.Failed(reachFailed = !mismatch)
     }
 
-    private suspend fun gateOf(pairing: Pairing, api: playlistsyncfox.android.net.SyncApi): RemovalCheck {
-        val body = (api.manifest() as? ApiResult.Ok)?.value ?: return RemovalCheck.Failed(reachFailed = false)
+    private suspend fun gateOf(pairing: Pairing, api: playlistsyncfox.android.net.SyncApi, selectedIds: List<String>): RemovalCheck {
+        val body = (api.manifest(selectedIds) as? ApiResult.Ok)?.value ?: return RemovalCheck.Failed(reachFailed = false)
         val manifest = (readManifest(body) as? ManifestReadResult.Loaded)?.manifest ?: return RemovalCheck.Failed(reachFailed = false)
         val placed = env.store.placedTracks(pairing.deviceId)
         val diff = computeDiff(
@@ -90,14 +91,15 @@ class SyncPreview(private val env: SyncEnvironment) {
             else -> RemovalCheck.NeedsConfirmation(diff.toRemove.size)
         }
     }
+}
 
-    private suspend fun endpointFor(pairing: Pairing, kind: String): Endpoint? = when (kind) {
-        LAN -> {
-            val found = withTimeoutOrNull(SyncValues.NSD_RESOLVE_WAIT_MS) { env.lan.discover() }
-            found?.firstOrNull { it.pcIdPrefix.isNotEmpty() && pairing.pcId.startsWith(it.pcIdPrefix) }
-                ?.let { Endpoint(Transport.Lan, it.host, it.port) }
-        }
-        TAILSCALE -> parseHostPort(Transport.Tailscale, pairing.endpointTailscale)
-        else -> parseHostPort(Transport.UsbTethering, pairing.endpointUsb)
+/** 接続先の方式 [kind] の宛先。LAN は NSD で引き直す（X6-3 の手順 2 の 2）。到達確認と P7 の取得で共有する。 */
+internal suspend fun SyncEnvironment.endpointFor(pairing: Pairing, kind: String): Endpoint? = when (kind) {
+    LAN -> {
+        val found = withTimeoutOrNull(SyncValues.NSD_RESOLVE_WAIT_MS) { lan.discover() }
+        found?.firstOrNull { it.pcIdPrefix.isNotEmpty() && pairing.pcId.startsWith(it.pcIdPrefix) }
+            ?.let { Endpoint(Transport.Lan, it.host, it.port) }
     }
+    TAILSCALE -> parseHostPort(Transport.Tailscale, pairing.endpointTailscale)
+    else -> parseHostPort(Transport.UsbTethering, pairing.endpointUsb)
 }

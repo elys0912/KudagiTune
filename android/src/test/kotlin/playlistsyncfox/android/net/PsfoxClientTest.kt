@@ -77,6 +77,8 @@ class CountingCrypto : CryptoProvider {
 
 private val ENDPOINT = Endpoint(Transport.Lan, "192.0.2.10", 47800)
 
+private val IDS = listOf("00000000000000A1", "00000000000000B2")
+
 private fun client(
     pinMismatched: () -> Boolean = { false },
     handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
@@ -172,8 +174,8 @@ class PsfoxClientTest {
     @Test
     fun `TA-031 マニフェストと digest の 400 と 404 と 500 は E なしの停止で 503 は E4`() = runTest {
         for ((status, want) in listOf(400 to ApiFailure.ServerFault, 404 to ApiFailure.ServerFault, 500 to ApiFailure.ServerFault, 503 to ApiFailure.XmlUnavailable)) {
-            assertEquals(ApiResult.Fail(want), client { failure(status) }.manifest(), "P1 $status")
-            assertEquals(ApiResult.Fail(want), client { failure(status) }.digest(), "P3 $status")
+            assertEquals(ApiResult.Fail(want), client { failure(status) }.manifest(IDS), "P1 $status")
+            assertEquals(ApiResult.Fail(want), client { failure(status) }.digest(IDS), "P3 $status")
         }
     }
 
@@ -193,7 +195,7 @@ class PsfoxClientTest {
 
         api.track("A", 1, 1, rangeFrom = 0) { }
         api.track("A", 1, 1, rangeFrom = 0) { }
-        api.digest()
+        api.digest(IDS)
 
         for (request in seen) {
             for (name in listOf(SignatureHeaderNames.DEVICE, SignatureHeaderNames.TIMESTAMP, SignatureHeaderNames.NONCE, SignatureHeaderNames.SIGNATURE)) {
@@ -234,11 +236,43 @@ class PsfoxClientTest {
         }
 
         api.track("A", 1, 1, rangeFrom = 0) { }
-        val manifest = api.manifest()
+        val manifest = api.manifest(IDS)
 
         assertFalse("gzip" in seen[0].headers[HttpHeaders.AcceptEncoding].orEmpty())
         assertEquals("gzip", seen[1].headers[HttpHeaders.AcceptEncoding])
         assertEquals(ApiResult.Ok("{\"a\":1}"), manifest)
+    }
+
+    @Test
+    fun `TA-224 P1 と P3 は POST で本文に選んだ ID の配列を JSON で送る`() = runTest {
+        val seen = mutableListOf<Pair<HttpRequestData, String>>()
+        val api = client {
+            seen += it to (it.body as io.ktor.http.content.OutgoingContent.ByteArrayContent).bytes().decodeToString()
+            if (it.url.encodedPath == "/v1/digest") respond("""{"content_digest":"d"}""", HttpStatusCode.OK) else respond("{}", HttpStatusCode.OK)
+        }
+
+        api.manifest(IDS)
+        api.digest(IDS)
+
+        for ((request, body) in seen) {
+            assertEquals(io.ktor.http.HttpMethod.Post, request.method)
+            assertEquals("""{"playlist_ids":["00000000000000A1","00000000000000B2"]}""", body)
+        }
+        assertEquals(listOf("/v1/manifest", "/v1/digest"), seen.map { it.first.url.encodedPath })
+    }
+
+    @Test
+    fun `TA-224 P7 は GET でプレイリストの本文を返し 503 は E4 にする`() = runTest {
+        val seen = mutableListOf<HttpRequestData>()
+        val ok = client {
+            seen += it
+            respond("""{"playlists":[]}""", HttpStatusCode.OK)
+        }
+
+        assertEquals(ApiResult.Ok("""{"playlists":[]}"""), ok.playlists())
+        assertEquals(io.ktor.http.HttpMethod.Get, seen.single().method)
+        assertEquals("/v1/playlists", seen.single().url.encodedPath)
+        assertEquals(ApiResult.Fail(ApiFailure.XmlUnavailable), client { failure(503) }.playlists())
     }
 
     @Test
@@ -249,7 +283,7 @@ class PsfoxClientTest {
             respond("""{"content_digest":"d"}""", HttpStatusCode.OK)
         }
 
-        api.digest()
+        api.digest(IDS)
 
         val config = assertIs<io.ktor.client.plugins.HttpTimeoutConfig>(timeout)
         assertEquals(SyncValues.CONNECT_WAIT_MS, config.connectTimeoutMillis)
@@ -260,14 +294,14 @@ class PsfoxClientTest {
     fun `TA-065 接続の時間切れは切断として分類される`() = runTest {
         val api = client { throw ConnectTimeoutException("時間切れ", null) }
 
-        assertEquals(ApiResult.Fail(ApiFailure.Disconnected), api.digest())
+        assertEquals(ApiResult.Fail(ApiFailure.Disconnected), api.digest(IDS))
     }
 
     @Test
     fun `証明書の不一致で切った接続は切断と区別される`() = runTest {
         val api = client(pinMismatched = { true }) { throw java.io.IOException("切断") }
 
-        assertEquals(ApiResult.Fail(ApiFailure.PinMismatch), api.digest())
+        assertEquals(ApiResult.Fail(ApiFailure.PinMismatch), api.digest(IDS))
     }
 
     @Test
@@ -283,7 +317,7 @@ class PsfoxClientTest {
             nowSeconds = { 0 },
         )
 
-        assertEquals(ApiResult.Fail(ApiFailure.Rejected(ErrorDetail.NoDetail, keyMismatch = true)), broken.digest())
+        assertEquals(ApiResult.Fail(ApiFailure.Rejected(ErrorDetail.NoDetail, keyMismatch = true)), broken.digest(IDS))
     }
 
     @Test
@@ -295,12 +329,12 @@ class PsfoxClientTest {
         try {
             val good = SpkiPinTrustManager(spkiSha256(certificate))
             val reached = PsfoxClient(createTrustedHttpClient(good), Endpoint(Transport.Lan, "127.0.0.1", server.address.port), CountingCrypto(), SigningKeyRef.KeystoreAlias("a"), DEVICE, { 0 }, { good.mismatched })
-            assertEquals(ApiResult.Ok("d"), reached.digest())
+            assertEquals(ApiResult.Ok("d"), reached.digest(IDS))
             assertEquals(1, served.get())
 
             val other = SpkiPinTrustManager(ByteArray(32) { 1 })
             val refused = PsfoxClient(createTrustedHttpClient(other), Endpoint(Transport.Lan, "127.0.0.1", server.address.port), CountingCrypto(), SigningKeyRef.KeystoreAlias("a"), DEVICE, { 0 }, { other.mismatched })
-            assertEquals(ApiResult.Fail(ApiFailure.PinMismatch), refused.digest())
+            assertEquals(ApiResult.Fail(ApiFailure.PinMismatch), refused.digest(IDS))
             assertEquals(1, served.get(), "不一致の接続では要求が届かない")
         } finally {
             server.stop(0)

@@ -6,10 +6,12 @@ import playlistsyncfox.desktop.settings.SettingsStore
 import playlistsyncfox.desktop.watch.HeldLibrary
 import playlistsyncfox.shared.crypto.CryptoProvider
 import playlistsyncfox.shared.manifest.Manifest
+import playlistsyncfox.shared.manifest.PlaylistNode
 import java.time.Clock
 
 /**
- * P1・P3 の処理（X5-1）。読み直し済みの XML と選択の集合から、M1 にマニフェストを作らせる。
+ * P1・P3・P7 の処理（X5-1）。読み直し済みの XML と、要求の本文で渡された選択から、M1 にマニフェストを作らせる。
+ * 選択は保存しない。
  * 読めない状態（[library] が null）では null を返し、呼び出し側が 503（E4）にする。
  */
 class ManifestService(
@@ -22,19 +24,22 @@ class ManifestService(
     private val builder = ManifestBuilder(crypto)
     private val knownNames = HashMap<String, String>()
 
-    /** P1：曲の表を置き換える。 */
-    suspend fun forManifest(): Manifest? = build()?.also { tracks.replace(it.tracks) }?.manifest
+    /** P1：曲の表を、この要求の選択で作ったものに置き換える。 */
+    suspend fun forManifest(selectedIds: List<String>): Manifest? =
+        build(selectedIds)?.also { tracks.replace(it.tracks) }?.manifest
 
     /** P3：曲の表は置き換えない。 */
-    suspend fun forDigest(): String? = build()?.manifest?.contentDigest
+    suspend fun forDigest(selectedIds: List<String>): String? = build(selectedIds)?.manifest?.contentDigest
 
-    private suspend fun build(): BuiltManifest? {
+    /** P7：プレイリストの木。曲の表は置き換えない。 */
+    suspend fun forPlaylists(): List<PlaylistNode>? = library()?.let { buildPlaylistTree(it.result.playlists) }
+
+    private suspend fun build(selectedIds: List<String>): BuiltManifest? {
         val held = library() ?: return null
-        val current = settings.current
         return withContext(Dispatchers.IO) {
             synchronized(knownNames) {
                 held.result.playlists.forEach { knownNames[it.persistentId] = it.name }
-                builder.build(held, current.selectedPlaylistIds, libraryIdOf(held), knownNames.toMap(), clock.instant())
+                builder.build(held, selectedIds, libraryIdOf(held), knownNames.toMap(), clock.instant())
             }
         }
     }

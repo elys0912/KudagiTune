@@ -1,7 +1,7 @@
 # playlist-sync-fox 詳細設計
 
 - 起票：2026-11-05
-- 状態：第 5 稿（2026-11-06。review-13 を反映）。節ごとの稿は X1-2
+- 状態：第 5 稿（2026-11-06。review-13 を反映）。2026-11-07 に D15〜D18 を X2〜X7 へ反映した（X-31〜X-36）。節ごとの稿は X1-2
 - 前提：基本設計 5 本（[basic-design.md](basic-design.md)、[basic-design-b2.md](basic-design-b2.md)、[basic-design-b3.md](basic-design-b3.md)、[basic-design-b4a.md](basic-design-b4a.md)、[basic-design-b4b.md](basic-design-b4b.md)。第 5 稿）と概要設計 3 本（[design-overview.md](design-overview.md)、[requirements.md](requirements.md)、[open-questions.md](open-questions.md)）に従う。review-03 の J7〜J15 は推奨 a で取り込む
 - 置き場：この repo の `docs/`（2026-11-05 に portfolio の `notes/ideas/playlist-sync-fox/` から移した。D5）
 
@@ -58,10 +58,10 @@
 | X1 | [detailed-design.md](detailed-design.md) | 索引、パッケージ、置いた値の候補 | B1 全体 | X1-1〜X1-6 |
 | X2 | detailed-design-x2.md | itunes（M2）と XML の監視 | B2-1、B2-2、B2-3 | X2-1 plist の読み手、X2-2 `file://` の復号、X2-3 読み取りの結果の型、X2-4 監視と読み直し（M3 側）、X2-5 テストの観点 |
 | X3 | detailed-design-x3.md | shared の同期（M1） | B2-4、B2-5、B2-8、B3-1 の規則、B3-3 の形式 | X3-1 マニフェストの型、X3-2 差分の計算、X3-3 保存先のパスの関数、X3-4 m3u8 の生成、X3-5 エラーの型 E1〜E9 と結果の型、X3-6 テストの観点（前提は「X3 の前提」） |
-| X4 | detailed-design-x4.md | shared の認証（M1）と暗号の部品 | B4-2、B4-3 の 1、B4-4 の 6〜8 | X4-1 `CryptoProvider` の表、X4-2 ペアリングの手順、X4-3 署名と再送防止、X4-4 SPKI のハッシュと指紋の表示形式、X4-5 テストの観点 |
+| X4 | detailed-design-x4.md | shared の認証（M1）と暗号の部品 | B4-2、B4-3 の 1、B4-4 の 6〜8 | X4-1 `CryptoProvider` の表、X4-2 ペアリングの手順、X4-3 署名と再送防止、X4-4 SPKI のハッシュと確認コード（旧称「指紋」）の表示形式、X4-5 テストの観点 |
 | X5 | detailed-design-x5.md | desktop（M3） | B4-1 の 1、B4-3 の 2（K1、K2）、B4-4 の 1〜5・8、B4-5、B4-6 の PC | X5-1 サーバー、X5-2 鍵の保管 K1・K2、X5-3 mDNS の広告、X5-4 設定とログ、X5-5 画面 W1〜W5、X5-6 起動と終了、X5-7 テストの観点 |
-| X6 | detailed-design-x6.md | android の保存と同期（M4） | B2-6、B2-7、B3-2、B3-3 の書き方、B3-4、B3-5、B4-3 の 2（K3、K4）、B4-4 の端末側 | X6-1 Room の定義 T1〜T7、X6-2 MediaStore の書き込み、X6-3 同期の実行、X6-4 WorkManager の登録、X6-5 HTTP クライアント、X6-6 鍵の保管 K3・K4、X6-7 テストの観点 |
-| X7 | detailed-design-x7.md | android の画面と権限（M4） | B3-6、B3-7、B4-1 の 2・3、B3-5 の通知、B4-6 の端末 | X7-1 画面 S1〜S5、X7-2 発見と手入力、X7-3 通知、X7-4 権限の一覧、X7-5 ログ、X7-6 ライセンスの表示、X7-7 テストの観点 |
+| X6 | detailed-design-x6.md | android の保存と同期（M4） | B2-6、B2-7、B3-2、B3-3 の書き方、B3-4、B3-5、B4-3 の 2（K3、K4）、B4-4 の端末側 | X6-1 Room の定義 T1〜T9、X6-2 MediaStore の書き込み、X6-3 同期の実行、X6-4 WorkManager の登録、X6-5 HTTP クライアント、X6-6 鍵の保管 K3・K4、X6-7 テストの観点 |
+| X7 | detailed-design-x7.md | android の画面と権限（M4） | B3-6、B3-7、B4-1 の 2・3、B3-5 の通知、B4-6 の端末 | X7-1 画面 S1〜S6、X7-2 発見と手入力、X7-3 通知、X7-4 権限の一覧、X7-5 ログ、X7-6 ライセンスの表示、X7-7 テストの観点 |
 
 テスト計画（X の 7 節の外。B4-8 の方針を束ごとのケースに落とす。3 本と索引は第 3 稿。review-13）：
 
@@ -88,14 +88,14 @@ M1 shared（OS に触れない。時計と乱数は引数で受ける。B1-3）�
 
 | パッケージ | 責務 | 引き受ける節 |
 |---|---|---|
-| `shared.manifest` | マニフェストと P1 の応答の型、`format_version`、`content_digest` | X3-1 |
+| `shared.manifest` | マニフェストと P1 の応答の型、`format_version`、`content_digest`。P1・P3 の要求の本文（選んだ ID の配列）とその検査、P7 の応答（プレイリストの木）の型と選択の操作（フォルダの一括）。2026-11-07 | X3-1 |
 | `shared.diff` | 差分の計算（足す、置き換える、消す）と、その入力・出力の型 | X3-2 |
 | `shared.path` | 保存先のパスの組み立て、使えない文字の置き換え、衝突の解き方 | X3-3 |
 | `shared.m3u8` | m3u8 の生成 | X3-4 |
 | `shared.result` | エラーの種類 E1〜E9 と同期の結果の型 | X3-5 |
 | `shared.auth` | ペアリングの手順、署名の組み立て、再送防止の判定。暗号の実体は持たない | X4-2、X4-3 |
-| `shared.crypto` | `CryptoProvider` の定義（実体は M3、M4）、SPKI のハッシュと指紋の表示形式 | X4-1、X4-4 |
-| `shared.api` | P1〜P6 の要求と応答の型、応答の印 | X3-1、X4-2、X5-1 |
+| `shared.crypto` | `CryptoProvider` の定義（実体は M3、M4）、SPKI のハッシュと確認コード（旧称「指紋」）の表示形式 | X4-1、X4-4 |
+| `shared.api` | P1〜P7 の要求と応答の型、応答の印 | X3-1、X4-2、X5-1 |
 
 M2 itunes（JVM。HTTP と画面と同期の判断を持たない。B1-3）：
 
@@ -111,7 +111,7 @@ M3 desktop（JVM。差分の判断、m3u8 の生成、plist の解釈を持た�
 
 | パッケージ | 責務 | 引き受ける節 |
 |---|---|---|
-| `desktop.server` | Ktor のルート P1〜P6、要求の検査、Range、gzip | X5-1 |
+| `desktop.server` | Ktor のルート P1〜P7、要求の検査、Range、gzip | X5-1 |
 | `desktop.vault` | K1・K2 の DPAPI による保管、証明書の生成と更新 | X5-2 |
 | `desktop.discovery` | mDNS の広告（JmDNS） | X5-3 |
 | `desktop.settings` | 設定とログの書き込みと読み取り | X5-4 |
@@ -123,13 +123,13 @@ M4 android（差分の判断、m3u8 の生成、署名の手順の中身を持�
 
 | パッケージ | 責務 | 引き受ける節 |
 |---|---|---|
-| `android.db` | Room の定義 T1〜T7 と移行 | X6-1 |
+| `android.db` | Room の定義 T1〜T9 と移行（版 2。2026-11-07） | X6-1 |
 | `android.storage` | MediaStore の書き込み、読み戻し、置き換え、削除 | X6-2 |
 | `android.sync` | 同期の実行（ワーカー）、前面サービス、WorkManager の登録 | X6-3、X6-4 |
 | `android.net` | Ktor のクライアント、SPKI の固定、署名ヘッダの付与、Range | X6-5 |
 | `android.vault` | K3、K4 の保管（Keystore）、`CryptoProvider` の実体（端末側） | X4-1、X6-6 |
 | `android.discovery` | NSD の発見、手入力の検査 | X7-2 |
-| `android.ui` | 画面 S1〜S5、権限の要求 | X7-1、X7-4 |
+| `android.ui` | 画面 S1〜S6、権限の要求 | X7-1、X7-4 |
 | `android.notify` | 通知 | X7-3 |
 | `android.log` | ログの書き込み、閲覧、共有 | X7-5 |
 
@@ -218,6 +218,7 @@ version catalog の項目名（版は書かない。B1-6。項目名は候補で
 | 第 4 稿 | 2026-11-06 | X1〜X7 を第 4 稿に揃えた（review-11）。X1-1 の約束に V37・V47 の例外、X1-2 にテスト計画の対応、C-1〜C-14 への参照の更新 |
 | 第 4 稿 | 2026-11-06 | review-12（相互レビューと最終確認の 84 件）を反映した（J22〜J32）。稿の番号と表記は第 4 稿のまま上げなかった |
 | 第 5 稿 | 2026-11-06 | review-13（シナリオ追跡、ファイル横断、テスト計画、上流との照合）を反映した（J33〜J43）。X1 は稿の表記、X-17 の文、X-25〜X-30（X6 の決定 3b・8〜11 と X4 の決定 4）を直した。X2〜X5 の直しは各節の本文。review-14（シナリオ追跡、整合の確認 3 本）を反映した（J44〜J48） |
+| 第 5 稿（追記） | 2026-11-07 | D15〜D18 を X2〜X7 へ反映した（選択を端末へ、P1・P3 を POST、P7、T8・T9、S6、保存先の切り替え、確認コード）。稿の番号は上げない |
 
 ### X1-6 決定（未付番）の一覧
 
@@ -259,6 +260,12 @@ version catalog の項目名（版は書かない。B1-6。項目名は候補で
 | X-28 | X6-3 | 確認の取り消しは「消す」だけ飛ばして同期する。`LibraryChanged` は承認後に記録の `library_id` を更新する。「消す」が 1 件以上あり、かつ未解決のプレイリストがあれば、「消す」は確認の扱い（X6 の決定 10） | B2-5、X7-1-2 と合わせる | 決定（J24、J25、J26）|
 | X-29 | X6-2 | 「以前の曲を一覧する」に T2 に無い m3u8 を含める。証明書の不一致は E2（X6 の決定 11） | 入れ直し後の古い m3u8、B4-3 との一致 | 決定（J28、J32）|
 | X-30 | X4-3-2 | 時刻の検査は device_id の引き当ての前に行う（X4 の決定 4） | 時刻の誤りの応答を登録の有無によらず同じにする | 決定（review-11）|
+| X-31 | X3-1、X5-1 | P1・P3 の要求の本文は `{"playlist_ids":[…]}`。検査は境界（X5-1）で行い、書式の検査は shared に置く（`parsePlaylistIds`）。P7 の応答の型とフォルダの一括操作の関数も shared に置く（端末が使う） | PC と端末が同じ型を使う | 決定（未付番、2026-11-07 先生。D15 に基づく） |
+| X-32 | X5-1 | P2 の曲の表は P1 の要求の選択で作ったものに置き換える。P3 と P7 では置き換えない | 選んでいない曲を配らない（N1-7） | 決定（未付番、2026-11-07 先生。D15 に基づく） |
+| X-33 | X5-4 | `settings.json` から `selected_playlist_ids` を消す。古い設定に残っていても読み捨てる（`schema_version` は 1 のまま） | PC は選択を持たない | 決定（未付番、2026-11-07 先生） |
+| X-34 | X6-1 | Room の版を 2 にし、手書きの `MIGRATION_1_2` で T8・T9 を足す | X-14 | 決定（未付番、2026-11-07 先生。D15、D16 に基づく） |
+| X-35 | X6-2、X6-3 | 保存先の切り替えは、実行の始めに T1・T2 を T9 へ移して差分を全曲の「足す」にする。完了で終えたときだけ T9 のファイルを消す | 途中で失敗しても古い曲を消さない（D16） | 決定（未付番、2026-11-07 先生。D16 に基づく） |
+| X-36 | X5-5 | PC の画面の「古いと警告する日数」と「サーバーのポート」の入力を外す（`settings.json` で変える） | D17 の「極力置かない」 | 判断待ち（2026-11-07。先生の解釈の確認） |
 
 - X4・X6 の「決定（未付番）」の番号は各節の別系列で、X-n と別。対応は次のとおり。X4 の 1〜3＝X-11〜X-13、4＝X-30。X6 の 1〜7＝X-14〜X-20、3b＝X-25、8＝X-26、9＝X-27、10＝X-28、11＝X-29（番号の振り直しはしない）
 - X5 は決定（未付番）なし。X6 の元の決定 4（m3u8 の insert 案を T7 に保存）は J18 で消えた

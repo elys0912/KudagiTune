@@ -8,7 +8,10 @@ import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
+import playlistsyncfox.android.sync.SyncValues
 
 @Dao
 abstract class SyncDao {
@@ -98,6 +101,55 @@ abstract class SyncDao {
     @Query("SELECT * FROM playlists")
     abstract fun observePlaylists(): Flow<List<WrittenPlaylist>>
 
+    @Query("SELECT * FROM selected_playlists ORDER BY selected_at, playlist_id")
+    abstract suspend fun selectedPlaylists(): List<SelectedPlaylist>
+
+    @Query("SELECT * FROM selected_playlists ORDER BY selected_at, playlist_id")
+    abstract fun observeSelectedPlaylists(): Flow<List<SelectedPlaylist>>
+
+    @Query("DELETE FROM selected_playlists")
+    abstract suspend fun clearSelection()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun insertSelection(rows: List<SelectedPlaylist>)
+
+    /** 選択は全置き換え（1 取引）。 */
+    @Transaction
+    open suspend fun replaceSelection(rows: List<SelectedPlaylist>) {
+        clearSelection()
+        insertSelection(rows)
+    }
+
+    @Query("SELECT * FROM relocated_files")
+    abstract suspend fun relocatedFiles(): List<RelocatedFile>
+
+    @Query("DELETE FROM relocated_files WHERE media_uri = :mediaUri")
+    abstract suspend fun deleteRelocated(mediaUri: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun insertRelocated(rows: List<RelocatedFile>)
+
+    @Query("DELETE FROM placed_tracks WHERE device_id = :deviceId")
+    abstract suspend fun deleteAllPlaced(deviceId: String)
+
+    @Query("DELETE FROM playlists WHERE device_id = :deviceId")
+    abstract suspend fun deleteAllPlaylists(deviceId: String)
+
+    @Query("DELETE FROM pending_transfers")
+    abstract suspend fun deleteAllPending()
+
+    /** 保存先の切り替え。T1、T2 の行を T9 へ移し、T5 を消し、`placed_volume` を新しい値にする（1 取引）。 */
+    @Transaction
+    open suspend fun relocate(deviceId: String, volume: String) {
+        insertRelocated(
+            placedTracks(deviceId).map { RelocatedFile(it.mediaUri) } + playlists(deviceId).map { RelocatedFile(it.mediaUri) },
+        )
+        deleteAllPlaced(deviceId)
+        deleteAllPlaylists(deviceId)
+        deleteAllPending()
+        putSetting(AppSetting(SyncValues.PLACED_VOLUME_KEY, volume))
+    }
+
     @Query("SELECT value FROM app_settings WHERE `key` = :key")
     abstract suspend fun setting(key: String): String?
 
@@ -106,7 +158,7 @@ abstract class SyncDao {
 }
 
 /**
- * 版は 1。版を上げるときは手書きの `Migration` を書く（破壊的な再作成は使わない。X6-1）。
+ * 版は 2。版を上げるときは手書きの `Migration` を書く（破壊的な再作成は使わない。X6-1）。
  * スキーマの JSON は `android/schemas` に書き出す。
  */
 @Database(
@@ -118,10 +170,23 @@ abstract class SyncDao {
         PendingTransfer::class,
         RunIssue::class,
         AppSetting::class,
+        SelectedPlaylist::class,
+        RelocatedFile::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun syncDao(): SyncDao
+}
+
+/** 版 1 → 2：T8、T9 を足す（D15、D16）。既存の表は変えない。 */
+val MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `selected_playlists` (`playlist_id` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                "`selected_at` INTEGER NOT NULL, PRIMARY KEY(`playlist_id`))",
+        )
+        db.execSQL("CREATE TABLE IF NOT EXISTS `relocated_files` (`media_uri` TEXT NOT NULL, PRIMARY KEY(`media_uri`))")
+    }
 }

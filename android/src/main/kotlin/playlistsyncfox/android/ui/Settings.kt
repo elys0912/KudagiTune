@@ -17,8 +17,30 @@ sealed interface CleanupState {
     data class Found(val items: List<StoredFile>) : CleanupState
 }
 
+/** 保存先の選択肢（S5。D16）。[available] が偽は、選んでいるが今は見つからない SD。 */
+data class StorageOption(val volume: String, val label: String, val available: Boolean)
+
+data class StorageUi(val selected: String, val options: List<StorageOption>)
+
+/**
+ * 本体は常に選べる。SD は `MediaStore.getExternalVolumeNames` が返す本体以外の名前（[mounted]）。
+ * [saved] が本体以外で今つながっていなければ、「見つからない」の選択肢として残す（本体へ切り替えない）。
+ */
+fun storageUi(mounted: Set<String>, saved: String): StorageUi {
+    val others = mounted.filter { it != SyncValues.VOLUME_PRIMARY }.sorted()
+    val options = buildList {
+        add(StorageOption(SyncValues.VOLUME_PRIMARY, "本体", available = true))
+        others.forEachIndexed { index, volume ->
+            add(StorageOption(volume, if (others.size == 1) "SD" else "SD ${index + 1}", available = true))
+        }
+        if (saved != SyncValues.VOLUME_PRIMARY && saved !in others) add(StorageOption(saved, "SD（見つからない）", available = false))
+    }
+    return StorageUi(saved, options)
+}
+
 data class SettingsUiState(
     val autoEnabled: Boolean,
+    val storage: StorageUi,
     /** `Music/<V22>/`。 */
     val saveFolder: String,
     val pcName: String?,
@@ -29,9 +51,10 @@ data class SettingsUiState(
     val cleanup: CleanupState,
 )
 
-fun settingsUi(autoSetting: String?, pairing: Pairing?, notificationsAllowed: Boolean, logBytes: Long, cleanup: CleanupState) =
+fun settingsUi(autoSetting: String?, storage: StorageUi, pairing: Pairing?, notificationsAllowed: Boolean, logBytes: Long, cleanup: CleanupState) =
     SettingsUiState(
         autoEnabled = autoSetting == "true",
+        storage = storage,
         saveFolder = SyncValues.MEDIA_ROOT,
         pcName = pairing?.pcName,
         fingerprint = pairing?.let { fingerprintOf(it.spkiHash) },

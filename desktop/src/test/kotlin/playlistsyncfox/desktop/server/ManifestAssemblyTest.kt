@@ -155,7 +155,7 @@ class ManifestAssemblyTest {
     private fun service(library: HeldLibrary, fallback: String?): ManifestService {
         val settings = SettingsStore(dir.resolve("settings-${System.nanoTime()}.json")) { "pc" }
         settings.load()
-        settings.update { it.copy(selectedPlaylistIds = listOf(SELECTED), libraryIdFallback = fallback) }
+        settings.update { it.copy(libraryIdFallback = fallback) }
         return ManifestService(crypto, MutableClock(T0), settings, TrackTable()) { library }
     }
 
@@ -163,8 +163,8 @@ class ManifestAssemblyTest {
     fun `TD-70 library_id は Library Persistent ID を使い、無ければ library_id_fallback を使う`() = runTest {
         val playlists = listOf(playlist(SELECTED))
 
-        val withId = service(held(emptyList(), playlists, libraryId = "FROMXML"), fallback = "FALLBACK").forManifest()
-        val withoutId = service(held(emptyList(), playlists, libraryId = null), fallback = "FALLBACK").forManifest()
+        val withId = service(held(emptyList(), playlists, libraryId = "FROMXML"), fallback = "FALLBACK").forManifest(listOf(SELECTED))
+        val withoutId = service(held(emptyList(), playlists, libraryId = null), fallback = "FALLBACK").forManifest(listOf(SELECTED))
 
         assertEquals("FROMXML", withId?.libraryId)
         assertEquals("FALLBACK", withoutId?.libraryId)
@@ -174,8 +174,8 @@ class ManifestAssemblyTest {
     fun `TD-70 library_id が XML にも設定にも無ければ乱数を作って設定に保存する`() = runTest {
         val service = service(held(emptyList(), listOf(playlist(SELECTED)), libraryId = null), fallback = null)
 
-        val first = service.forManifest()!!.libraryId
-        val second = service.forManifest()!!.libraryId
+        val first = service.forManifest(listOf(SELECTED))!!.libraryId
+        val second = service.forManifest(listOf(SELECTED))!!.libraryId
 
         assertEquals(32, first.length)
         assertEquals(first, second)

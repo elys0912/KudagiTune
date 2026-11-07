@@ -5,7 +5,6 @@ import playlistsyncfox.desktop.server.PairingView
 import playlistsyncfox.desktop.settings.LastSync
 import playlistsyncfox.desktop.settings.Settings
 import playlistsyncfox.desktop.watch.XmlStatus
-import playlistsyncfox.itunes.library.LibraryReadResult
 import java.time.Instant
 
 // 画面の状態は 1 つの「PC の状態」にまとめ、画面はそれを写すだけにする（X5-5）。
@@ -20,7 +19,7 @@ sealed interface ServerStatus {
     data class Failed(val kind: ServerFailureKind) : ServerStatus
 }
 
-enum class Warning { XmlStale, PortInUse, KeyStorageFailed, KeyMissing, SelectionEmpty, CertificateRegenerated, SettingsReset }
+enum class Warning { XmlStale, PortInUse, KeyStorageFailed, KeyMissing, CertificateRegenerated, SettingsReset }
 
 class DeviceState(
     val deviceId: String,
@@ -30,15 +29,9 @@ class DeviceState(
     val lastSync: LastSync?,
 )
 
-class PlaylistNode(val id: String, val name: String, val children: List<PlaylistNode>?, val trackCount: Int)
-
 class PcState(
     val server: ServerStatus,
     val xml: XmlStatus,
-    val playlists: List<PlaylistNode>,
-    val selectedIds: List<String>,
-    /** 保存した ID のうち、XML に無いもの。灰色で「見つからない」を出し、「外す」で除く。 */
-    val missingIds: List<String>,
     val device: DeviceState?,
     val pairing: PairingView,
     val syncing: Boolean,
@@ -65,7 +58,6 @@ fun hasWarningMark(state: PcState): Boolean = state.warnings.isNotEmpty()
 class PcInputs(
     val server: ServerStatus,
     val xml: XmlStatus,
-    val library: LibraryReadResult?,
     val settings: Settings,
     val keyMissing: Set<String>,
     val pairing: PairingView,
@@ -78,11 +70,6 @@ class PcInputs(
 
 fun buildPcState(inputs: PcInputs, now: Instant): PcState {
     val settings = inputs.settings
-    val playlists = inputs.library?.let { buildPlaylistTree(it.playlists) }.orEmpty()
-    val knownIds = inputs.library?.playlists?.map { it.persistentId }?.toSet().orEmpty()
-    // 保存した ID が XML に無い状態は、XML を読めているときだけ判定する（読めない間は一覧が空）
-    val missing = if (inputs.library == null) emptyList() else settings.selectedPlaylistIds.filter { it !in knownIds }
-
     val device = settings.devices.firstOrNull()?.let {
         DeviceState(it.deviceId, it.displayName, inputs.activity.isConnected(now), it.deviceId in inputs.keyMissing, it.lastSync)
     }
@@ -91,16 +78,12 @@ fun buildPcState(inputs: PcInputs, now: Instant): PcState {
         if (inputs.server == ServerStatus.Failed(ServerFailureKind.PortInUse)) add(Warning.PortInUse)
         if (inputs.server == ServerStatus.Failed(ServerFailureKind.KeyStorage)) add(Warning.KeyStorageFailed)
         if (inputs.keyMissing.isNotEmpty()) add(Warning.KeyMissing)
-        if (settings.selectedPlaylistIds.isEmpty()) add(Warning.SelectionEmpty)
         if (inputs.certificateRegenerated && settings.devices.isNotEmpty()) add(Warning.CertificateRegenerated)
         if (inputs.settingsReset) add(Warning.SettingsReset)
     }
     return PcState(
         server = inputs.server,
         xml = inputs.xml,
-        playlists = playlists,
-        selectedIds = settings.selectedPlaylistIds,
-        missingIds = missing,
         device = device,
         pairing = inputs.pairing,
         syncing = inputs.activity.isSyncing(now),

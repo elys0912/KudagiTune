@@ -135,12 +135,31 @@ class SyncRunner(private val env: SyncEnvironment) {
         private var freeBefore: Long? = null
         private var skippedUnchanged = false
 
+        // 端末が選んだプレイリストの ID。P3・P1 の本文で渡す（D15）。実行の始めに 1 回読み、実行の間は変えない
+        private var selectedIds: List<String> = emptyList()
+
+        // 保存先の切り替えの取り直しが済んでいない（T9 に切り替え前のファイルが残る）。D16
+        private var relocating = false
+
         suspend fun start(): SyncRun? {
             pairing = env.store.pairing() ?: run {
                 env.log.line("ペアリングが無いため、何もせず終える")
                 return null
             }
             deviceId = pairing.deviceId
+            // 0. 選択が空、または保存先が無いときは始めない（D15、D16）
+            when (env.startBlock()) {
+                StartBlock.NoSelection -> {
+                    env.log.line("同期するプレイリストが選ばれていないため、何もせず終える")
+                    return null
+                }
+                StartBlock.StorageMissing -> {
+                    env.log.line("保存先が見つからないため、何もせず終える")
+                    return null
+                }
+                null -> Unit
+            }
+            selectedIds = env.store.selectedPlaylists().map { it.playlistId }
             transport = transportOf(pairing.lastEndpoint) ?: Transport.Lan
             publish(SyncStage.Connecting)
 
@@ -194,7 +213,9 @@ class SyncRunner(private val env: SyncEnvironment) {
 
             if (trigger == SyncTrigger.Auto) {
                 val base = digestBase(runs)
-                if (base != null && base.contentDigest == connected.digest && base.result == SyncRun.RESULT_SUCCESS) {
+                if (base != null && base.contentDigest == connected.digest && base.result == SyncRun.RESULT_SUCCESS &&
+                    !env.writer.relocationNeeded(env.volume)
+                ) {
                     env.log.line("内容が前回と同じため、何もせず終える")
                     return null
                 }
@@ -232,6 +253,8 @@ class SyncRunner(private val env: SyncEnvironment) {
             duplicatesDropped = loaded.duplicatesDropped
 
             publish(SyncStage.Diff)
+            // 保存先が変わっていれば、T1・T2 を T9 へ移して全曲を取り直す（D16）
+            relocating = env.writer.relocateTo(env.volume)
             val placed = env.store.placedTracks(deviceId)
             val first = computeDiffFor(loaded.manifest, placed, runs)
             diff = first
@@ -241,7 +264,7 @@ class SyncRunner(private val env: SyncEnvironment) {
 
             // 差分が空で、前回の完了と同じ内容なら、m3u8 の書き出しと「消す」を省く（J37）
             val base = digestBase(runs)
-            if (first.isEmpty() && base != null && base.contentDigest == loaded.manifest.contentDigest &&
+            if (!relocating && first.isEmpty() && base != null && base.contentDigest == loaded.manifest.contentDigest &&
                 base.result == SyncRun.RESULT_SUCCESS && runs.none { isCrashTrace(it) && it.isAfterRun(base) }
             ) {
                 skippedUnchanged = true
@@ -441,7 +464,7 @@ class SyncRunner(private val env: SyncEnvironment) {
         private suspend fun fetchManifest(api: SyncApi): Fetch {
             var failures = 0
             while (true) {
-                when (val response = api.manifest()) {
+                when (val response = api.manifest(selectedIds)) {
                     is ApiResult.Ok -> return when (val read = readManifest(response.value)) {
                         is ManifestReadResult.Loaded -> Fetch.Loaded(read)
                         // 版が合わない、壊れている：端末の更新の案内が要る。E なしで止める
@@ -482,7 +505,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             for (kind in endpointOrder(pairing)) {
                 val endpoint = endpointFor(kind) ?: continue
                 val candidate = env.apis.open(endpoint).also { opened += it }
-                when (val result = candidate.digest()) {
+                when (val result = candidate.digest(selectedIds)) {
                     is ApiResult.Ok -> {
                         if (pairing.lastEndpoint != kind) {
                             pairing = pairing.copy(lastEndpoint = kind)
@@ -609,6 +632,9 @@ class SyncRunner(private val env: SyncEnvironment) {
                 }
                 outcome = classify(userInterrupted)
             }
+
+            // 9b. 取り直しがすべて済んだ（完了）ときだけ、切り替え前の場所のファイルを消す（D16）
+            if (relocating && !afterCancel && outcome == SyncOutcome.Completed) env.writer.deleteRelocated()
 
             return record(outcome, loaded, finalDiff, afterCancel)
         }
