@@ -138,7 +138,7 @@ class PairingPresenter(
     fun submitCode(code: String) {
         val current = mutableState.value.stage as? PairingStage.Target ?: return
         if (code.length != CODE_LENGTH || !code.all(Char::isDigit)) {
-            mutableState.update { it.copy(stage = current.copy(codeError = "コードは $CODE_LENGTH 桁の数字")) }
+            mutableState.update { it.copy(stage = current.copy(codeError = "$CODE_LENGTH 桁の数字を入力してください")) }
             return
         }
         lastTarget = current.target
@@ -166,7 +166,7 @@ class PairingPresenter(
             PairingEvent.CodeMismatch -> if (++mismatches >= CODE_ATTEMPTS) {
                 PairingStage.AttemptsExhausted
             } else {
-                current.copy(codeError = "コードが違う")
+                current.copy(codeError = "ペアリングコードが違います")
             }
             PairingEvent.AttemptsExhausted -> PairingStage.AttemptsExhausted
             PairingEvent.Waiting -> PairingStage.Waiting

@@ -36,13 +36,13 @@ data class ProgressUiState(
 )
 
 fun stageHeading(stage: SyncStage): String = when (stage) {
-    SyncStage.Connecting -> "PC に接続している"
-    SyncStage.Manifest -> "曲の一覧を取得している"
-    SyncStage.Diff -> "差分を計算している"
-    SyncStage.Capacity -> "空き容量を確認している"
-    SyncStage.Transfer -> "曲を転送している"
-    SyncStage.Playlist -> "プレイリストを書いている"
-    SyncStage.Finished -> "終了"
+    SyncStage.Connecting -> "PC に接続しています"
+    SyncStage.Manifest -> "曲の一覧を取得しています"
+    SyncStage.Diff -> "変更点を確認しています"
+    SyncStage.Capacity -> "空き容量を確認しています"
+    SyncStage.Transfer -> "曲を転送しています"
+    SyncStage.Playlist -> "プレイリストを保存しています"
+    SyncStage.Finished -> "終了しました"
 }
 
 fun progressUi(progress: SyncProgress) = ProgressUiState(
@@ -53,7 +53,7 @@ fun progressUi(progress: SyncProgress) = ProgressUiState(
     totalBytes = progress.totalBytes,
     currentTitle = progress.currentTitle.takeIf { progress.stage == SyncStage.Transfer },
     shortageBytes = progress.shortageBytes,
-    nearLimitNote = "時間の上限が近い。続きは次の同期で行う".takeIf { progress.nearLimit },
+    nearLimitNote = "実行時間の上限が近づいています。残りは次の同期で続けます".takeIf { progress.nearLimit },
     notice = progress.errorDetail?.let(::noticeOf),
 )
 
@@ -119,7 +119,7 @@ fun resultUi(run: SyncRun, issues: List<RunIssue>, limit: Int = ISSUE_LIMIT): Re
 
 /** 同期が「消す」を飛ばしたときの案内。自動と手動で文が違い、手動の 4 つの場合は同じ文。 */
 private fun removalNote(trigger: String) =
-    if (trigger == SyncRun.TRIGGER_AUTO) "消す処理は手動の同期で行う" else "確認が要る消す処理を行っていない。もう一度同期して確認する"
+    if (trigger == SyncRun.TRIGGER_AUTO) "削除が必要な曲があります。手動で同期すると、確認のうえ削除します" else "削除の確認が済んでいないため、削除しませんでした。もう一度同期すると確認が出ます"
 
 /** 過去の実行の一覧の 1 行。 */
 data class PastRun(val runId: Long, val word: String, val atMillis: Long)

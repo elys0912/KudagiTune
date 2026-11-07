@@ -32,9 +32,9 @@ fun storageUi(mounted: Set<String>, saved: String): StorageUi {
     val options = buildList {
         add(StorageOption(SyncValues.VOLUME_PRIMARY, "本体", available = true))
         others.forEachIndexed { index, volume ->
-            add(StorageOption(volume, if (others.size == 1) "SD" else "SD ${index + 1}", available = true))
+            add(StorageOption(volume, if (others.size == 1) "SD カード" else "SD カード ${index + 1}", available = true))
         }
-        if (saved != SyncValues.VOLUME_PRIMARY && saved !in others) add(StorageOption(saved, "SD（見つからない）", available = false))
+        if (saved != SyncValues.VOLUME_PRIMARY && saved !in others) add(StorageOption(saved, "SD カード（見つかりません）", available = false))
     }
     return StorageUi(saved, options)
 }

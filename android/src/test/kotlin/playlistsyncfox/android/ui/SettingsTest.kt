@@ -169,7 +169,7 @@ class StorageUiTest {
         val with = storageUi(setOf(primary, "1234-ABCD"), primary)
 
         assertEquals(listOf("本体"), without.options.map { it.label })
-        assertEquals(listOf("本体", "SD"), with.options.map { it.label })
+        assertEquals(listOf("本体", "SD カード"), with.options.map { it.label })
         assertTrue(with.options.all { it.available })
     }
 
@@ -180,6 +180,6 @@ class StorageUiTest {
         assertEquals("1234-ABCD", ui.selected)
         val missing = ui.options.single { it.volume == "1234-ABCD" }
         assertFalse(missing.available)
-        assertEquals("SD（見つからない）", missing.label)
+        assertEquals("SD カード（見つかりません）", missing.label)
     }
 }

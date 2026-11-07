@@ -12,19 +12,19 @@ import java.time.format.DateTimeFormatter
 /** E2 の `detail` の表示（X7-1-3 の表）。S4 は [label] で、S2・S3 は [title] と [guidance] を出す。 */
 data class Notice(val title: String, val guidance: String, val label: String, val rePair: Boolean)
 
-private const val REPAIR_GUIDE = "PC の窓の「端末」とこのアプリの設定の両方で解除してから再ペアリングする"
+private const val REPAIR_GUIDE = "PC の画面の「端末」とこのアプリの設定の両方で解除してから、もう一度ペアリングしてください"
 
 fun noticeOf(detail: ErrorDetail): Notice = when (detail) {
-    ErrorDetail.ClockSkew -> Notice("端末と PC の時計が違う", "時刻を合わせてやり直す", "時計のずれ", rePair = false)
-    ErrorDetail.Replay -> Notice("通信が重複した", "もう一度試す", "通信の重複", rePair = false)
+    ErrorDetail.ClockSkew -> Notice("端末と PC の時刻がずれています", "時刻を合わせてから、やり直してください", "時計のずれ", rePair = false)
+    ErrorDetail.Replay -> Notice("同じ通信が重複して届きました", "もう一度同期してください", "通信の重複", rePair = false)
     ErrorDetail.RateLimited ->
-        Notice("要求が続いたため PC が一時的に断った", "時間をおいて同期する（再ペアリングは要らない）", "一時的な拒否", rePair = false)
-    ErrorDetail.PinMismatch -> Notice("証明書が変わった", REPAIR_GUIDE, "証明書の変更", rePair = true)
+        Notice("短い間に接続が続いたため、PC が一時的に断りました", "少し時間をおいてから同期してください（ペアリングのやり直しは不要です）", "一時的な拒否", rePair = false)
+    ErrorDetail.PinMismatch -> Notice("PC の証明書が変わりました", REPAIR_GUIDE, "証明書の変更", rePair = true)
     ErrorDetail.NoDetail -> Notice("ペアリングをやり直してください", REPAIR_GUIDE, "署名の不一致", rePair = true)
 }
 
 /** S2 だけに出る `pairing_closed`。 */
-val PairingClosedNotice = Notice("PC がコードを表示していない", "PC でコードを出してからやり直す", "コード未表示", rePair = false)
+val PairingClosedNotice = Notice("PC にペアリングコードが表示されていません", "PC でペアリングコードを表示してから、やり直してください", "コード未表示", rePair = false)
 
 /** T3 の `result` に 1 対 1 の表示語（X3-5）。 */
 fun resultWord(result: String): String = when (result) {
@@ -42,22 +42,22 @@ fun triggerWord(trigger: String): String = if (trigger == SyncRun.TRIGGER_MANUAL
 /** E の番号の表示語。空なら出さない。 */
 fun errorWord(errorKind: String?): String? = when (errorKind) {
     null, "" -> null
-    "E1" -> "PC に届かない"
-    "E2" -> "ペアリングし直す必要がある"
-    "E3" -> "空き容量が足りない"
-    "E4" -> "PC の XML が読めない"
-    "E5" -> "PC に曲のファイルが無い"
-    "E6" -> "途中で切れた"
-    "E7" -> "時間の上限。続きは次回"
-    "E8" -> "曲が変わった"
-    "E9" -> "保存に失敗した"
+    "E1" -> "PC に接続できません"
+    "E2" -> "ペアリングのやり直しが必要です"
+    "E3" -> "空き容量が足りません"
+    "E4" -> "PC の iTunes ライブラリ（XML）を読めません"
+    "E5" -> "PC に曲のファイルがありません"
+    "E6" -> "通信が途中で切れました"
+    "E7" -> "実行時間の上限に達しました。残りは次の同期で続けます"
+    "E8" -> "転送中に PC の曲が変更されました"
+    "E9" -> "端末への保存に失敗しました"
     else -> errorKind
 }
 
 /** 除外・再生不可の理由（T6 の `reason`）。知らない語はそのまま出す。 */
 fun reasonWord(reason: String?): String = when (reason) {
     null -> ""
-    "protected" -> "保護された曲"
+    "protected" -> "著作権保護された曲"
     "unsupported_format", "unsupportedformat" -> "再生できない形式"
     else -> reason
 }
@@ -81,8 +81,8 @@ fun fingerprintOf(spkiHash: String): String = spkiHash.take(24).chunked(4).joinT
 /** S6 で一覧を取れなかった理由の表示語。 */
 fun catalogWord(result: CatalogResult): String = when (result) {
     is CatalogResult.Loaded -> ""
-    CatalogResult.Unreachable -> "PC に届かない"
-    CatalogResult.KeyMismatch -> "ペアリングし直す必要がある"
-    CatalogResult.XmlUnavailable -> "PC の XML が読めない"
-    CatalogResult.Other -> "一覧を取れなかった"
+    CatalogResult.Unreachable -> "PC に接続できません"
+    CatalogResult.KeyMismatch -> "ペアリングのやり直しが必要です"
+    CatalogResult.XmlUnavailable -> "PC の iTunes ライブラリ（XML）を読めません"
+    CatalogResult.Other -> "プレイリストの一覧を取得できませんでした"
 }

@@ -32,7 +32,7 @@ object SyncNotifications {
 
     fun ensureChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL_PROGRESS, "同期中", NotificationManager.IMPORTANCE_LOW))
+        manager.createNotificationChannel(NotificationChannel(CHANNEL_PROGRESS, "同期の進行状況", NotificationManager.IMPORTANCE_LOW))
         manager.createNotificationChannel(NotificationChannel(CHANNEL_RESULT, "同期の結果", NotificationManager.IMPORTANCE_DEFAULT))
         manager.createNotificationChannel(NotificationChannel(CHANNEL_RESULT_QUIET, "同期の結果（自動）", NotificationManager.IMPORTANCE_LOW))
     }
@@ -51,7 +51,7 @@ object SyncNotifications {
         } else {
             builder.setProgress(0, 0, true)
         }
-        if (cancel != null) builder.addAction(Notification.Action.Builder(null, "中断", cancel).build())
+        if (cancel != null) builder.addAction(Notification.Action.Builder(null, "中断する", cancel).build())
         return builder.build()
     }
 
@@ -59,19 +59,19 @@ object SyncNotifications {
     fun finished(context: Context, run: SyncRun, progress: SyncProgress, trigger: SyncTrigger, open: PendingIntent?): Notification {
         val channel = resultChannel(trigger)
         val title = when (run.result) {
-            SyncRun.RESULT_SUCCESS -> "同期が完了した"
-            SyncRun.RESULT_PARTIAL -> "一部の曲で失敗した"
-            SyncRun.RESULT_INTERRUPTED -> "同期が中断された"
-            SyncRun.RESULT_NOT_STARTED -> "空き容量が足りず始められなかった"
-            else -> "同期に失敗した"
+            SyncRun.RESULT_SUCCESS -> "同期が完了しました"
+            SyncRun.RESULT_PARTIAL -> "一部の曲で失敗しました"
+            SyncRun.RESULT_INTERRUPTED -> "同期が中断されました"
+            SyncRun.RESULT_NOT_STARTED -> "空き容量が足りないため、同期を開始できませんでした"
+            else -> "同期に失敗しました"
         }
         val text = buildString {
-            append("追加 ${run.added}、置き換え ${run.replaced}、削除 ${run.removed}、失敗 ${run.failed}")
+            append("追加 ${run.added}、更新 ${run.replaced}、削除 ${run.removed}、失敗 ${run.failed}")
             // E7 は続きを次の同期で行う
-            if (run.errorKind == "E7") append("。続きは次の同期で行う")
-            progress.shortageBytes?.let { append("。あと ${it / (1024 * 1024)} MiB 空けてほしい。タップで空きを作る画面を開く") }
+            if (run.errorKind == "E7") append("。残りは次の同期で続けます")
+            progress.shortageBytes?.let { append("。あと ${it / (1024 * 1024)} MiB の空きが必要です。タップするとストレージの設定を開きます") }
             // 自動が「消す」を飛ばしたときは、確認が要る旨を足す（J9）
-            if (trigger == SyncTrigger.Auto && removalSkipped(run)) append("。確認が要る消す処理がある")
+            if (trigger == SyncTrigger.Auto && removalSkipped(run)) append("。削除の確認が必要な曲があります")
         }
         return Notification.Builder(context, channel)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
@@ -105,13 +105,13 @@ object SyncNotifications {
     private fun removalSkipped(run: SyncRun) = run.resultJson?.let { runCatching { decodeResult(it).removalSkipped }.getOrNull() } == true
 
     private fun progressText(progress: SyncProgress): String = when (progress.stage) {
-        SyncStage.Connecting -> "PC に接続している"
-        SyncStage.Manifest -> "曲の一覧を取得している"
-        SyncStage.Diff -> "差分を計算している"
-        SyncStage.Capacity -> "空き容量を確認している"
+        SyncStage.Connecting -> "PC に接続しています"
+        SyncStage.Manifest -> "曲の一覧を取得しています"
+        SyncStage.Diff -> "変更点を確認しています"
+        SyncStage.Capacity -> "空き容量を確認しています"
         SyncStage.Transfer -> "${progress.doneCount}/${progress.totalCount} 曲" + (progress.currentTitle?.let { "：$it" } ?: "")
-        SyncStage.Playlist -> "プレイリストを書いている"
-        SyncStage.Finished -> "終了"
+        SyncStage.Playlist -> "プレイリストを保存しています"
+        SyncStage.Finished -> "終了しました"
     }
 
     private const val PROGRESS_SCALE = 1000
