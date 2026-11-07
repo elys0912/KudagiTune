@@ -112,7 +112,7 @@ M3 desktop（JVM。差分の判断、m3u8 の生成、plist の解釈を持た�
 | パッケージ | 責務 | 引き受ける節 |
 |---|---|---|
 | `desktop.server` | Ktor のルート P1〜P6、要求の検査、Range、gzip | X5-1 |
-| `desktop.secrets` | K1・K2 の DPAPI による保管、証明書の生成と更新 | X5-2 |
+| `desktop.vault` | K1・K2 の DPAPI による保管、証明書の生成と更新 | X5-2 |
 | `desktop.discovery` | mDNS の広告（JmDNS） | X5-3 |
 | `desktop.settings` | 設定とログの書き込みと読み取り | X5-4 |
 | `desktop.ui` | トレイと画面 W1〜W5 | X5-5、X5-6 |
@@ -127,7 +127,7 @@ M4 android（差分の判断、m3u8 の生成、署名の手順の中身を持�
 | `android.storage` | MediaStore の書き込み、読み戻し、置き換え、削除 | X6-2 |
 | `android.sync` | 同期の実行（ワーカー）、前面サービス、WorkManager の登録 | X6-3、X6-4 |
 | `android.net` | Ktor のクライアント、SPKI の固定、署名ヘッダの付与、Range | X6-5 |
-| `android.keystore` | K3、K4 の保管（Keystore）、`CryptoProvider` の実体（端末側） | X4-1、X6-6 |
+| `android.vault` | K3、K4 の保管（Keystore）、`CryptoProvider` の実体（端末側） | X4-1、X6-6 |
 | `android.discovery` | NSD の発見、手入力の検査 | X7-2 |
 | `android.ui` | 画面 S1〜S5、権限の要求 | X7-1、X7-4 |
 | `android.notify` | 通知 | X7-3 |
@@ -137,7 +137,7 @@ M4 android（差分の判断、m3u8 の生成、署名の手順の中身を持�
 
 - `shared.auth` → `shared.crypto`、`shared.api`。`shared.diff` → `shared.manifest`、`shared.path`。`shared.m3u8` → `shared.manifest`。`shared.result` は他の shared の型を参照しない
 - `itunes.library` → `shared.manifest`（除外の規則を M1 の型で返す。B1-3）。`itunes.plist` と `itunes.location` は `itunes.library` の型へ書き込む側
-- `desktop.server` → `shared.api`、`shared.auth`、`desktop.settings`、`desktop.secrets`。`desktop.watch` → `itunes.library`
+- `desktop.server` → `shared.api`、`shared.auth`、`desktop.settings`、`desktop.vault`。`desktop.watch` → `itunes.library`
 - `android.sync` → `android.db`、`android.storage`、`android.net`、`shared.diff`、`shared.m3u8`。`android.ui` → `android.sync`、`android.db`
 - 禁止：`shared.*` から他のモジュールへ、`desktop.*` から `android.*` へ（逆も同じ）、`itunes.*` から `android.*` と `desktop.*` へ。CI で確かめる（B1-6。確かめ方は下の「依存の向きの検査」）
 
@@ -213,7 +213,7 @@ version catalog の項目名（版は書かない。B1-6。項目名は候補で
 | 稿 | 日付 | 内容 |
 |---|---|---|
 | 第 1 稿 | 2026-11-05 | X1 を書いた（X1-1〜X1-6）。X2〜X7 は同時に別の執筆者が書く |
-| 第 2 稿 | 2026-11-05 | review-05 を反映。パッケージ `desktop.keystore` を `desktop.secrets` に改名、version catalog の暗号と保管の項目を `bouncycastle`・`jna`・`jna-platform` に、`licensee` を足した（指摘 2、3、12）。X1-2 の項の見出しを確定、X1-4 に A3〜A19、X1-6 に X-3〜X-24 を集めた（指摘 24）。依存の向きの検査の方法を X1-3 に足した（指摘 33）。節末を `###` にした（指摘 35）。署名失敗の閾値を A10（10 回）にした（指摘 17） |
+| 第 2 稿 | 2026-11-05 | review-05 を反映。パッケージ `desktop.keystore` を `desktop.vault` に改名、version catalog の暗号と保管の項目を `bouncycastle`・`jna`・`jna-platform` に、`licensee` を足した（指摘 2、3、12）。X1-2 の項の見出しを確定、X1-4 に A3〜A19、X1-6 に X-3〜X-24 を集めた（指摘 24）。依存の向きの検査の方法を X1-3 に足した（指摘 33）。節末を `###` にした（指摘 35）。署名失敗の閾値を A10（10 回）にした（指摘 17） |
 | 第 3 稿 | 2026-11-06 | X2・X3・X5〜X7 を第 3 稿に。実物の確認と土台の反映。X1-3 の version catalog の候補の項目名を土台に合わせて差し替えた（A1 の規則は変えない）。review-09 |
 | 第 4 稿 | 2026-11-06 | X1〜X7 を第 4 稿に揃えた（review-11）。X1-1 の約束に V37・V47 の例外、X1-2 にテスト計画の対応、C-1〜C-14 への参照の更新 |
 | 第 4 稿 | 2026-11-06 | review-12（相互レビューと最終確認の 84 件）を反映した（J22〜J32）。稿の番号と表記は第 4 稿のまま上げなかった |

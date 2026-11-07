@@ -46,7 +46,7 @@ desktop ──▶ itunes ──▶ shared ◀── android
 | itunes | `itunes.location` | `file://` の復号 |
 | itunes | `itunes.library` | トラックとプレイリストの型、展開 |
 | desktop | `desktop.server` | Ktor のルート、要求の検査、Range |
-| desktop | `desktop.secrets` | DPAPI による鍵の保管、証明書 |
+| desktop | `desktop.vault` | DPAPI による鍵の保管、証明書 |
 | desktop | `desktop.discovery` | mDNS の広告（JmDNS） |
 | desktop | `desktop.settings` | 設定とログ |
 | desktop | `desktop.ui` | トレイと画面 |
@@ -56,7 +56,7 @@ desktop ──▶ itunes ──▶ shared ◀── android
 | android | `android.storage` | MediaStore の書き込みと削除 |
 | android | `android.sync` | 同期の実行、前面サービス、WorkManager |
 | android | `android.net` | Ktor のクライアント、証明書の固定 |
-| android | `android.keystore` | Keystore による鍵の保管、`CryptoProvider` の端末側の実体 |
+| android | `android.vault` | Keystore による鍵の保管、`CryptoProvider` の端末側の実体 |
 | android | `android.discovery` | NSD の発見、手入力の検査 |
 | android | `android.ui` | 画面 S1〜S5、権限の要求 |
 | android | `android.notify` | 通知 |

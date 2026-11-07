@@ -22,8 +22,8 @@ import kotlinx.coroutines.runBlocking
 import playlistsyncfox.desktop.crypto.PcCrypto
 import playlistsyncfox.desktop.discovery.JmdnsRegistrar
 import playlistsyncfox.desktop.discovery.listIpv4Addresses
-import playlistsyncfox.desktop.secrets.DpapiCipher
-import playlistsyncfox.desktop.secrets.FileSecretStore
+import playlistsyncfox.desktop.vault.DpapiCipher
+import playlistsyncfox.desktop.vault.FileSecretStore
 import playlistsyncfox.desktop.server.NettyServerLauncher
 import playlistsyncfox.desktop.ui.MainWindowContent
 import playlistsyncfox.desktop.ui.TrayStatus

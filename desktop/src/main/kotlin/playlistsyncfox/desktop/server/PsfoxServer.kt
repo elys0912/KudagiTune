@@ -33,7 +33,7 @@ import kotlinx.io.readByteArray
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import playlistsyncfox.desktop.DesktopValues
-import playlistsyncfox.desktop.secrets.KeyRing
+import playlistsyncfox.desktop.vault.KeyRing
 import playlistsyncfox.desktop.settings.AppLog
 import playlistsyncfox.desktop.settings.LastSync
 import playlistsyncfox.desktop.settings.SettingsStore

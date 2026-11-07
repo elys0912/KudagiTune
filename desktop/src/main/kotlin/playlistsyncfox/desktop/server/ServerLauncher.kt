@@ -4,7 +4,7 @@ import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.engine.sslConnector
 import io.ktor.server.netty.Netty
-import playlistsyncfox.desktop.secrets.TlsIdentity
+import playlistsyncfox.desktop.vault.TlsIdentity
 import java.security.KeyStore
 
 /** 起動したサーバー。終了の手順（X5-6）が止める。 */
