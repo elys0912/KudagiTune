@@ -22,7 +22,7 @@
 | 規則 | 内容 |
 |---|---|
 | 名前 | JSON のキーは B2-4 の snake_case。型の項目名は camelCase とし、`SerialName` で対応させる |
-| 未知のキー | 読み捨てる。`content_hash` のような空の項目の追加で `format_version` を増やさないため（B2-4） |
+| 未知のキー | 読み捨てる。ただし `content_hash` は読み捨てず型に保持し、digest に含める（空の項目の追加で `format_version` を増やさないため。B2-4） |
 | 空の項目 | 「空を許す」項目は、型では null を許し、JSON では書かない（読むときは無い＝null）。空文字列と 0 を空の意味に使わない |
 | 日時 | `generated_at`、`xml_modified_at` は UTC の ISO 8601 文字列（ミリ秒まで、末尾 `Z`）。`modified_at` は B2-4 のとおり UTC のエポックミリ秒の整数。`generated_at`、`xml_modified_at` は文字列であることだけを検査し、形は検査しない（同期の判定に使わないので、形の違いで同期を止めない。2026-11-07 先生） |
 | 整数 | `size`、`modified_at` は 64 ビット。`track_number`、`disc_number`、`duration_ms` は 32 ビット |
@@ -64,7 +64,7 @@
 | `duration_ms` | 整数（32） | 任意 | 長さ。保存先の規則では使わない |
 | `kind` | 文字列 | 任意 | `Kind` の値。実物の値の例は MPEG、Apple Lossless、AAC、購入した AAC、WAV（B2 の実物の確認）。`unsupported_format` の判定（X3-5）には使わない |
 | `protected` | 真偽 | 必須 | 無ければ偽として PC が書く |
-| `content_hash` | 文字列 | 任意 | 将来用。最初の版では書かない（B2-4）。読むだけ読み捨てる |
+| `content_hash` | 文字列 | 任意 | 将来用。最初の版では書かない（B2-4）。読んだ値は型に保持し、digest に含める |
 
 - 拡張子が空でない場合に限り、`extension` は保存先のパスの材料になる。`file_name` の拡張子と `extension` が食い違うときは `extension` を使う
 - B2-4 の材料のうち `track_number`、`disc_number` は B3-1 の規則（`<アーティスト>/<アルバム>/<曲名>.<拡張子>`）が使わない。保存先の材料の一覧は X3-3 のとおり
@@ -358,7 +358,7 @@ PC への報告（P4 の本文の元。`SyncReport`）。項目は次の 8 つ�
 
 | 対象 | 観点 |
 |---|---|
-| マニフェストの読み書き | 往復で同じ値になる。未知のキー（`content_hash` を含む）を読み捨てる。任意の項目の無しと値あり。`persistent_id` の形の違い（15 桁、小文字、非 16 進）。重複の落とし。`format_version` の範囲外と欠落。`track_ids` が `tracks` に無い ID を持つ。必須項目の欠け（`size` が無い）と型違い（`modified_at` が文字列）は「壊れた」 |
+| マニフェストの読み書き | 往復で同じ値になる。未知のキーを読み捨てる。`content_hash` は読んだ値を保持し、digest に含める。任意の項目の無しと値あり。`persistent_id` の形の違い（15 桁、小文字、非 16 進）。重複の落とし。`format_version` の範囲外と欠落。`track_ids` が `tracks` に無い ID を持つ。必須項目の欠け（`size` が無い）と型違い（`modified_at` が文字列）は「壊れた」 |
 | `content_digest` | 固定の入力の期待値（手で作った試料の値を 1 つ固定する）。入力の並びを入れ替えても同じ。`generated_at`、`library_id`、`excluded` を変えても同じ。`track_ids` の順を変えると違う。文字列の境界（「ab」「c」と「a」「bc」）で違う。`CryptoProvider` は固定の SHA-256 の実体を使う |
 | 差分 | 判定（足す、置き換える、変更なし、消す。ファイルが無い場合の補充は「足す」の一種。ほかに保護付き）の表。`size` だけ違う、`modified_at` だけ違う。保護付きと `m4p`。1 曲が複数のプレイリストに入る（集合は `tracks` なので 1 件）。`SyncRecord` が空（入れ直し）。ファイルが無く、かつマニフェストに無い記録（消す）。`recordedLibraryId` の null と違い。消す件数が V20 と同じ、V20 を超える、全部。`toRemove` が 0 件で全部の条件に当たらない（全部の条件は 1 件以上）。`toRemove` が 1 件以上で `unresolvedPlaylists` が 1 件なら `NeedsConfirmation`、`unresolvedPlaylists` が 0 件なら `Allowed`。`toRemove` が 0 件で `unresolvedPlaylists` が 1 件のときは `Allowed`。`LibraryChanged` でも `toRemove` を計算して返す。`LibraryChanged` と `NeedsConfirmation` の両方に当たるとき `LibraryChanged`。`isEmpty`（3 つの並びがすべて空のときだけ真） |
 | 容量 | 足す、置き換えるだけを数え、消すを引かない。空の差分は 0 |
