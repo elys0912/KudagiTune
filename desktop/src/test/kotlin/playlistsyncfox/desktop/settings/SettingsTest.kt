@@ -1,5 +1,6 @@
 package playlistsyncfox.desktop.settings
 
+import playlistsyncfox.desktop.DesktopValues
 import playlistsyncfox.desktop.MutableClock
 import playlistsyncfox.desktop.T0
 import java.nio.file.Files
@@ -134,5 +135,30 @@ class SettingsTest {
 
         val line = Files.list(logDir).use { it.toList().single() }.readText().trimEnd()
         assertEquals("2026-01-01T00:00:00.000Z\tWARN\tserver\t署名の検証に失敗\tE2", line)
+    }
+
+    @Test
+    fun `TD-84 欄の行は V55 ちょうどまで残り、1 行超えると古い行から消える`() {
+        val log = AppLog(dir.resolve("logs"), MutableClock(T0))
+
+        repeat(DesktopValues.LOG_LINES) { log.info("m", "行 $it") }
+        assertEquals(DesktopValues.LOG_LINES, log.lines.value.size)
+        assertEquals("行 0", log.lines.value.first().message)
+
+        log.info("m", "行 ${DesktopValues.LOG_LINES}")
+        assertEquals(DesktopValues.LOG_LINES, log.lines.value.size)
+        assertEquals("行 1", log.lines.value.first().message)
+        assertEquals("行 ${DesktopValues.LOG_LINES}", log.lines.value.last().message)
+    }
+
+    @Test
+    fun `TD-84 ファイルへ書けなくても欄には入る`() {
+        val blocker = dir.resolve("blocker").also { it.writeText("ファイル") }
+        val log = AppLog(blocker.resolve("logs"), MutableClock(T0))
+
+        log.warn("server", "書けない", 2)
+
+        val line = log.lines.value.single()
+        assertEquals(LogLine(T0, LogLevel.Warn, "server", "書けない", 2), line)
     }
 }

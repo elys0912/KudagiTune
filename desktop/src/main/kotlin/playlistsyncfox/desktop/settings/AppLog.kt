@@ -1,13 +1,20 @@
 package playlistsyncfox.desktop.settings
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import playlistsyncfox.desktop.DesktopValues
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.time.Clock
+import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 enum class LogLevel(val label: String) { Info("INFO"), Warn("WARN"), Error("ERROR") }
+
+/** 画面のログの欄の 1 行（X5-4）。ファイルへ書く行と同じ内容。 */
+data class LogLine(val at: Instant, val level: LogLevel, val module: String, val message: String, val errorNumber: Int?)
 
 private val stamp = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
 
@@ -26,6 +33,10 @@ class AppLog(
     private val generations: Int = 3,
 ) {
     private var currentFile: Path? = null
+    private val recent = MutableStateFlow<List<LogLine>>(emptyList())
+
+    /** 直近 V55 行（X5-4）。ファイルへ書けなくても入れる。起動の前の行は読み戻さない。 */
+    val lines: StateFlow<List<LogLine>> = recent
 
     fun info(module: String, message: String, errorNumber: Int? = null) = write(LogLevel.Info, module, message, errorNumber)
 
@@ -35,13 +46,10 @@ class AppLog(
 
     @Synchronized
     private fun write(level: LogLevel, module: String, message: String, errorNumber: Int?) {
-        val line = listOfNotNull(
-            stamp.format(clock.instant()),
-            level.label,
-            module,
-            message.replace('\n', ' ').replace('\t', ' '),
-            errorNumber?.let { "E$it" },
-        ).joinToString("\t") + "\n"
+        val at = clock.instant()
+        val text = message.replace('\n', ' ').replace('\t', ' ')
+        recent.value = (recent.value + LogLine(at, level, module, text, errorNumber)).takeLast(DesktopValues.LOG_LINES)
+        val line = listOfNotNull(stamp.format(at), level.label, module, text, errorNumber?.let { "E$it" }).joinToString("\t") + "\n"
         val bytes = line.encodeToByteArray()
         try {
             Files.createDirectories(dir)

@@ -2,6 +2,12 @@ package playlistsyncfox.desktop.server
 
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.bodyAsChannel
+import io.ktor.utils.io.discard
+import io.ktor.utils.io.readByte
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -21,6 +27,7 @@ import kotlin.io.path.writeBytes
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -506,6 +513,57 @@ class ServerRoutesTest {
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertNull(lastSync())
+    }
+
+    // ---- P8 と送信中の曲（TD-82、TD-83） ----
+
+    private val progressBody = """{"stage":"transfer","done_tracks":9,"total_tracks":17,"done_bytes":100,"total_bytes":200}"""
+
+    @Test
+    fun `TD-82 正しい P8 は 204 で progress に入り、範囲外の stage と負の数と JSON でない本文は 400 で変えない`() = withServer(fixture) { client ->
+        assertEquals(HttpStatusCode.NoContent, client.signed(fixture, HttpMethod.Post, "/v1/progress", progressBody.encodeToByteArray()).status)
+        val saved = fixture.progress.current()
+        assertEquals(9, saved?.doneTracks)
+
+        val bad = listOf(
+            progressBody.replace("transfer", "finished"),
+            progressBody.replace(""""done_tracks":9""", """"done_tracks":-1"""),
+            "これは JSON ではない",
+        )
+        for (body in bad) {
+            assertEquals(HttpStatusCode.BadRequest, client.signed(fixture, HttpMethod.Post, "/v1/progress", body.encodeToByteArray()).status)
+            assertEquals(saved, fixture.progress.current())
+        }
+    }
+
+    @Test
+    fun `TD-82 P4 を受けると progress が消える`() = withServer(fixture) { client ->
+        client.signed(fixture, HttpMethod.Post, "/v1/progress", progressBody.encodeToByteArray())
+
+        assertEquals(HttpStatusCode.NoContent, client.signed(fixture, HttpMethod.Post, "/v1/reports", report.encodeToByteArray()).status)
+
+        assertNull(fixture.progress.current())
+    }
+
+    @Test
+    fun `TD-82 progress は最後の P8 から V56 ちょうどまで残り、1 秒超で消える`() = withServer(fixture) { client ->
+        client.signed(fixture, HttpMethod.Post, "/v1/progress", progressBody.encodeToByteArray())
+
+        fixture.elapse(DesktopValues.PROGRESS_TTL)
+        assertNotNull(fixture.progress.current())
+
+        fixture.elapse(Duration.ofSeconds(1))
+        assertNull(fixture.progress.current())
+    }
+
+    @Test
+    fun `TD-83 P2 を読み終えると sending が無くなり、送り終えた行が欄に入る`() = withServer(fixture) { client ->
+        client.prepareTable()
+
+        assertContentEquals(TRACK_BYTES, client.signed(fixture, HttpMethod.Get, trackUri()).readRawBytes())
+
+        withTimeout(5_000) { while (fixture.activity.sendingTrack() != null) delay(10) }
+        assertTrue(fixture.log.lines.value.any { it.message == "P2 を送り終えた name=track size=100" })
     }
 
     @Test

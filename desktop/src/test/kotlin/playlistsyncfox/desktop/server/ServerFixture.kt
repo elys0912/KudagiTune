@@ -65,11 +65,12 @@ class ServerFixture(val root: Path, val store: SecretStore = MemorySecretStore()
     var library: HeldLibrary? = null
     val manifests = ManifestService(crypto, clock, settings, tracks) { library }
     val activity = ActivityTracker(clock)
+    val progress = ProgressBoard(clock)
     val logDir: Path = root.resolve("logs")
     val log = AppLog(logDir, clock)
     val env = ServerEnv(
         crypto, clock, T0, NonceStore(), keyRing, SignatureFailureCounter(clock), pairing,
-        PC_ID, settings, manifests, tracks, activity, log,
+        PC_ID, settings, manifests, tracks, activity, progress, log,
     )
 
     fun addDevice(id: String = DEVICE, key: ByteArray = DEVICE_KEY) = check(registry.register(id, "端末の名前", key))

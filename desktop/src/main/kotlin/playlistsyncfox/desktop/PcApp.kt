@@ -20,12 +20,14 @@ import playlistsyncfox.desktop.server.DeviceRegistry
 import playlistsyncfox.desktop.server.ManifestService
 import playlistsyncfox.desktop.server.PairingService
 import playlistsyncfox.desktop.server.PairingView
+import playlistsyncfox.desktop.server.ProgressBoard
 import playlistsyncfox.desktop.server.RunningServer
 import playlistsyncfox.desktop.server.ServerEnv
 import playlistsyncfox.desktop.server.ServerLauncher
 import playlistsyncfox.desktop.server.SignatureFailureCounter
 import playlistsyncfox.desktop.server.TrackTable
 import playlistsyncfox.desktop.settings.AppLog
+import playlistsyncfox.desktop.settings.LogLine
 import playlistsyncfox.desktop.settings.SettingsStore
 import playlistsyncfox.desktop.ui.PcInputs
 import playlistsyncfox.desktop.ui.PcState
@@ -91,6 +93,7 @@ class PcApp(
     private val registry = DeviceRegistry(keyRing, settings, clock)
     private val holder = LibraryHolder(clock) { settings.current.staleDays }
     private val activity = ActivityTracker(clock)
+    private val progress = ProgressBoard(clock)
     private val tracks = TrackTable()
     private var pairing: PairingService? = null
     private var tls: TlsIdentity? = null
@@ -107,6 +110,9 @@ class PcApp(
 
     /** 画面が写す「PC の状態」。 */
     val state: StateFlow<PcState> = stateFlow
+
+    /** ログの欄の行。行のたびに「PC の状態」を作り直さないよう、別の購読にする（X5-5）。 */
+    val logLines: StateFlow<List<LogLine>> = log.lines
 
     /** 初回起動の印。W1 が W4 を自動で開く。 */
     var firstRun = false
@@ -159,7 +165,7 @@ class PcApp(
         env = ServerEnv(
             crypto, clock, clock.instant(), NonceStore(), keyRing, SignatureFailureCounter(clock), service,
             settings.current.pcId, settings, ManifestService(crypto, clock, settings, tracks, ::libraryForRequest),
-            tracks, activity, log,
+            tracks, activity, progress, log,
         )
         launchServer()
     }
@@ -270,6 +276,7 @@ class PcApp(
                 keyMissing = keyRing.missing,
                 pairing = pairing?.view?.value ?: PairingView.Closed,
                 activity = activity,
+                progress = progress,
                 certificateRegenerated = certificateRegenerated,
                 settingsReset = settingsReset,
                 endpoints = advertised.map { "${it.hostAddress}:${settings.current.port}" },

@@ -5,6 +5,11 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
+
+/** P2 の送信中の曲（X5-1。D22）。表示名は実ファイル名から拡張子を除いたもの。 */
+data class SendingTrack(val displayName: String, val sentBytes: Long, val size: Long)
 
 /**
  * 直近の署名つき要求と P2 の要求の時刻、P2 の送信中の数（メモリだけ）。W3 の接続中と W1 の同期中の判定に使う。
@@ -17,6 +22,11 @@ class ActivityTracker(private val clock: Clock) {
     @Volatile
     private var lastTrackRequest: Instant? = null
     private val sending = AtomicInteger(0)
+    private val sendingTrack = AtomicReference<Sending?>(null)
+
+    private class Sending(val displayName: String, val size: Long) {
+        val sent = AtomicLong(0)
+    }
 
     fun signedRequest() {
         lastSigned = clock.instant()
@@ -28,8 +38,18 @@ class ActivityTracker(private val clock: Clock) {
     }
 
     fun trackRequestFinished() {
-        sending.decrementAndGet()
+        if (sending.decrementAndGet() == 0) sendingTrack.set(null)
     }
+
+    /** P2 で送り始めた曲を登録する。戻りの関数に、応答へ渡したバイト数を足していく（X5-1。D22）。 */
+    fun trackSendStarted(displayName: String, size: Long): (Int) -> Unit {
+        val track = Sending(displayName, size)
+        sendingTrack.set(track)
+        return { track.sent.addAndGet(it.toLong()) }
+    }
+
+    /** P2 の送信中の曲。無ければ null。 */
+    fun sendingTrack(): SendingTrack? = sendingTrack.get()?.let { SendingTrack(it.displayName, it.sent.get(), it.size) }
 
     /** P2 の送信中の数。終了時に待つ対象にもなる。 */
     val sendingCount: Int get() = sending.get()
