@@ -98,7 +98,7 @@ class AppGraph(val application: Application) {
             apis = apis,
             lan = NsdLanResolver(discovery),
             aliasExists = { vault.exists(it) },
-            deleteMissing = runBlocking(Dispatchers.IO) { store.setting(SyncValues.DELETE_MISSING_KEY) } == "true",
+            deleteMissing = runBlocking(Dispatchers.IO) { store.setting(SyncValues.DELETE_MISSING_KEY) } == SyncValues.SETTING_ON,
             volume = volume,
             volumeAvailable = volume == SyncValues.VOLUME_PRIMARY || volume in volumes.mounted(),
             freeBytes = { volumes.freeBytes(volume) },

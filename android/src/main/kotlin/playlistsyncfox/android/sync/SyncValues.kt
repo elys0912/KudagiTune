@@ -69,6 +69,9 @@ object SyncValues {
     /** T7 のキー：保存先の切り替えの取り直しが完了で終わっていない間 `true`（D16）。 */
     const val RELOCATING_KEY = "relocating"
 
+    /** T7 の真偽の値を ON と読む文字列（OFF は `false`、行が無いときも OFF）。 */
+    const val SETTING_ON = "true"
+
     /** 本体の MediaStore のボリューム名（`MediaStore.VOLUME_EXTERNAL_PRIMARY`）。 */
     const val VOLUME_PRIMARY = "external_primary"
 

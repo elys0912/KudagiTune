@@ -66,8 +66,8 @@ data class SettingsUiState(
 
 fun settingsUi(autoSetting: String?, deleteMissingSetting: String?, relocatedCount: Int, storage: StorageUi, pairing: Pairing?, notificationsAllowed: Boolean, logBytes: Long, cleanup: CleanupState) =
     SettingsUiState(
-        autoEnabled = autoSetting == "true",
-        deleteMissing = deleteMissingSetting == "true",
+        autoEnabled = autoSetting == SyncValues.SETTING_ON,
+        deleteMissing = deleteMissingSetting == SyncValues.SETTING_ON,
         relocatedCount = relocatedCount,
         storage = storage,
         saveFolder = SyncValues.MEDIA_ROOT,

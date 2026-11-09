@@ -215,7 +215,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         viewModelScope.launch {
             val ok = graph.scheduler.setAutoEnabled(enabled)
             if (!ok) message.value = "自動同期の設定に失敗しました"
-            settings.update { it?.copy(autoEnabled = store.setting(playlistsyncfox.android.sync.SyncScheduler.AUTO_ENABLED_KEY) == "true") }
+            settings.update { it?.copy(autoEnabled = store.setting(playlistsyncfox.android.sync.SyncScheduler.AUTO_ENABLED_KEY) == SyncValues.SETTING_ON) }
         }
     }
 
