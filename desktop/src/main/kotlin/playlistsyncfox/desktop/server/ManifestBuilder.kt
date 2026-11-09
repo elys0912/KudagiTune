@@ -16,6 +16,7 @@ import playlistsyncfox.shared.manifest.ManifestPlaylist
 import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.manifest.UnresolvedPlaylist
 import playlistsyncfox.shared.manifest.computeContentDigest
+import playlistsyncfox.shared.manifest.isProtectedTrack
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.InvalidPathException
@@ -186,7 +187,7 @@ class ManifestBuilder(
             discNumber = track.discNumber?.toIntOrNull(),
             durationMs = track.totalTimeMs?.toIntOrNull(),
             kind = track.kind,
-            isProtected = track.isProtected || extension == "m4p",
+            isProtected = isProtectedTrack(track.isProtected, extension),
         )
         return Checked.Ok(manifestTrack, TrackEntry(size, modifiedAt, path))
     }
