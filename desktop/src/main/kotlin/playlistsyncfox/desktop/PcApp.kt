@@ -97,14 +97,20 @@ class PcApp(
     private val tracks = TrackTable()
     private var pairing: PairingService? = null
     private var tls: TlsIdentity? = null
-    private var env: ServerEnv? = null
-    private var xmlWatch: XmlWatch? = null
     private var running: RunningServer? = null
     private var ticker: Job? = null
     private var serverStatus: ServerStatus = ServerStatus.NotStarted
-    private var certificateRegenerated = false
     private var settingsReset = false
     private var pcAdvertiser: Advertiser? = null
+
+    // 書くスレッドと読むスレッドが違うので @Volatile にする
+    // xmlWatch：EDT（W5 の保存）と main（起動）が書き、Netty（要求の処理）が読む
+    @Volatile
+    private var xmlWatch: XmlWatch? = null
+
+    // certificateRegenerated：main（起動）と Netty（P6 の成功）が書き、EDT（画面）と Default（ticker）が読む
+    @Volatile
+    private var certificateRegenerated = false
 
     private val stateFlow = MutableStateFlow(snapshot())
 
@@ -167,20 +173,19 @@ class PcApp(
             onPaired = { certificateRegenerated = false; refreshState() },
         )
         pairing = service
-        env = ServerEnv(
+        val env = ServerEnv(
             crypto, clock, clock.instant(), NonceStore(), keyRing, SignatureFailureCounter(clock), service,
             settings.current.pcId, settings, ManifestService(crypto, clock, settings, tracks, ::libraryForRequest),
             tracks, activity, progress, log,
         )
-        launchServer()
+        launchServer(identity, env)
     }
 
     // ポートの使用中は警告を出して続行する。サーバーは止まった状態になる
-    private fun launchServer() {
-        val identity = tls ?: return
+    private fun launchServer(identity: TlsIdentity, env: ServerEnv) {
         val port = settings.current.port
         try {
-            running = serverLauncher.start(port, identity, checkNotNull(env))
+            running = serverLauncher.start(port, identity, env)
             serverStatus = ServerStatus.Running
             log.info("server", "サーバーを起動した port=$port")
             pcAdvertiser = Advertiser(scope, settings.current.pcId, enumerateAddresses, registrar).also { it.start(port, pair = false) }
