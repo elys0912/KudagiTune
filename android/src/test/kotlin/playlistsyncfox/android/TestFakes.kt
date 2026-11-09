@@ -313,7 +313,7 @@ class FakeMediaStore : MediaStoreFiles {
 
     override fun ownedPendingPlaylistUris() = entries.values.filter { it.playlist && it.pending }.map { it.uri }
 
-    override fun listOwned() = entries.values.filter { !it.pending }.map(::stored)
+    override fun listUnderRoot() = entries.values.filter { !it.pending }.map(::stored)
 
     private fun stored(entry: Entry) = StoredFile(entry.uri, entry.displayName, entry.relativePath, entry.data.size().toLong(), 0)
 }
