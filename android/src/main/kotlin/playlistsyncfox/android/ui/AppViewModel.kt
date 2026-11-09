@@ -75,7 +75,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState(HomeKind.Unpaired))
 
     val progress: StateFlow<ProgressUiState?> = SyncServices.progress
-        .combine(screen) { progress, _ -> progress?.let(::progressUi) }
+        .map { it?.let(::progressUi) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val result = MutableStateFlow(ResultScreen(null, emptyList()))
