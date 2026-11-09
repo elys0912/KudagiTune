@@ -118,6 +118,9 @@ class PcApp(
     var firstRun = false
         private set
 
+    /** 実際に読んでいる XML の場所。未設定なら既定の場所。W5 の欄に出す。 */
+    val xmlPathInUse: String get() = currentXmlPath().toString()
+
     // 起動の順 2〜7（X5-6）。1（二重起動の防止）と 8（トレイ）は呼び出し側
     fun start() {
         val load = settings.load()
@@ -127,7 +130,7 @@ class PcApp(
         applyAutostart(settings.current.launchOnLogin)
 
         val identity = loadKeys()
-        startXmlWatch(settings.current.xmlPath?.let(Path::of) ?: defaultXmlPath)
+        startXmlWatch(currentXmlPath())
         if (identity != null) startServer(identity)
 
         ticker = scope.launch {
@@ -160,6 +163,8 @@ class PcApp(
         val service = PairingService(
             crypto, clock, settings.current.pcId, crypto.sha256(identity.spkiDer), settings, registry,
             onViewChanged = { pcAdvertiser?.setPair(pairing?.view?.value is PairingView.Open); refreshState() },
+            // 端末が新しい証明書でペアリングし直したので、作り直しの警告は要らない
+            onPaired = { certificateRegenerated = false; refreshState() },
         )
         pairing = service
         env = ServerEnv(
@@ -187,9 +192,12 @@ class PcApp(
         refreshState()
     }
 
+    // 未設定のときは既定の場所を読む
+    private fun currentXmlPath(): Path = settings.current.xmlPath?.let(Path::of) ?: defaultXmlPath
+
     private fun startXmlWatch(path: Path) {
         xmlWatch?.stop()
-        xmlWatch = XmlWatch(scope, path, holder, watchOpener).also { it.start() }
+        xmlWatch = XmlWatch(scope, path, holder, watchOpener, log).also { it.start() }
     }
 
     // 読めない状態の要求には null を返し、サーバーが E4 で応える。最後に読めた結果で応えない
@@ -231,7 +239,9 @@ class PcApp(
         return XmlPathResult.Saved
     }
 
+    /** 端末がある間は開かない。受付中（`pair=1`）を広告して、P5 が常に 403 になる状態を作らないため。 */
     fun showPairingCode() {
+        if (settings.current.devices.isNotEmpty()) return
         pairing?.open()
     }
 

@@ -49,6 +49,13 @@ tasks.test {
 compose.desktop {
     application {
         mainClass = "playlistsyncfox.desktop.MainKt"
+
+        // jpackage が実行ファイルに付けるアイコン。トレイと窓の画像は資源の `icons/`（Main.kt が読む）
+        nativeDistributions {
+            windows {
+                iconFile.set(project.file("packaging/kudagitune.ico"))
+            }
+        }
     }
 }
 

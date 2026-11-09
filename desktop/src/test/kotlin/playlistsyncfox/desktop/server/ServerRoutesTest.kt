@@ -8,6 +8,7 @@ import io.ktor.utils.io.discard
 import io.ktor.utils.io.readByte
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.jsonArray
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -435,6 +436,28 @@ class ServerRoutesTest {
     }
 
     @Test
+    fun `X5-21 P1 の本文に同じ ID が重なっていても 200 で、プレイリストと曲は 1 回だけ出る`() = withServer(fixture) { client ->
+        fixture.useLibrary(trackFile)
+
+        val response = client.signed(fixture, HttpMethod.Post, "/v1/manifest", ids(PLAYLIST_ID, PLAYLIST_ID))
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val manifest = response.json()
+        assertEquals(1, manifest.getValue("playlists").jsonArray.size)
+        assertEquals(1, manifest.getValue("tracks").jsonArray.size)
+    }
+
+    @Test
+    fun `X5-21 P3 の本文に同じ ID が重なっていても、1 つだけ選んだときと同じ content_digest を返す`() = withServer(fixture) { client ->
+        fixture.useLibrary(trackFile)
+
+        val single = client.signed(fixture, HttpMethod.Post, "/v1/digest", ids(PLAYLIST_ID)).json().getValue("content_digest")
+        val duplicated = client.signed(fixture, HttpMethod.Post, "/v1/digest", ids(PLAYLIST_ID, PLAYLIST_ID)).json().getValue("content_digest")
+
+        assertEquals(single, duplicated)
+    }
+
+    @Test
     fun `TD-79 署名の後に本文を差し替えた P1 は 401`() = withServer(fixture) { client ->
         fixture.useLibrary(trackFile)
         val headers = sign(fixture, HttpMethod.Post, "/v1/manifest", ids(PLAYLIST_ID))
@@ -513,6 +536,41 @@ class ServerRoutesTest {
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
         assertNull(lastSync())
+    }
+
+    @Test
+    fun `X5-20 開始時刻か終了時刻が UTC のミリ秒つきの書式でない報告は 400 で保存しない`() = withServer(fixture) { client ->
+        val bad = listOf(
+            report.replace("2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00Z"),
+            report.replace("2026-01-01T00:01:00.000Z", "2026-01-01 00:01:00.000"),
+            // 書式は合うが日付として存在しない
+            report.replace("2026-01-01T00:00:00.000Z", "2026-13-01T00:00:00.000Z"),
+        )
+
+        for (body in bad) {
+            assertEquals(HttpStatusCode.BadRequest, client.signed(fixture, HttpMethod.Post, "/v1/reports", body.encodeToByteArray()).status, body)
+        }
+        assertNull(lastSync())
+    }
+
+    @Test
+    fun `X5-20 failure_counts のキーが E1 から E9 の形でない報告は 400 で保存しない`() = withServer(fixture) { client ->
+        for (key in listOf("E0", "E10", "e5", "X1")) {
+            val body = report.replace(""""failure_counts":{"E5":1}""", """"failure_counts":{"$key":1}""")
+
+            assertEquals(HttpStatusCode.BadRequest, client.signed(fixture, HttpMethod.Post, "/v1/reports", body.encodeToByteArray()).status, key)
+        }
+        assertNull(lastSync())
+    }
+
+    @Test
+    fun `X5-20 failure_counts のキーが E1 と E9 の報告は保存する`() = withServer(fixture) { client ->
+        for (key in listOf("E1", "E9")) {
+            val body = report.replace(""""failure_counts":{"E5":1}""", """"failure_counts":{"$key":1}""")
+
+            assertEquals(HttpStatusCode.NoContent, client.signed(fixture, HttpMethod.Post, "/v1/reports", body.encodeToByteArray()).status, key)
+            assertEquals(mapOf(key to 1), lastSync()!!.failureCounts)
+        }
     }
 
     // ---- P8 と送信中の曲（TD-82、TD-83） ----

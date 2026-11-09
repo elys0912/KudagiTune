@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import playlistsyncfox.desktop.settings.AppLog
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -21,11 +22,12 @@ class XmlWatch(
     private val path: Path,
     holder: LibraryHolder,
     opener: DirectoryEventsOpener,
+    log: AppLog,
 ) {
     private val scope = CoroutineScope(parent.coroutineContext + SupervisorJob(parent.coroutineContext[Job]))
     private val refresher = LibraryRefresher(
         scope,
-        LibraryLoader(path),
+        LibraryLoader(path, log),
         StabilityWaiter({ statOf(path) }),
         holder,
         { statOf(path)?.let { Instant.ofEpochMilli(it.modifiedAtMillis) } },

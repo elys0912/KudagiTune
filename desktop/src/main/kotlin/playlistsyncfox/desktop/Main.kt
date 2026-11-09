@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.DpSize
@@ -35,16 +36,24 @@ import playlistsyncfox.desktop.ui.trayStatus
 import playlistsyncfox.desktop.ui.trayText
 import playlistsyncfox.desktop.watch.WatchServiceOpener
 import java.awt.Desktop
-import java.awt.image.BufferedImage
+import java.awt.SystemTray
 import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.time.Clock
+import javax.imageio.ImageIO
 import kotlin.system.exitProcess
 
 private const val OPEN_SIGNAL_FILE = "open-window.signal"
 private const val LOCK_FILE = "app.lock"
+
+/** 利用者に見える製品名。識別子（パッケージ名、フォルダ名、Run キーの値の名前）は変えない。 */
+private const val PRODUCT_NAME = "KudagiTune"
+
+// 窓の画像（資源の icons/）。トレイは大きさ別に 16・24・32 px を持つ
+private const val WINDOW_ICON = "app-64.png"
+private val TRAY_ICON_SIZES = listOf(16, 24, 32)
 
 fun main(args: Array<String>) {
     val paths = AppPaths.fromEnvironment()
@@ -90,14 +99,16 @@ fun main(args: Array<String>) {
             if (app.isSyncing()) confirmExit = true else shutdown(app, ::exitApplication)
         }
 
-        val icon = remember { BitmapPainter(BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB).toComposeImageBitmap()) }
+        val trayIcon = remember { BitmapPainter(loadIcon("tray-${trayIconSize()}.png")) }
+        val windowIcon = remember { BitmapPainter(loadIcon(WINDOW_ICON)) }
         Tray(
-            icon = icon,
-            tooltip = trayText(trayStatus(state)).let { if (state.warnings.isNotEmpty()) "$it（警告あり）" else it },
+            icon = trayIcon,
+            tooltip = "$PRODUCT_NAME：" + trayText(trayStatus(state)).let { if (state.warnings.isNotEmpty()) "$it（警告あり）" else it },
             onAction = { windowOpen = true },
         ) {
             Item("開く") { windowOpen = true }
-            Item("ペアリングコードを表示") {
+            // 端末がある間はコードを開かない。受付中の広告も出さない
+            Item("ペアリングコードを表示", enabled = state.device == null) {
                 app.showPairingCode()
                 windowOpen = true
             }
@@ -113,7 +124,8 @@ fun main(args: Array<String>) {
                     app.closePairing()
                     windowOpen = false
                 },
-                title = "playlist-sync-fox",
+                title = PRODUCT_NAME,
+                icon = windowIcon,
                 state = rememberWindowState(size = DpSize(1120.dp, 780.dp)),
             ) {
                 PsfoxTheme {
@@ -133,6 +145,17 @@ fun main(args: Array<String>) {
             }
         }
     }
+}
+
+// トレイの 1 マスの大きさ（表示の倍率で 16・24・32 px）以上で最小の画像を選ぶ
+private fun trayIconSize(): Int {
+    val wanted = if (SystemTray.isSupported()) SystemTray.getSystemTray().trayIconSize.width else TRAY_ICON_SIZES.first()
+    return TRAY_ICON_SIZES.firstOrNull { it >= wanted } ?: TRAY_ICON_SIZES.last()
+}
+
+private fun loadIcon(name: String): ImageBitmap {
+    val stream = checkNotNull(PcApp::class.java.getResourceAsStream("/icons/$name")) { "アイコンの資源が無い：$name" }
+    return stream.use { ImageIO.read(it) }.toComposeImageBitmap()
 }
 
 private fun shutdown(app: PcApp, exit: () -> Unit) {

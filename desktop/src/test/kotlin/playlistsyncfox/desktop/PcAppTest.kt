@@ -18,6 +18,7 @@ import playlistsyncfox.desktop.server.PairingView
 import playlistsyncfox.desktop.server.RunningServer
 import playlistsyncfox.desktop.server.ServerEnv
 import playlistsyncfox.desktop.server.ServerLauncher
+import playlistsyncfox.desktop.settings.LogLevel
 import playlistsyncfox.desktop.settings.PairedDevice
 import playlistsyncfox.desktop.settings.SettingsStore
 import playlistsyncfox.desktop.ui.ServerFailureKind
@@ -25,8 +26,13 @@ import playlistsyncfox.desktop.ui.ServerStatus
 import playlistsyncfox.desktop.ui.TrayStatus
 import playlistsyncfox.desktop.ui.Warning
 import playlistsyncfox.desktop.ui.trayStatus
+import playlistsyncfox.desktop.vault.loadOrCreateTls
 import playlistsyncfox.desktop.watch.DirectoryEvents
 import playlistsyncfox.desktop.watch.DirectoryEventsOpener
+import playlistsyncfox.desktop.watch.XmlStatus
+import playlistsyncfox.shared.auth.PairingOutcome
+import playlistsyncfox.shared.auth.confirmPairing
+import playlistsyncfox.shared.auth.startPairing
 import java.net.BindException
 import java.net.InetAddress
 import java.nio.file.Files
@@ -44,26 +50,31 @@ private const val DEVICE_ID = "00000000-0000-4000-8000-000000000001"
 private val ADDRESS: InetAddress = InetAddress.getByName("192.0.2.10")
 
 /** 外の世界（サーバー、mDNS、監視、レジストリ）を偽物にした PcApp の一式。実ネットワークとレジストリは使わない。 */
-private class Harness(scope: CoroutineScope, store: SecretStore = MemorySecretStore(), addresses: List<InetAddress> = listOf(ADDRESS)) {
+private class Harness(scope: CoroutineScope, val store: SecretStore = MemorySecretStore(), addresses: List<InetAddress> = listOf(ADDRESS)) {
     val root: Path = createTempDirectory("psfox-app")
     val order = mutableListOf<String>()
     var portInUse = false
+    var launchFailure: Exception? = null
     var env: ServerEnv? = null
     var serverStarts = 0
     var watchOpens = 0
     val registered = mutableListOf<InetAddress>()
+    val txtUpdates = mutableListOf<Map<String, String>>()
     val runKey = FakeRunKey()
 
     private val launcher = ServerLauncher { _, _: TlsIdentity, serverEnv ->
         serverStarts++
         if (portInUse) throw BindException("使用中")
+        launchFailure?.let { throw it }
         env = serverEnv
         RunningServer { order += "server.stop" }
     }
     private val registrar = MdnsRegistrar { address: InetAddress, _: Advertisement ->
         registered += address
         object : MdnsRegistration {
-            override fun updateTxt(txt: Map<String, String>) = Unit
+            override fun updateTxt(txt: Map<String, String>) {
+                txtUpdates += txt
+            }
 
             override fun close() {
                 order += "mdns.unregister"
@@ -87,6 +98,25 @@ private class Harness(scope: CoroutineScope, store: SecretStore = MemorySecretSt
         paths, root.resolve("none.xml"), clock, scope, PcCrypto(), store, launcher, registrar, { addresses }, opener,
         Autostart(runKey) { "C:\\fake\\playlist-sync-fox.exe" },
     )
+}
+
+/** 設定に端末が 1 台ある状態にする。PcApp の起動の前に呼ぶ。 */
+private fun Harness.addPairedDevice() {
+    SettingsStore(paths.settingsFile).also { it.load() }.update {
+        it.copy(devices = listOf(PairedDevice(DEVICE_ID, "端末", "2026-01-01T00:00:00.000Z")))
+    }
+}
+
+/** 端末側の手順（shared の関数）で、開いているコードの P5・P6 を済ませる。 */
+private fun Harness.completePairing() {
+    val pairing = checkNotNull(env).pairing
+    val deviceCrypto = PcCrypto()
+    val init = startPairing(deviceCrypto, DEVICE_ID, (pairing.view.value as PairingView.Open).code)
+    val started = pairing.start(DEVICE_ID, "端末", init.x.encoded)
+    check(started is PairingOutcome.Ok)
+    val spkiHash = deviceCrypto.sha256(loadOrCreateTls(store, paths.certFile, clock.instant()).spkiDer)
+    val confirmation = checkNotNull(confirmPairing(deviceCrypto, init, app.settings.current.pcId, started.value.encoded, spkiHash))
+    check(pairing.confirm(DEVICE_ID, confirmation.macD) is PairingOutcome.Ok)
 }
 
 class FakeRunKey : RunKey {
@@ -252,6 +282,190 @@ class PcAppTest {
         runCurrent()
         assertTrue("server.stop" in h.order)
         assertNotNull(h.env)
+    }
+
+    // ---- 画面向けの状態と警告（X5-2、X5-3、X5-4、X5-22） ----
+
+    @Test
+    fun `X5-22 起動すると、サーバーを起動した行が画面のログの欄に入る`() = runTest {
+        val h = harness()
+
+        h.app.start()
+        runCurrent()
+
+        val line = h.app.logLines.value.single { it.module == "server" }
+        assertEquals(LogLevel.Info, line.level)
+        assertEquals("サーバーを起動した port=47800", line.message)
+    }
+
+    @Test
+    fun `X5-22 鍵を新しく作った起動で端末があれば、証明書の作り直しの警告が出る`() = runTest {
+        val h = harness()
+        h.addPairedDevice()
+
+        h.app.start()
+        runCurrent()
+
+        assertTrue(Warning.CertificateRegenerated in h.app.state.value.warnings)
+    }
+
+    @Test
+    fun `X5-22 鍵を新しく作った起動でも端末が無ければ、証明書の作り直しの警告は出ない`() = runTest {
+        val h = harness()
+
+        h.app.start()
+        runCurrent()
+
+        assertFalse(Warning.CertificateRegenerated in h.app.state.value.warnings)
+    }
+
+    @Test
+    fun `X5-2 端末を解除して再ペアリングを済ませると、証明書の作り直しの警告が消えたままになる`() = runTest {
+        val h = harness()
+        h.addPairedDevice()
+        h.app.start()
+        runCurrent()
+        assertTrue(Warning.CertificateRegenerated in h.app.state.value.warnings)
+
+        h.app.unpair(DEVICE_ID)
+        h.app.showPairingCode()
+        h.completePairing()
+
+        assertEquals(DEVICE_ID, h.app.state.value.device?.deviceId)
+        assertFalse(Warning.CertificateRegenerated in h.app.state.value.warnings)
+    }
+
+    @Test
+    fun `X5-22 設定を読めなかった起動では、退避して初期設定で起動した警告が出て、ログにも残る`() = runTest {
+        val h = harness()
+        Files.writeString(h.paths.settingsFile, "これは JSON ではない")
+
+        h.app.start()
+        runCurrent()
+
+        assertTrue(Warning.SettingsReset in h.app.state.value.warnings)
+        assertTrue(Files.exists(h.paths.settingsFile.resolveSibling("settings.json.bad")))
+        assertTrue(h.app.logLines.value.any { it.level == LogLevel.Warn && it.module == "settings" })
+    }
+
+    @Test
+    fun `X5-4 ポートの使用中以外の起動の失敗も、警告を出して待機中と表示せず、ログに理由を残す`() = runTest {
+        val h = harness()
+        h.launchFailure = IllegalStateException("TLS を組めない")
+
+        h.app.start()
+        runCurrent()
+
+        assertEquals(ServerStatus.Failed(ServerFailureKind.Other), h.app.state.value.server)
+        assertTrue(Warning.ServerStartFailed in h.app.state.value.warnings)
+        assertEquals(TrayStatus.ServerFailed, trayStatus(h.app.state.value))
+        val line = h.app.logLines.value.single { it.module == "server" }
+        assertEquals(LogLevel.Warn, line.level)
+        assertEquals("サーバーを起動できない port=47800 reason=IllegalStateException", line.message)
+    }
+
+    @Test
+    fun `X5-3 端末がある間は、ペアリングコードを開かず、受付中の広告も出さない`() = runTest {
+        val h = harness()
+        h.addPairedDevice()
+        h.app.start()
+        runCurrent()
+
+        h.app.showPairingCode()
+
+        assertEquals(PairingView.Closed, h.app.state.value.pairing)
+        assertTrue(h.txtUpdates.isEmpty())
+    }
+
+    @Test
+    fun `X5-3 端末が無ければ、ペアリングコードを開いて受付中を広告する`() = runTest {
+        val h = harness()
+        h.app.start()
+        runCurrent()
+
+        h.app.showPairingCode()
+
+        assertTrue(h.app.state.value.pairing is PairingView.Open)
+        assertEquals(listOf("1"), h.txtUpdates.map { it["pair"] })
+    }
+
+    // ---- XML の場所の保存（X5-18、X5-9） ----
+
+    @Test
+    fun `X5-18 W5 で読める XML の場所を保存すると、その XML を読み直して読めた状態になる`() = runTest {
+        val h = harness()
+        h.app.start()
+        // 既定の場所に XML が無いまま V6 の回数（間隔 1 秒を 2 回）を読んで諦める
+        advanceTimeBy(3_500)
+        runCurrent()
+        assertEquals(XmlStatus.Unreadable(hasResult = false), h.app.state.value.xml)
+        val xml = h.root.resolve("lib.xml").also { Files.writeString(it, EMPTY_LIBRARY_XML) }
+
+        assertEquals(XmlPathResult.Saved, h.app.setXmlPath(xml.toString()))
+        advanceTimeBy(1_001)
+        runCurrent()
+
+        assertEquals(XmlStatus.Normal, h.app.state.value.xml)
+    }
+
+    @Test
+    fun `X5-9 XML の場所が未設定なら、実際に読んでいる既定の場所を返す`() = runTest {
+        val h = harness()
+        h.app.start()
+        runCurrent()
+
+        assertEquals(h.root.resolve("none.xml").toString(), h.app.xmlPathInUse)
+    }
+
+    @Test
+    fun `X5-9 XML の場所を保存した後は、保存した場所を返す`() = runTest {
+        val h = harness()
+        h.app.start()
+        runCurrent()
+        val xml = h.root.resolve("lib.xml").also { Files.writeString(it, EMPTY_LIBRARY_XML) }
+        h.app.setXmlPath(xml.toString())
+
+        assertEquals(xml.toString(), h.app.xmlPathInUse)
+    }
+
+    // ---- ログイン時の起動の結線（X5-19） ----
+
+    @Test
+    fun `X5-19 ログイン時の起動の切り替えは、Run キーの解除と登録と設定の保存に届く`() = runTest {
+        val h = harness()
+        h.app.start()
+        runCurrent()
+
+        h.app.setLaunchOnLogin(false)
+        assertTrue(h.runKey.values.isEmpty())
+        assertFalse(h.app.settings.current.launchOnLogin)
+
+        h.app.setLaunchOnLogin(true)
+        assertEquals(mapOf("playlist-sync-fox" to "\"C:\\fake\\playlist-sync-fox.exe\" --background"), h.runKey.values)
+        assertTrue(h.app.settings.current.launchOnLogin)
+    }
+
+    @Test
+    fun `X5-19 起動のとき、設定が有効なら Run キーを現在のパスに書き直す`() = runTest {
+        val h = harness()
+        h.runKey.set("playlist-sync-fox", "\"C:\\old\\app.exe\" --background")
+
+        h.app.start()
+        runCurrent()
+
+        assertEquals(mapOf("playlist-sync-fox" to "\"C:\\fake\\playlist-sync-fox.exe\" --background"), h.runKey.values)
+    }
+
+    @Test
+    fun `X5-19 起動のとき、設定が無効なら Run キーを解除する`() = runTest {
+        val h = harness()
+        SettingsStore(h.paths.settingsFile).also { it.load() }.update { it.copy(launchOnLogin = false) }
+        h.runKey.set("playlist-sync-fox", "\"C:\\old\\app.exe\" --background")
+
+        h.app.start()
+        runCurrent()
+
+        assertTrue(h.runKey.values.isEmpty())
     }
 
     // ---- Run キーの窓口（TD-64） ----
