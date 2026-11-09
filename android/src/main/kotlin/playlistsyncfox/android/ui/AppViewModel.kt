@@ -165,9 +165,10 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
-    fun syncPressed() {
+    /** 同期ボタン。[askNotification] は [ManualSyncFlow.press] に渡す通知の許可の確認。 */
+    fun syncPressed(askNotification: () -> Boolean = { false }) {
         val shownAtPress = SyncServices.progress.value
-        viewModelScope.launch { apply(manualSync.press(paired = store.pairing() != null), shownAtPress) }
+        viewModelScope.launch { apply(manualSync.press(paired = store.pairing() != null, askNotification), shownAtPress) }
     }
 
     fun answerConfirm(approved: Boolean) {
@@ -192,6 +193,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
             is PressOutcome.Confirm -> mutableConfirm.value = outcome
             PressOutcome.ToSelection -> openSelection(NO_SELECTION_NOTICE)
             PressOutcome.StorageMissing -> mutableMessage.value = STORAGE_MISSING_NOTICE
+            PressOutcome.AwaitingNotificationPermission -> Unit
         }
     }
 

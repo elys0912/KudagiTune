@@ -115,31 +115,33 @@ class MainActivity : ComponentActivity() {
         model.openFromNotification(intent.getStringExtra(SyncNotifications.EXTRA_OPEN))
     }
 
+    private fun onSyncButton() = model.syncPressed(askNotification = ::askNotificationPermission)
+
     /**
-     * 手動の同期の前に、通知の許可を確かめる。拒否でも同期は続ける。
-     * 未ペアリングは S2、選択が空は S6 へ進んで同期が始まらないので、求めない（X7-3）。
+     * 同期が始まると決まった後に、通知の許可を確かめる。拒否でも同期は続ける。
+     * 許可の画面を出したときは true（同期は結果の後に始める）。
      */
-    private fun onSyncButton() {
-        if (model.home.value.startsSync && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permission = Manifest.permission.POST_NOTIFICATIONS
-            val step = permissionStep(
-                granted = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED,
-                deniedThisLaunch = model.notificationDenied,
-                blockedByOs = prefs.getBoolean(KEY_ASKED_NOTIFICATION, false) && !shouldShowRequestPermissionRationale(permission),
-            )
-            when (step) {
-                PermissionStep.Request -> {
-                    prefs.edit().putBoolean(KEY_ASKED_NOTIFICATION, true).apply()
-                    notificationLauncher.launch(permission)
-                    return
-                }
-                // 直後に S3 へ移っても消えないよう、画面の知らせでなくトーストで出す（X7-1）
-                PermissionStep.GuideToSettings ->
-                    Toast.makeText(this, "通知が出ません。出すには設定アプリで通知を許可してください", Toast.LENGTH_LONG).show()
-                PermissionStep.Granted, PermissionStep.SkipDenied -> Unit
+    private fun askNotificationPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+        val permission = Manifest.permission.POST_NOTIFICATIONS
+        val step = permissionStep(
+            granted = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED,
+            deniedThisLaunch = model.notificationDenied,
+            blockedByOs = prefs.getBoolean(KEY_ASKED_NOTIFICATION, false) && !shouldShowRequestPermissionRationale(permission),
+        )
+        return when (step) {
+            PermissionStep.Request -> {
+                prefs.edit().putBoolean(KEY_ASKED_NOTIFICATION, true).apply()
+                notificationLauncher.launch(permission)
+                true
             }
+            // 直後に S3 へ移っても消えないよう、画面の知らせでなくトーストで出す（X7-1）
+            PermissionStep.GuideToSettings -> {
+                Toast.makeText(this, "通知が出ません。出すには設定アプリで通知を許可してください", Toast.LENGTH_LONG).show()
+                false
+            }
+            PermissionStep.Granted, PermissionStep.SkipDenied -> false
         }
-        model.syncPressed()
     }
 
     private fun notificationsAllowed(): Boolean = getSystemService(NotificationManager::class.java).areNotificationsEnabled()
