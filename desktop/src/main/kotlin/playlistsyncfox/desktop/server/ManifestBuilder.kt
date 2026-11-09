@@ -1,5 +1,6 @@
 package playlistsyncfox.desktop.server
 
+import playlistsyncfox.desktop.formatIsoMillis
 import playlistsyncfox.desktop.watch.HeldLibrary
 import playlistsyncfox.itunes.library.LibraryPlaylist
 import playlistsyncfox.itunes.library.LibraryReadResult
@@ -22,15 +23,8 @@ import java.nio.file.Files
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import java.time.Instant
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 
 class BuiltManifest(val manifest: Manifest, val tracks: Map<String, TrackEntry>)
-
-private val isoMillis = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
-
-/** UTC、ミリ秒まで、末尾 `Z`（X3-1）。 */
-fun formatIsoMillis(instant: Instant): String = isoMillis.format(instant)
 
 /**
  * 選んだプレイリストからマニフェストを組む（X2-4 末尾の順、B2-2、B2-4）。実在の確認は選んだプレイリストの曲だけ。
