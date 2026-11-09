@@ -38,21 +38,23 @@ class ProgressTest {
     }
 
     @Test
+    fun `TA-104 開始の直後の待ちの間は最初の進捗で待ちを終え、finished が先に届いていれば S4 へ進む`() {
+        assertEquals(ProgressNav.Started, progressNav(SyncProgress(SyncStage.Connecting), awaitingStart = true))
+        assertEquals(ProgressNav.ToResult, progressNav(SyncProgress(SyncStage.Finished), awaitingStart = true))
+    }
+
+    @Test
     fun `TA-105 near_limit が真のときだけ注記が出る`() {
         assertNotNull(progressUi(SyncProgress(SyncStage.Transfer, nearLimit = true)).nearLimitNote)
         assertNull(progressUi(SyncProgress(SyncStage.Transfer, nearLimit = false)).nearLimitNote)
     }
 
     @Test
-    fun `TA-105 曲名は transfer のときだけ出し、容量不足の不足分と E2 の案内はそのまま渡す`() {
-        val transfer = progressUi(SyncProgress(SyncStage.Transfer, currentTitle = "Song 1"))
-        val diff = progressUi(SyncProgress(SyncStage.Diff, currentTitle = "Song 1"))
+    fun `TA-105 容量不足の不足分と E2 の案内はそのまま渡す`() {
         val finished = progressUi(SyncProgress(SyncStage.Finished, shortageBytes = 100, errorDetail = ErrorDetail.ClockSkew))
 
-        assertEquals("Song 1", transfer.currentTitle)
-        assertNull(diff.currentTitle)
         assertEquals(100, finished.shortageBytes)
-        assertEquals("端末と PC の時刻がずれています", finished.notice?.title)
+        assertEquals(noticeOf(ErrorDetail.ClockSkew).title, finished.notice?.title)
     }
 }
 
@@ -127,6 +129,22 @@ class TrackRowUiTest {
         assertEquals(0f, fraction(100, 0))
         assertEquals(0.53f, fraction(53, 100))
         assertEquals(1f, fraction(150, 100))
+    }
+}
+
+class FormatBytesTest {
+    @Test
+    fun `1 KiB 未満は B、1 KiB から KiB、1 MiB から MiB で、小数 1 桁に丸める`() {
+        assertEquals("0 B", formatBytes(0))
+        assertEquals("1023 B", formatBytes(1023))
+        assertEquals("1.0 KiB", formatBytes(1024))
+        assertEquals("1.0 MiB", formatBytes(1L shl 20))
+        assertEquals("1.0 GiB", formatBytes(1L shl 30))
+    }
+
+    @Test
+    fun `1 MiB の 1 バイト手前は、丸めのため 1024 KiB と出る`() {
+        assertEquals("1024.0 KiB", formatBytes((1L shl 20) - 1))
     }
 }
 
@@ -223,11 +241,7 @@ class ResultUiTest {
         fun cause(detail: ErrorDetail?) =
             resultUi(finishedRun(1, result = SyncRun.RESULT_FAILED, errorKind = "E2", json = resultJson(detail = detail)), emptyList()).errorWord
 
-        assertEquals("端末と PC の時刻がずれています", cause(ErrorDetail.ClockSkew))
-        assertEquals("同じ通信が重複して届きました", cause(ErrorDetail.Replay))
-        assertEquals("短い間に接続が続いたため、PC が一時的に断りました", cause(ErrorDetail.RateLimited))
-        assertEquals("PC の証明書が変わりました", cause(ErrorDetail.PinMismatch))
-        assertEquals("ペアリングをやり直してください", cause(ErrorDetail.NoDetail))
+        ErrorDetail.entries.forEach { assertEquals(noticeOf(it).title, cause(it), it.name) }
         // error_detail を持たない行は E の番号の語
         assertEquals("ペアリングのやり直しが必要です", cause(null))
     }

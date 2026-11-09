@@ -1,9 +1,11 @@
 package playlistsyncfox.android.ui
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.WrittenPlaylist
 import playlistsyncfox.android.sync.ManualStart
+import playlistsyncfox.android.sync.PairingKeeper
 import playlistsyncfox.android.sync.RemovalCheck
 import playlistsyncfox.android.sync.StartBlock
 import playlistsyncfox.android.sync.SyncProgress
@@ -29,6 +31,9 @@ data class HomeUiState(
 ) {
     /** 同期ボタンの遷移先。未ペアリングだけ S2 で、同期中は S3 へ「進み具合を見る」。 */
     val syncButtonGoesToPairing get() = kind == HomeKind.Unpaired
+
+    /** 同期ボタンで同期が始まるか。未ペアリングは S2、選択が空は S6 へ進むだけで、始まらない（X7-3）。 */
+    val startsSync get() = !syncButtonGoesToPairing && selectedCount > 0
 }
 
 /** 同期が動いているか。`finished` を過ぎた状態は動いていない。 */
@@ -51,9 +56,9 @@ fun latestRun(runs: List<SyncRun>, syncing: Boolean): LastRun? {
 /** T4 の `last_endpoint` が指す方式の値。空なら「未接続」（J30）。 */
 fun endpointText(pairing: Pairing): String {
     val value = when (pairing.lastEndpoint) {
-        "lan" -> pairing.endpointLan
-        "tailscale" -> pairing.endpointTailscale
-        "usb" -> pairing.endpointUsb
+        PairingKeeper.LAN -> pairing.endpointLan
+        PairingKeeper.TAILSCALE -> pairing.endpointTailscale
+        PairingKeeper.USB -> pairing.endpointUsb
         else -> null
     }
     return value?.takeIf { it.isNotEmpty() } ?: "未接続"
@@ -90,8 +95,6 @@ sealed interface PressOutcome {
     /** 保存先の SD が見つからない。同期を始めず案内する。本体へ切り替えない（D16）。 */
     data object StorageMissing : PressOutcome
 }
-
-const val APPROVAL_UNUSED_NOTICE = "自動の同期が実行中だったため、今回は削除しません。終わってから、もう一度「同期」を押してください"
 
 /**
  * 手動の同期の開始（X7-1-2）。確認の要否は画面側が決め、ワーカーの起動は [start] に任せる。
@@ -130,4 +133,15 @@ class ManualSyncFlow(
         val unused = approvedCount != null && result == ManualStart.AutoRunning
         return PressOutcome.ToProgress(APPROVAL_UNUSED_NOTICE.takeIf { unused })
     }
+}
+
+/**
+ * 手動の同期の開始。前回の終了の進捗が [progress] に残っていると、開始した直後に S4 へ進むため、新しい仕事を作ったときだけ消す。
+ * 作らなかったとき（自動か手動が実行中）は、走っているワーカーの進捗を残す。新しいワーカーが先に出した進捗も消さない。
+ */
+suspend fun startManualSync(progress: MutableStateFlow<SyncProgress?>, start: suspend () -> ManualStart): ManualStart {
+    val before = progress.value
+    val result = start()
+    if (result == ManualStart.Started) progress.compareAndSet(before, null)
+    return result
 }

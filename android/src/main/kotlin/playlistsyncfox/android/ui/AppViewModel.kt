@@ -6,28 +6,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import playlistsyncfox.android.AppGraph
 import playlistsyncfox.android.discovery.checkManualEndpoint
 import playlistsyncfox.android.log.LogEntry
 import playlistsyncfox.android.notify.SyncNotifications
-import playlistsyncfox.android.storage.MediaWriter
-import playlistsyncfox.android.storage.ResolverMediaStoreFiles
 import playlistsyncfox.android.sync.SyncServices
-import playlistsyncfox.android.sync.SyncValues
-import playlistsyncfox.android.sync.SyncStage
-
-const val NO_SELECTION_NOTICE = "同期するプレイリストを選んでください"
-const val STORAGE_MISSING_NOTICE = "保存先の SD カードが見つかりません。SD カードを確認するか、設定で保存先を変更してください"
-const val STORAGE_CHANGED_NOTICE = "保存先を変更しました。次の同期で、新しい保存先へ全曲を転送し直します"
-const val STORAGE_LEFTOVER_NOTICE = "前の場所に曲が残っています。次の同期の前に、「前の保存先の曲を削除する」で、先に前の場所の曲を消してください"
-const val LOG_SAVED_NOTICE = "ログをファイルに保存しました"
-const val LOG_SAVE_FAILED_NOTICE = "ログを保存できませんでした"
 
 /** 画面の遷移は S1 を起点にする（X7-1-1 の 4）。 */
 sealed interface Screen {
@@ -54,28 +44,46 @@ sealed interface Screen {
 class AppViewModel(private val graph: AppGraph) : ViewModel() {
     private val store = graph.store
 
-    val screen = MutableStateFlow<Screen>(Screen.Home)
+    /**
+     * 権限の拒否の記録。拒否したら、同じ起動の間は再び求めない（X7-4-2 の 4）。
+     * 画面の回転などで Activity が作り直されても消えないよう、Activity でなくここに持つ。
+     */
+    var notificationDenied = false
+    var readDenied = false
+
+    private val mutableScreen = MutableStateFlow<Screen>(Screen.Home)
+    val screen: StateFlow<Screen> = mutableScreen.asStateFlow()
 
     /** 「消す」の確認の画面を出している間の件数。 */
-    val confirm = MutableStateFlow<PressOutcome.Confirm?>(null)
-    val message = MutableStateFlow<String?>(null)
+    private val mutableConfirm = MutableStateFlow<PressOutcome.Confirm?>(null)
+    val confirm: StateFlow<PressOutcome.Confirm?> = mutableConfirm.asStateFlow()
+
+    private val mutableMessage = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = mutableMessage.asStateFlow()
+
+    /** 同期が動いているか。S1 の状態、S4 の最新の行、S5 の削除の可否が使う。 */
+    val syncing: StateFlow<Boolean> = SyncServices.progress
+        .map(::isSyncing)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, isSyncing(SyncServices.progress.value))
 
     val home: StateFlow<HomeUiState> = combine(
         store.observePairing(),
         store.observeRuns(),
         store.observePlaylists(),
         store.observeSelectedPlaylists(),
-        SyncServices.progress,
-    ) { pairing, runs, playlists, selected, progress -> homeState(pairing, runs, playlists, selected.size, isSyncing(progress)) }
+        syncing,
+    ) { pairing, runs, playlists, selected, syncing -> homeState(pairing, runs, playlists, selected.size, syncing) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState(HomeKind.Unpaired))
 
     val progress: StateFlow<ProgressUiState?> = SyncServices.progress
-        .combine(screen) { progress, _ -> progress?.let(::progressUi) }
+        .map { it?.let(::progressUi) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    val result = MutableStateFlow(ResultScreen(null, emptyList()))
-    val settings = MutableStateFlow<SettingsUiState?>(null)
-    val logLines = MutableStateFlow<List<String>>(emptyList())
+    private val mutableResult = MutableStateFlow(ResultScreenState(null, emptyList()))
+    val result: StateFlow<ResultScreenState> = mutableResult.asStateFlow()
+
+    private val mutableLogLines = MutableStateFlow<List<String>>(emptyList())
+    val logLines: StateFlow<List<String>> = mutableLogLines.asStateFlow()
 
     /** S3 のログの欄（X7-1-4）。同期のワーカーと同じ `AppLog` の流れ。 */
     val logPane: StateFlow<List<LogEntry>> = graph.log.recent
@@ -95,39 +103,51 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         now = System::currentTimeMillis,
     )
 
+    val settings = SettingsPresenter(
+        scope = viewModelScope,
+        store = store,
+        setAutoEnabled = graph.scheduler::setAutoEnabled,
+        mountedVolumes = graph.volumes::mounted,
+        storageVolume = graph::storageVolume,
+        logBytes = graph.log::sizeBytes,
+        cleanupWriter = graph::cleanupWriter,
+        syncing = { syncing.value },
+        unpairDevice = graph.keeper::unpair,
+        showMessage = { mutableMessage.value = it },
+    )
+
     private val manualSync = ManualSyncFlow(
         autoRunning = graph.scheduler::autoRunning,
         block = { withContext(Dispatchers.IO) { graph.startBlock() } },
         check = { withContext(Dispatchers.IO) { graph.checkRemoval() } },
         start = { approvedCount, reachFailed ->
-            // 前回の終了の状態が残っていると、開始した直後に S4 へ進んでしまう
-            SyncServices.progress.value = null
-            graph.scheduler.startManual(approvedCount != null, approvedCount ?: 0, reachFailed)
+            startManualSync(SyncServices.progress) {
+                graph.scheduler.startManual(approvedCount != null, approvedCount ?: 0, reachFailed)
+            }
         },
     )
 
     init {
         // 画面の下の知らせは、その画面にいる間だけ出す。移ったら消す
-        viewModelScope.launch { screen.drop(1).collect { message.value = null } }
+        viewModelScope.launch { screen.drop(1).collect { mutableMessage.value = null } }
+        // S2 を離れたら、どの経路で離れても（通知のタップを含む）PC の発見と接続を止める
+        viewModelScope.launch { screen.collect { if (it != Screen.Pairing) pairing.close() } }
         // S3 の自動の遷移（finished で S4、動いていなければ S1）
         viewModelScope.launch {
             SyncServices.progress.combine(screen) { progress, current -> progress to current }.collect { (progress, current) ->
                 if (current !is Screen.Progress) return@collect
                 when (progressNav(progress, current.awaitingStart)) {
                     ProgressNav.ToResult -> openResult(null)
-                    ProgressNav.ToHome -> screen.value = Screen.Home
-                    ProgressNav.Stay ->
-                        if (current.awaitingStart && progress != null && progress.stage != SyncStage.Finished) {
-                            screen.value = current.copy(awaitingStart = false)
-                        }
+                    ProgressNav.ToHome -> mutableScreen.value = Screen.Home
+                    ProgressNav.Started -> mutableScreen.value = current.copy(awaitingStart = false)
+                    ProgressNav.Stay -> Unit
                 }
             }
         }
     }
 
     fun back() {
-        if (screen.value == Screen.Pairing) pairing.close()
-        screen.value = when (screen.value) {
+        mutableScreen.value = when (screen.value) {
             Screen.Log, Screen.Licenses -> Screen.Settings
             else -> Screen.Home
         }
@@ -136,7 +156,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     /** 通知のタップ。 */
     fun openFromNotification(route: String?) {
         when (route) {
-            SyncNotifications.OPEN_PROGRESS -> screen.value = Screen.Progress(awaitingStart = false)
+            SyncNotifications.OPEN_PROGRESS -> mutableScreen.value = Screen.Progress(awaitingStart = false)
             SyncNotifications.OPEN_RESULT -> openResult(null)
         }
     }
@@ -147,31 +167,31 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun answerConfirm(approved: Boolean) {
         val pending = confirm.value ?: return
-        confirm.value = null
+        mutableConfirm.value = null
         viewModelScope.launch { apply(manualSync.answer(pending, approved)) }
     }
 
     private fun apply(outcome: PressOutcome) {
         when (outcome) {
             PressOutcome.ToPairing -> {
-                screen.value = Screen.Pairing
+                mutableScreen.value = Screen.Pairing
                 pairing.open()
             }
-            is PressOutcome.ToProgress -> screen.value = Screen.Progress(awaitingStart = SyncServices.progress.value == null, notice = outcome.notice)
-            is PressOutcome.Confirm -> confirm.value = outcome
+            is PressOutcome.ToProgress -> mutableScreen.value = Screen.Progress(awaitingStart = SyncServices.progress.value == null, notice = outcome.notice)
+            is PressOutcome.Confirm -> mutableConfirm.value = outcome
             PressOutcome.ToSelection -> openSelection(NO_SELECTION_NOTICE)
-            PressOutcome.StorageMissing -> message.value = STORAGE_MISSING_NOTICE
+            PressOutcome.StorageMissing -> mutableMessage.value = STORAGE_MISSING_NOTICE
         }
     }
 
     /** S6 を開き、PC の一覧を取る（P7）。 */
     fun openSelection(notice: String? = null) {
-        screen.value = Screen.Selection(notice)
+        mutableScreen.value = Screen.Selection(notice)
         selection.load()
     }
 
     fun showProgress() {
-        screen.value = Screen.Progress(awaitingStart = false)
+        mutableScreen.value = Screen.Progress(awaitingStart = false)
     }
 
     /** S3 の「中断」。X6-3 の中断を呼び、`finished` を待って S4 へ進む。 */
@@ -181,107 +201,50 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun openResult(runId: Long?) {
         viewModelScope.launch {
-            result.value = loadResult(store, runId, isSyncing(SyncServices.progress.value))
-            screen.value = Screen.Result(runId)
+            mutableResult.value = loadResult(store, runId, syncing.value)
+            mutableScreen.value = Screen.Result(runId)
         }
     }
 
-    fun openSettings(notificationsAllowed: Boolean, readGranted: Boolean) {
-        screen.value = Screen.Settings
-        refreshSettings(notificationsAllowed, readGranted)
-    }
-
-    fun refreshSettings(notificationsAllowed: Boolean, readGranted: Boolean, denied: Boolean = false) {
-        viewModelScope.launch {
-            val cleanup = when {
-                denied -> CleanupState.Denied
-                !readGranted -> CleanupState.NeedsPermission
-                else -> CleanupState.Found(withContext(Dispatchers.IO) { writer().leftovers() })
-            }
-            settings.value = settingsUi(
-                autoSetting = store.setting(playlistsyncfox.android.sync.SyncScheduler.AUTO_ENABLED_KEY),
-                deleteMissingSetting = store.setting(SyncValues.DELETE_MISSING_KEY),
-                relocatedCount = store.relocatedUris().size,
-                storage = storageUi(graph.volumes.mounted(), graph.storageVolume()),
-                pairing = store.pairing(),
-                notificationsAllowed = notificationsAllowed,
-                logBytes = graph.log.sizeBytes(),
-                cleanup = cleanup,
-            )
-        }
-    }
-
-    fun toggleAuto(enabled: Boolean) {
-        viewModelScope.launch {
-            val ok = graph.scheduler.setAutoEnabled(enabled)
-            if (!ok) message.value = "自動同期の設定に失敗しました"
-            settings.update { it?.copy(autoEnabled = store.setting(playlistsyncfox.android.sync.SyncScheduler.AUTO_ENABLED_KEY) == "true") }
-        }
-    }
-
-    /** 「PC に無い曲を端末から消す」の切り替え。 */
-    fun setDeleteMissing(enabled: Boolean) {
-        viewModelScope.launch {
-            store.putSetting(SyncValues.DELETE_MISSING_KEY, enabled.toString())
-            settings.update { it?.copy(deleteMissing = enabled) }
-        }
-    }
-
-    /** 「以前の場所の曲を消す」。確認は画面が済ませてある。同期が走っている間は消さない。 */
-    fun deleteRelocated() {
-        viewModelScope.launch {
-            val deleted = withContext(Dispatchers.IO) { cleanRelocated(writer(), isSyncing(SyncServices.progress.value)) }
-            message.value = if (deleted == null) "同期中は削除できません" else "前の保存先から $deleted 件を削除しました"
-            settings.update { it?.copy(relocatedCount = store.relocatedUris().size) }
-        }
-    }
-
-    /** 保存先の切り替え（D16）。T1、T2 は動かさず、次の同期が新しい場所へ取り直す。 */
-    fun setStorage(volume: String) {
-        viewModelScope.launch {
-            store.putSetting(SyncValues.STORAGE_VOLUME_KEY, volume)
-            settings.update { it?.copy(storage = storageUi(graph.volumes.mounted(), volume)) }
-            message.value = storageChangedNotice(store.relocatedUris().size)
-        }
+    fun openSettings(notificationsAllowed: Boolean, readAccess: ReadAccess) {
+        mutableScreen.value = Screen.Settings
+        settings.refresh(notificationsAllowed, readAccess)
     }
 
     fun unpair() {
         viewModelScope.launch {
-            if (graph.keeper.unpair()) {
-                screen.value = Screen.Home
-            } else {
-                message.value = "鍵の削除に失敗したため、解除できませんでした"
-            }
+            if (settings.unpair()) mutableScreen.value = Screen.Home
         }
     }
 
     fun openLog() {
-        logLines.value = graph.log.tail().asReversed()
-        screen.value = Screen.Log
+        viewModelScope.launch {
+            mutableLogLines.value = withContext(Dispatchers.IO) { graph.log.tail() }.asReversed()
+            mutableScreen.value = Screen.Log
+        }
     }
 
-    /** 共有する本文。閲覧と同じ切り詰め。 */
-    fun logText(): String = graph.log.tail().joinToString("\n")
+    /** 共有する本文を [share] に渡す。本文は閲覧と同じ切り詰め。 */
+    fun shareLog(share: (String) -> Unit) {
+        viewModelScope.launch {
+            share(withContext(Dispatchers.IO) { graph.log.tail().joinToString("\n") })
+        }
+    }
 
     /** 「ファイルに保存する」。本文は全世代の全行。書き込み先は [write] が持ち、失敗は画面の下の知らせに出す。 */
     fun saveLog(write: (String) -> Unit) {
         viewModelScope.launch {
             val saved = withContext(Dispatchers.IO) { runCatching { write(graph.log.exportText()) }.isSuccess }
-            message.value = if (saved) LOG_SAVED_NOTICE else LOG_SAVE_FAILED_NOTICE
+            mutableMessage.value = if (saved) LOG_SAVED_NOTICE else LOG_SAVE_FAILED_NOTICE
         }
     }
 
     fun clearLog() {
         graph.log.clear()
-        logLines.value = emptyList()
+        mutableLogLines.value = emptyList()
     }
 
     fun openLicenses() {
-        screen.value = Screen.Licenses
-    }
-
-    private suspend fun writer(): MediaWriter {
-        val deviceId = store.pairing()?.deviceId ?: store.setting("device_id").orEmpty()
-        return MediaWriter(store, ResolverMediaStoreFiles(graph.application, graph.storageVolume()), deviceId, System::currentTimeMillis)
+        mutableScreen.value = Screen.Licenses
     }
 }

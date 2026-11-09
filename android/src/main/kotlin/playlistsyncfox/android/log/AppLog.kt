@@ -1,9 +1,9 @@
 package playlistsyncfox.android.log
 
-import playlistsyncfox.android.sync.SyncLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import playlistsyncfox.android.sync.SyncLogger
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -49,8 +49,14 @@ class AppLog(
         override fun failure(text: String, errorNumber: Int) = log(LogLevel.Warn, "sync", text, errorNumber)
     }
 
-    /** 古い世代から新しい世代の順で、末尾の [maxLines] 行まで（閲覧と共有で共通。V51）。 */
-    fun tail(maxLines: Int = MAX_VIEW_LINES): List<String> {
+    /**
+     * 古い世代から新しい世代の順で、末尾の [maxLines] 行まで（閲覧と共有で共通。V51）。
+     * 世代送りの途中のファイルを読まないよう、読み取りは書き込みと同じ executor で行い、結果を待つ。呼び出しは IO のスレッドから。
+     */
+    fun tail(maxLines: Int = MAX_VIEW_LINES): List<String> =
+        CompletableFuture.supplyAsync({ readTail(maxLines) }, executor).join()
+
+    private fun readTail(maxLines: Int): List<String> {
         val collected = ArrayDeque<String>()
         for (file in generationFiles()) {
             if (!file.exists()) continue

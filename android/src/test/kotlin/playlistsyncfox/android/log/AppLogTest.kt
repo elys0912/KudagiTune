@@ -137,12 +137,44 @@ class AppLogTest {
     }
 
     @Test
+    fun `TA-118 閲覧の読み取りは、先に投げた書き込みが済んでから行う`() {
+        val queued = ConcurrentLinkedQueue<Runnable>()
+        // 書き込み 3 件と読み取り 1 件が並ぶまで、何も実行しない executor
+        val submitted = CountDownLatch(4)
+        val deferred = Executor { task ->
+            queued.add(task)
+            submitted.countDown()
+        }
+        val log = AppLog(tempDir(), now = { 0L }, executor = deferred)
+        repeat(3) { log.log(LogLevel.Info, "m", "行 $it") }
+        val lines = CompletableFuture.supplyAsync { log.tail() }
+
+        assertTrue(submitted.await(5, TimeUnit.SECONDS), "読み取りも executor に投げる")
+        queued.forEach { it.run() }
+
+        assertEquals(3, lines.get(5, TimeUnit.SECONDS).size)
+    }
+
+    @Test
     fun `X7-5 保存の既定の名前は端末の地方時の日時を 0 埋めで含む`() {
         val zone = ZoneId.of("Asia/Tokyo")
         // 2026-01-02T03:04:05+09:00
         val millis = ZonedDateTime.of(2026, 1, 2, 3, 4, 5, 0, zone).toInstant().toEpochMilli()
 
         assertEquals("kudagitune-log-20260102-030405.txt", logFileName(millis, zone))
+    }
+
+    @Test
+    fun `消去すると全世代が消え、消した旨の 1 行だけが新しい世代に残る`() {
+        val dir = tempDir()
+        val log = log(dir, maxBytes = 200)
+        repeat(40) { log.log(LogLevel.Info, "sync", "メッセージ $it") }
+        assertEquals(setOf("app.log", "app.log.1", "app.log.2"), dir.list()!!.toSet())
+
+        log.clear()
+
+        assertEquals(setOf("app.log"), dir.list()!!.toSet())
+        assertTrue(log.tail().single().contains("ログを消去した"))
     }
 
     @Test
