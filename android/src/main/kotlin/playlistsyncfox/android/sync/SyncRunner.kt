@@ -197,20 +197,21 @@ class SyncRunner(private val env: SyncEnvironment) {
             }
             if (!env.aliasExists(pairing.keyAlias)) {
                 // 署名の鍵が無い（端末の変更、OS の鍵の破棄）。P3 を送らず、再ペアリングへ誘導する
-                return closeEarly(SyncError.KeyMismatch(KeyMismatchCause.SignatureMismatch), keyMismatch = true, detail = ErrorDetail.NoDetail)
+                return closeEarly(TrackStep.Stop(SyncError.KeyMismatch(KeyMismatchCause.SignatureMismatch), keyMismatch = true, detail = ErrorDetail.NoDetail))
             }
 
             val connected = when (val reach = reach()) {
                 is Reach.Connected -> reach
                 is Reach.Unreachable -> return when {
-                    reach.mismatch -> closeEarly(SyncError.KeyMismatch(KeyMismatchCause.PinMismatch), keyMismatch = true, detail = ErrorDetail.PinMismatch)
-                    trigger == SyncTrigger.Manual -> closeEarly(SyncError.ConnectionFailed(ConnectionFailure.Timeout))
+                    reach.mismatch -> closeEarly(TrackStep.Stop(SyncError.KeyMismatch(KeyMismatchCause.PinMismatch), keyMismatch = true, detail = ErrorDetail.PinMismatch))
+                    trigger == SyncTrigger.Manual -> closeEarly(TrackStep.Stop(SyncError.ConnectionFailed(ConnectionFailure.Timeout)))
                     else -> {
                         env.log.line("PC に届かないため、何もせず終える")
                         null
                     }
                 }
-                is Reach.Stopped -> return closeStopped(reach.failure)
+                // 500 は E なし。T3 の result は M1 の区分から写す
+                is Reach.Stopped -> return closeEarly(stopFor(reach.failure))
             }
             api = connected.api
             transport = connected.endpoint.transport
@@ -229,7 +230,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             }
 
             // 3. T3 に行を追加する
-            run = SyncRun(deviceId = deviceId, trigger = triggerText, startedAt = startedAt).let { it.copy(runId = env.store.startRun(it)) }
+            openRun()
             baseLibraryId = recordedLibraryId(runs)
 
             return try {
@@ -655,32 +656,19 @@ class SyncRunner(private val env: SyncEnvironment) {
             return false
         }
 
-        private suspend fun closeStopped(failure: ApiFailure): SyncRun {
-            val step = stopFor(failure)
-            // 500 は E なし。T3 の result は M1 の区分から写す
-            return closeEarly(step.error, step.keyMismatch, step.detail, withoutE = step.error == null)
-        }
-
         /**
          * 抑止ではなく、記録して終える早い終わり（手順 2 の 1b、3、4、4b）。到達確認の段で閉じる行は
          * 差分に入る前なので、件数は空。`reported`＝0 のまま次回の再送の対象にする。
          */
-        private suspend fun closeEarly(
-            error: SyncError?,
-            keyMismatch: Boolean? = null,
-            detail: ErrorDetail? = null,
-            withoutE: Boolean = false,
-        ): SyncRun {
-            error?.let { errors += it }
-            stoppedWithoutE = withoutE
-            if (error is SyncError.KeyMismatch) {
-                this.keyMismatch = keyMismatch
-                this.errorDetail = detail
-            }
-            run = env.store.startRun(SyncRun(deviceId = deviceId, trigger = triggerText, startedAt = startedAt)).let {
-                SyncRun(runId = it, deviceId = deviceId, trigger = triggerText, startedAt = startedAt)
-            }
+        private suspend fun closeEarly(step: TrackStep.Stop): SyncRun {
+            applyStop(step)
+            openRun()
             return conclude(userInterrupted = false, afterCancel = false, skipPlaylists = true)
+        }
+
+        private suspend fun openRun() {
+            val row = SyncRun(deviceId = deviceId, trigger = triggerText, startedAt = startedAt)
+            run = row.copy(runId = env.store.startRun(row))
         }
 
         /** 手順 8〜12。T3 の更新は必須。 */
