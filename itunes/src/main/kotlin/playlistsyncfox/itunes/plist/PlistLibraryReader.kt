@@ -98,14 +98,20 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
 
     private fun readTopLevel() {
         // DOCTYPE やコメントを読み飛ばして、最初の要素へ進む
-        do { val event = xml.next() } while (event != START_ELEMENT)
+        while (xml.eventType != START_ELEMENT) xml.next()
         if (xml.localName != "plist") throw StructureException()
         if (xml.nextTag() != START_ELEMENT || xml.localName != "dict") throw StructureException()
 
         eachEntry { key ->
             when {
-                key == "Tracks" && xml.localName == "dict" -> { tracksFound = true; readTracks() }
-                key == "Playlists" && xml.localName == "array" -> { playlistsFound = true; readPlaylists() }
+                key == "Tracks" && xml.localName == "dict" -> {
+                    tracksFound = true
+                    readTracks()
+                }
+                key == "Playlists" && xml.localName == "array" -> {
+                    playlistsFound = true
+                    readPlaylists()
+                }
                 key == "Library Persistent ID" -> libraryPersistentId = textOrCountMalformed(readValue())?.uppercase()
                 key == "Application Version" -> applicationVersion = textOrCountMalformed(readValue())
                 key == "Date" -> xmlDate = (readValue() as? Value.Date)?.value
@@ -160,7 +166,10 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
                 "Parent Persistent ID" -> parentPersistentId = textOrCountMalformed(readValue())?.uppercase()
                 "Master" -> isMaster = flagOrCountMalformed(readValue())
                 "Folder" -> isFolder = flagOrCountMalformed(readValue())
-                "Distinguished Kind" -> { hasDistinguishedKind = true; skipElement() }
+                "Distinguished Kind" -> {
+                    hasDistinguishedKind = true
+                    skipElement()
+                }
                 "Playlist Items" -> {
                     if (xml.localName == "array") {
                         trackIds = readPlaylistItems()
@@ -310,9 +319,20 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
         "string" -> Value.Text(xml.elementText)
         "integer" -> Value.Integer(xml.elementText.trim().toLongOrNull())
         "date" -> Value.Date(parseInstant(xml.elementText.trim()))
-        "true" -> { xml.elementText; Value.Bool(true) }
-        "false" -> { xml.elementText; Value.Bool(false) }
-        else -> { skipElement(); Value.Other }
+        "true" -> {
+            // 終了要素まで読み進める
+            xml.elementText
+            Value.Bool(true)
+        }
+        "false" -> {
+            // 終了要素まで読み進める
+            xml.elementText
+            Value.Bool(false)
+        }
+        else -> {
+            skipElement()
+            Value.Other
+        }
     }
 
     /** 開始の要素に居る状態から、対応する終了の要素まで深さを数えて読み捨てる。 */
