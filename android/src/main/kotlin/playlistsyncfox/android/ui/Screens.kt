@@ -63,6 +63,8 @@ class ScreenActions(
     val onShareLog: (String) -> Unit,
     val onOpenStorageSettings: () -> Unit,
     val licenses: () -> List<LicenseEntry>?,
+    /** 同梱の全文（[LicenseEntry.textFiles] の 1 件）。読めなければ null。 */
+    val licenseText: (String) -> String?,
 )
 
 @Composable
@@ -661,8 +663,11 @@ private fun LicensesScreen(model: AppViewModel, actions: ScreenActions) {
     when {
         entries == null -> Label("ライセンスの一覧を読み込めません")
         chosen != null -> {
+            // 全文は選ばれたときに読む。再描画のたびには読まない
+            val texts = remember(chosen) { chosen.textFiles.map(actions.licenseText) }
             Label("${chosen.name} ${chosen.version}", bold = true)
             Label(chosen.body)
+            texts.forEach { Label(it ?: "ライセンスの全文を読み込めません", mono = true) }
             Action("一覧へ") { open = null }
         }
         else -> entries.forEach { Action("${it.name} ${it.version}　${it.license}") { open = it } }

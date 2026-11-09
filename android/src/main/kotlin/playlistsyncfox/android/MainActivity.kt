@@ -30,6 +30,7 @@ import playlistsyncfox.android.storage.StoredFile
 import playlistsyncfox.android.ui.AppScreen
 import playlistsyncfox.android.ui.AppViewModel
 import playlistsyncfox.android.ui.DarkColors
+import playlistsyncfox.android.ui.LICENSE_TEXT_DIR
 import playlistsyncfox.android.ui.LightColors
 import playlistsyncfox.android.ui.PermissionStep
 import playlistsyncfox.android.ui.Screen
@@ -80,6 +81,7 @@ class MainActivity : ComponentActivity() {
                 // 資産が読めなければ null（「読み込めない」を出す。アプリは止めない）
                 runCatching { assets.open("artifacts.json").bufferedReader().use { it.readText() } }.getOrNull()?.let(::parseLicenses)
             },
+            licenseText = { file -> runCatching { assets.open("$LICENSE_TEXT_DIR/$file").bufferedReader().use { it.readText() } }.getOrNull() },
         )
         setContent {
             val screen by model.screen.collectAsState()
