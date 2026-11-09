@@ -55,7 +55,7 @@ class PcStateTest {
     }
 
     @Test
-    fun `X5-4 ポートの使用中も待機中と表示せず、未ペアより上、鍵の保管の失敗より下に選ばれる`() {
+    fun `TD-35 ポートの使用中も待機中と表示せず、未ペアより上、鍵の保管の失敗より下に選ばれる`() {
         val noDevice = settings(devices = emptyList())
 
         assertEquals(TrayStatus.ServerFailed, trayStatus(state(server = ServerStatus.Failed(ServerFailureKind.PortInUse))))

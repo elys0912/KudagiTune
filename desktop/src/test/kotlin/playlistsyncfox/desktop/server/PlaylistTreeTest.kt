@@ -26,7 +26,7 @@ class PlaylistTreeTest {
     }
 
     @Test
-    fun `X5-21 フォルダの中のフォルダは入れ子の children になり、一番下の葉が曲数を持つ`() {
+    fun `TD-80 フォルダの中のフォルダは入れ子の children になり、一番下の葉が曲数を持つ`() {
         val tree = buildPlaylistTree(
             listOf(
                 playlist("F1", kind = folder, tracks = 0),

@@ -19,6 +19,8 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import playlistsyncfox.desktop.DesktopValues
 import playlistsyncfox.desktop.settings.LastSync
+import playlistsyncfox.desktop.settings.LogLevel
+import playlistsyncfox.desktop.settings.LogLine
 import playlistsyncfox.shared.auth.SignatureHeaderNames
 import java.nio.file.Files
 import java.nio.file.Path
@@ -436,7 +438,7 @@ class ServerRoutesTest {
     }
 
     @Test
-    fun `X5-21 P1 の本文に同じ ID が重なっていても 200 で、プレイリストと曲は 1 回だけ出る`() = withServer(fixture) { client ->
+    fun `TD-79 P1 の本文に同じ ID が重なっていても 200 で、プレイリストと曲は 1 回だけ出る`() = withServer(fixture) { client ->
         fixture.useLibrary(trackFile)
 
         val response = client.signed(fixture, HttpMethod.Post, "/v1/manifest", ids(PLAYLIST_ID, PLAYLIST_ID))
@@ -448,7 +450,7 @@ class ServerRoutesTest {
     }
 
     @Test
-    fun `X5-21 P3 の本文に同じ ID が重なっていても、1 つだけ選んだときと同じ content_digest を返す`() = withServer(fixture) { client ->
+    fun `TD-79 P3 の本文に同じ ID が重なっていても、1 つだけ選んだときと同じ content_digest を返す`() = withServer(fixture) { client ->
         fixture.useLibrary(trackFile)
 
         val single = client.signed(fixture, HttpMethod.Post, "/v1/digest", ids(PLAYLIST_ID)).json().getValue("content_digest")
@@ -539,7 +541,7 @@ class ServerRoutesTest {
     }
 
     @Test
-    fun `X5-20 開始時刻か終了時刻が UTC のミリ秒つきの書式でない報告は 400 で保存しない`() = withServer(fixture) { client ->
+    fun `TD-60 開始時刻か終了時刻が UTC のミリ秒つきの書式でない報告は 400 で保存しない`() = withServer(fixture) { client ->
         val bad = listOf(
             report.replace("2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00Z"),
             report.replace("2026-01-01T00:01:00.000Z", "2026-01-01 00:01:00.000"),
@@ -554,7 +556,7 @@ class ServerRoutesTest {
     }
 
     @Test
-    fun `X5-20 failure_counts のキーが E1 から E9 の形でない報告は 400 で保存しない`() = withServer(fixture) { client ->
+    fun `TD-60 failure_counts のキーが E1 から E9 の形でない報告は 400 で保存しない`() = withServer(fixture) { client ->
         for (key in listOf("E0", "E10", "e5", "X1")) {
             val body = report.replace(""""failure_counts":{"E5":1}""", """"failure_counts":{"$key":1}""")
 
@@ -564,7 +566,7 @@ class ServerRoutesTest {
     }
 
     @Test
-    fun `X5-20 failure_counts のキーが E1 と E9 の報告は保存する`() = withServer(fixture) { client ->
+    fun `TD-60 failure_counts のキーが E1 と E9 の報告は保存する`() = withServer(fixture) { client ->
         for (key in listOf("E1", "E9")) {
             val body = report.replace(""""failure_counts":{"E5":1}""", """"failure_counts":{"$key":1}""")
 
@@ -633,5 +635,67 @@ class ServerRoutesTest {
 
         assertEquals(HttpStatusCode.NoContent, response.status)
         assertEquals(3, lastSync()!!.excludedCount)
+    }
+
+    // ---- 画面向けのログ行（TD-91） ----
+
+    // P1 と P2 は応答を返した後に行を書くので、応答を受けた時点では欄に入っていないことがある
+    private suspend fun awaitLogLine(message: String): LogLine = withTimeout(5_000) {
+        while (fixture.log.lines.value.none { it.message == message }) delay(10)
+        fixture.log.lines.value.first { it.message == message }
+    }
+
+    @Test
+    fun `TD-91 P1 を返すと、曲数つきの行が情報で欄に入る`() = withServer(fixture) { client ->
+        fixture.useLibrary(trackFile)
+
+        assertEquals(HttpStatusCode.OK, client.manifest().status)
+
+        assertEquals(LogLevel.Info, awaitLogLine("P1 を返した tracks=1").level)
+    }
+
+    @Test
+    fun `TD-91 P2 を途中で切られると、表示名つきの行が情報で欄に入り、送り終えた行は入らない`() = withServer(fixture) { client ->
+        // 応答の緩衝に収まらない大きさにして、送信の途中で接続を閉じる
+        val bigBytes = ByteArray(8 * 1024 * 1024)
+        trackFile.writeBytes(bigBytes)
+        client.prepareTable()
+        val uri = trackUri(size = bigBytes.size.toLong())
+        val headers = sign(fixture, HttpMethod.Get, uri)
+
+        client.prepareGet(uri) {
+            header(SignatureHeaderNames.DEVICE, headers.device)
+            header(SignatureHeaderNames.TIMESTAMP, headers.timestamp)
+            header(SignatureHeaderNames.NONCE, headers.nonce)
+            header(SignatureHeaderNames.SIGNATURE, headers.signature)
+        }.execute { response ->
+            response.bodyAsChannel().readByte()
+        }
+
+        assertEquals(LogLevel.Info, awaitLogLine("P2 を途中で切られた name=track").level)
+        assertTrue(fixture.log.lines.value.none { it.message.startsWith("P2 を送り終えた") })
+    }
+
+    @Test
+    fun `TD-91 P4 を受けると、結果つきの行が情報で欄に入る`() = withServer(fixture) { client ->
+        assertEquals(HttpStatusCode.NoContent, client.signed(fixture, HttpMethod.Post, "/v1/reports", report.encodeToByteArray()).status)
+
+        val line = fixture.log.lines.value.single()
+        assertEquals(LogLevel.Info, line.level)
+        assertEquals("P4 を受けた outcome=success", line.message)
+    }
+
+    @Test
+    fun `TD-91 P3 と P7 と P8 が成功しても、欄の行は増えない`() = withServer(fixture) { client ->
+        fixture.useLibrary(trackFile)
+
+        val statuses = listOf(
+            client.signed(fixture, HttpMethod.Post, "/v1/digest", SELECTION).status,
+            client.signed(fixture, HttpMethod.Get, "/v1/playlists").status,
+            client.signed(fixture, HttpMethod.Post, "/v1/progress", progressBody.encodeToByteArray()).status,
+        )
+
+        assertEquals(listOf(HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.NoContent), statuses)
+        assertTrue(fixture.log.lines.value.isEmpty())
     }
 }
