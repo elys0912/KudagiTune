@@ -5,6 +5,7 @@ import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.net.ApiFailure
 import playlistsyncfox.android.net.ApiResult
 import playlistsyncfox.android.net.Endpoint
+import playlistsyncfox.android.net.SyncApi
 import playlistsyncfox.shared.diff.SyncRecord
 import playlistsyncfox.shared.diff.computeDiff
 import playlistsyncfox.shared.manifest.ManifestReadResult
@@ -27,6 +28,72 @@ internal fun parseHostPort(transport: Transport, text: String?): Endpoint? {
     val host = text?.substringBeforeLast(':', "")?.takeIf { it.isNotEmpty() }
     val port = text?.substringAfterLast(':', "")?.toIntOrNull()
     return if (host != null && port != null) Endpoint(transport, host, port) else null
+}
+
+/** 到達確認の結果（X6-3 の 2 の 2）。[T] は到達確認に使った通信の成功の値。 */
+internal sealed interface Reach<out T> {
+    /** [api] は閉じずに返す。呼び出し側が渡した `opened` に入っているので、まとめて閉じる。 */
+    class Connected<out T>(val api: SyncApi, val endpoint: Endpoint, val value: T) : Reach<T>
+
+    /** 全部の接続先が応えない。[mismatch] は証明書の固定の不一致が 1 つでもあったか。 */
+    class Unreachable(val mismatch: Boolean) : Reach<Nothing>
+
+    /** E2、E4、500 などを受けた。PC には届いているので、次の接続先を試さない。 */
+    class Stopped(val failure: ApiFailure) : Reach<Nothing>
+}
+
+/**
+ * 到達確認（X6-3 の 2 の 2）。[endpointOrder] の順に、[probe] が成功する接続先を探す。同期本体と画面側が同じ選び方をする。
+ * つながった接続先を `last_endpoint` に、NSD で引き直した名が保存と違うときは `endpoint_lan` に保存する。
+ * 開いた接続は [opened] に足す。応えなかった接続は閉じて外す。
+ */
+internal suspend fun <T> SyncEnvironment.reachPc(
+    pairing: Pairing,
+    opened: MutableList<SyncApi>,
+    probe: suspend (SyncApi) -> ApiResult<T>,
+): Reach<T> {
+    var saved = pairing
+    var mismatch = false
+    for (kind in endpointOrder(saved)) {
+        val endpoint = when (kind) {
+            LAN -> {
+                val service = resolveLan(saved)
+                if (service != null && service.serviceName != saved.endpointLan) {
+                    saved = saved.copy(endpointLan = service.serviceName)
+                    store.updatePairing(saved)
+                }
+                service?.let { Endpoint(Transport.Lan, it.host, it.port) }
+            }
+            TAILSCALE -> parseHostPort(Transport.Tailscale, saved.endpointTailscale)
+            else -> parseHostPort(Transport.UsbTethering, saved.endpointUsb)
+        } ?: continue
+        val candidate = apis.open(endpoint).also { opened += it }
+        when (val result = probe(candidate)) {
+            is ApiResult.Ok -> {
+                if (saved.lastEndpoint != kind) store.updatePairing(saved.copy(lastEndpoint = kind))
+                return Reach.Connected(candidate, endpoint, result.value)
+            }
+            is ApiResult.Fail -> when (val failure = result.failure) {
+                ApiFailure.Disconnected -> log.line("$kind は応えない")
+                ApiFailure.PinMismatch -> {
+                    log.line("$kind は証明書の固定が合わない")
+                    mismatch = true
+                }
+                else -> return Reach.Stopped(failure)
+            }
+        }
+        runCatching { candidate.close() }
+        opened.remove(candidate)
+    }
+    return Reach.Unreachable(mismatch)
+}
+
+/** T4 の `pc_id` の先頭 8 桁と前方一致する PC を NSD から引き直す（X6-3 の 2 の 2）。 */
+private suspend fun SyncEnvironment.resolveLan(pairing: Pairing): LanService? {
+    val found = withTimeoutOrNull(SyncValues.NSD_RESOLVE_WAIT_MS) { lan.discover() }
+    val service = found?.firstOrNull { it.pcIdPrefix.isNotEmpty() && pairing.pcId.startsWith(it.pcIdPrefix) }
+    if (service == null) log.line("LAN は引き直しで見つからない")
+    return service
 }
 
 /** 同期ボタンの後に、画面側が P1 と差分で得る「消す」の確認の要否（X7-1-2 の手順 1〜4）。 */
@@ -53,25 +120,17 @@ class SyncPreview(private val env: SyncEnvironment) {
         if (!env.aliasExists(pairing.keyAlias)) return RemovalCheck.Failed(reachFailed = false)
         val selectedIds = env.store.selectedPlaylists().map { it.playlistId }
 
-        var mismatch = false
-        for (kind in endpointOrder(pairing)) {
-            val endpoint = env.endpointFor(pairing, kind) ?: continue
-            val api = env.apis.open(endpoint)
-            try {
-                when (val reach = api.digest(selectedIds)) {
-                    is ApiResult.Ok -> return gateOf(pairing, api, selectedIds)
-                    is ApiResult.Fail -> when (reach.failure) {
-                        ApiFailure.Disconnected -> Unit
-                        ApiFailure.PinMismatch -> mismatch = true
-                        // E2、E4、500：届いているので、ほかの接続先は試さない。ワーカーが記録する
-                        else -> return RemovalCheck.Failed(reachFailed = false)
-                    }
-                }
-            } finally {
-                runCatching { api.close() }
+        val opened = mutableListOf<SyncApi>()
+        try {
+            return when (val reach = env.reachPc(pairing, opened) { it.digest(selectedIds) }) {
+                is Reach.Connected -> gateOf(pairing, reach.api, selectedIds)
+                // E2、E4、500：届いているので、ほかの接続先は試さない。ワーカーが記録する
+                is Reach.Stopped -> RemovalCheck.Failed(reachFailed = false)
+                is Reach.Unreachable -> RemovalCheck.Failed(reachFailed = !reach.mismatch)
             }
+        } finally {
+            opened.forEach { runCatching { it.close() } }
         }
-        return RemovalCheck.Failed(reachFailed = !mismatch)
     }
 
     private suspend fun gateOf(pairing: Pairing, api: playlistsyncfox.android.net.SyncApi, selectedIds: List<String>): RemovalCheck {
@@ -90,15 +149,4 @@ class SyncPreview(private val env: SyncEnvironment) {
         // 手動は 1 件でも消すなら確認を出す（D19）。`removalGate` は自動の判定に使う
         return if (diff.toRemove.isEmpty()) RemovalCheck.Allowed else RemovalCheck.NeedsConfirmation(diff.toRemove.size)
     }
-}
-
-/** 接続先の方式 [kind] の宛先。LAN は NSD で引き直す（X6-3 の手順 2 の 2）。到達確認と P7 の取得で共有する。 */
-internal suspend fun SyncEnvironment.endpointFor(pairing: Pairing, kind: String): Endpoint? = when (kind) {
-    LAN -> {
-        val found = withTimeoutOrNull(SyncValues.NSD_RESOLVE_WAIT_MS) { lan.discover() }
-        found?.firstOrNull { it.pcIdPrefix.isNotEmpty() && pairing.pcId.startsWith(it.pcIdPrefix) }
-            ?.let { Endpoint(Transport.Lan, it.host, it.port) }
-    }
-    TAILSCALE -> parseHostPort(Transport.Tailscale, pairing.endpointTailscale)
-    else -> parseHostPort(Transport.UsbTethering, pairing.endpointUsb)
 }

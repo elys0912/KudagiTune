@@ -7,6 +7,8 @@ import playlistsyncfox.android.ROOT
 import playlistsyncfox.android.db.PlacedTrack
 import playlistsyncfox.android.db.decodeResult
 import playlistsyncfox.android.manifestOf
+import playlistsyncfox.android.net.ApiFailure
+import playlistsyncfox.android.net.ApiResult
 import playlistsyncfox.android.track
 import playlistsyncfox.android.ui.resultUi
 import playlistsyncfox.shared.manifest.ManifestTrack
@@ -64,6 +66,23 @@ class DeleteMissingTest {
         val row = assertNotNull(declined.run())
         assertEquals(30, declined.store.placed.size)
         assertEquals(28, resultUi(row, emptyList()).notRemoved)
+    }
+
+    @Test
+    fun `X6-4 画面側の確認も、つながった接続先を last_endpoint に記録し NSD の名が変わっていれば endpoint_lan も更新する`() = runTest {
+        val viaTailscale = Harness()
+        val kept = viaTailscale.setup(placedCount = 3, keep = 2).take(2)
+        viaTailscale.lanApi.digestResult = ApiResult.Fail(ApiFailure.Disconnected)
+        viaTailscale.setManifest(manifestOf(kept), viaTailscale.tailApi)
+        SyncPreview(viaTailscale.environment()).check()
+        assertEquals("tailscale", viaTailscale.store.pairingRow?.lastEndpoint)
+
+        val renamed = Harness()
+        renamed.setup(placedCount = 3, keep = 2)
+        renamed.lanServices = listOf(LanService("psfox-01234567-2", Harness.LAN_HOST, 47800, "01234567"))
+        SyncPreview(renamed.environment()).check()
+        assertEquals("lan", renamed.store.pairingRow?.lastEndpoint)
+        assertEquals("psfox-01234567-2", renamed.store.pairingRow?.endpointLan)
     }
 
     @Test

@@ -18,7 +18,6 @@ import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.encodeResult
 import playlistsyncfox.android.net.ApiFailure
 import playlistsyncfox.android.net.ApiResult
-import playlistsyncfox.android.net.Endpoint
 import playlistsyncfox.android.net.SyncApi
 import playlistsyncfox.android.storage.PlaylistWriteResult
 import playlistsyncfox.android.storage.TrackBody
@@ -79,16 +78,6 @@ class SyncRunner(private val env: SyncEnvironment) {
             opened.forEach { runCatching { it.close() } }
             env.gate.unlock()
         }
-    }
-
-    private sealed interface Reach {
-        class Connected(val api: SyncApi, val endpoint: Endpoint, val digest: String) : Reach
-
-        /** 全部の接続先が応えない。[mismatch] は証明書の固定の不一致が 1 つでもあったか。 */
-        class Unreachable(val mismatch: Boolean) : Reach
-
-        /** P3 が E2、E4、500 を返した。次の接続先を試さない。 */
-        class Stopped(val failure: ApiFailure) : Reach
     }
 
     private sealed interface TrackStep {
@@ -241,7 +230,7 @@ class SyncRunner(private val env: SyncEnvironment) {
 
             if (trigger == SyncTrigger.Auto) {
                 val base = digestBase(runs)
-                if (base != null && base.contentDigest == connected.digest && base.result == SyncRun.RESULT_SUCCESS &&
+                if (base != null && base.contentDigest == connected.value && base.result == SyncRun.RESULT_SUCCESS &&
                     !env.writer.relocationNeeded(env.volume)
                 ) {
                     env.log.line("内容が前回と同じため、何もせず終える")
@@ -564,58 +553,12 @@ class SyncRunner(private val env: SyncEnvironment) {
             }
         }
 
-        /** 到達確認（X6-3 の 2 の 2）。 */
-        private suspend fun reach(): Reach {
+        /** 到達確認（X6-3 の 2 の 2）。P3 が通った接続先を使う。選び方は画面側と共有する（[reachPc]）。 */
+        private suspend fun reach(): Reach<String> {
             // 画面側が同じ試行を済ませているときは、繰り返さない
             if (input.reachFailed) return Reach.Unreachable(mismatch = false)
 
-            var mismatch = false
-            for (kind in endpointOrder(pairing)) {
-                val endpoint = endpointFor(kind) ?: continue
-                val candidate = env.apis.open(endpoint).also { opened += it }
-                when (val result = candidate.digest(selectedIds)) {
-                    is ApiResult.Ok -> {
-                        if (pairing.lastEndpoint != kind) {
-                            pairing = pairing.copy(lastEndpoint = kind)
-                            env.store.updatePairing(pairing)
-                        }
-                        return Reach.Connected(candidate, endpoint, result.value)
-                    }
-                    is ApiResult.Fail -> when (val failure = result.failure) {
-                        ApiFailure.Disconnected -> env.log.line("$kind は応えない")
-                        ApiFailure.PinMismatch -> {
-                            env.log.line("$kind は証明書の固定が合わない")
-                            mismatch = true
-                        }
-                        // E2、E4、500：PC には届いているので、次の接続先を試さない
-                        else -> return Reach.Stopped(failure)
-                    }
-                }
-                runCatching { candidate.close() }
-                opened.remove(candidate)
-            }
-            return Reach.Unreachable(mismatch)
-        }
-
-        private suspend fun endpointFor(kind: String): Endpoint? = when (kind) {
-            LAN -> resolveLan()
-            TAILSCALE -> parseHostPort(Transport.Tailscale, pairing.endpointTailscale)
-            else -> parseHostPort(Transport.UsbTethering, pairing.endpointUsb)
-        }
-
-        /** T4 の `pc_id` の先頭 8 桁と前方一致する PC を NSD から引き直す。名前が変わっていれば保存し直す。 */
-        private suspend fun resolveLan(): Endpoint? {
-            val found = withTimeoutOrNull(SyncValues.NSD_RESOLVE_WAIT_MS) { env.lan.discover() }
-            val service = found?.firstOrNull { it.pcIdPrefix.isNotEmpty() && pairing.pcId.startsWith(it.pcIdPrefix) }
-            if (service == null) {
-                env.log.line("LAN は引き直しで見つからない")
-                return null
-            }
-            if (service.serviceName != pairing.endpointLan) {
-                pairing = pairing.copy(endpointLan = service.serviceName)
-                env.store.updatePairing(pairing)
-            }
-            return Endpoint(Transport.Lan, service.host, service.port)
+            return env.reachPc(pairing, opened) { it.digest(selectedIds) }
         }
 
         /** P3 が通った後に、`reported`＝0 の行を古い順に全部、1 回の同期で 1 度ずつ再送する。 */
