@@ -1,7 +1,6 @@
 package playlistsyncfox.android.sync
 
 import playlistsyncfox.android.net.ApiFailure
-import playlistsyncfox.android.net.SyncApi
 import playlistsyncfox.shared.manifest.PlaylistNode
 import playlistsyncfox.shared.manifest.readPlaylistTree
 import playlistsyncfox.shared.result.ErrorDetail
@@ -35,15 +34,12 @@ class PlaylistCatalog(private val env: SyncEnvironment) {
         val pairing = env.store.pairing() ?: return CatalogResult.Other
         if (!env.aliasExists(pairing.keyAlias)) return CatalogResult.KeyMismatch
 
-        val opened = mutableListOf<SyncApi>()
-        try {
-            return when (val reach = env.reachPc(pairing, opened) { it.playlists() }) {
+        return withOpenedApis { opened ->
+            when (val reach = env.reachPc(pairing, opened) { it.playlists() }) {
                 is Reach.Connected -> readPlaylistTree(reach.value)?.let { CatalogResult.Loaded(it) } ?: CatalogResult.Other
                 is Reach.Stopped -> resultOf(reach.failure)
                 is Reach.Unreachable -> if (reach.mismatch) CatalogResult.KeyMismatch else CatalogResult.Unreachable
             }
-        } finally {
-            opened.forEach { runCatching { it.close() } }
         }
     }
 

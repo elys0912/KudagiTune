@@ -33,6 +33,7 @@ import playlistsyncfox.shared.result.SyncOutcome
 import playlistsyncfox.shared.result.SyncTrigger
 import playlistsyncfox.shared.result.Transport
 import playlistsyncfox.shared.result.UnplayableReason
+import playlistsyncfox.shared.result.WriteStep
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -591,6 +592,25 @@ class SyncRunnerTest {
     }
 
     @Test
+    fun `m3u8 の書き込みに失敗したプレイリストは E9 にして続け、T3 は partial で T6 の failed に残る`() = runTest {
+        val h = Harness()
+        h.seedPlaced(tracks)
+        h.sync(tracks, listOf(ManifestPlaylist(id(50), "Mix", tracks.map { it.persistentId })))
+        h.media.failInsert = true
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(SyncRun.RESULT_PARTIAL, row.result)
+        assertEquals("E9", row.errorKind)
+        assertEquals(SyncError.WriteFailed(id(50), "Mix", WriteStep.MediaStoreRegistration), row.result().errors.single())
+        assertTrue(h.store.playlistRows.isEmpty())
+        val issue = h.store.issueRows.single { it.kind == RunIssue.KIND_FAILED }
+        assertEquals(id(50), issue.persistentId)
+        assertEquals("Mix", issue.title)
+        assertEquals("E9", issue.errorKind)
+    }
+
+    @Test
     fun `TA-016 TA-058 応答が合わない E8 は終わりに 1 回だけ取り直し再び E8 なら retried つきで結果に載る`() = runTest {
         val h = Harness()
         h.sync(tracks)
@@ -627,6 +647,30 @@ class SyncRunnerTest {
         assertEquals(SyncRun.RESULT_SUCCESS, row.result)
         assertEquals(3, h.store.placed.size)
         assertTrue(row.result().errors.isEmpty())
+    }
+
+    @Test
+    fun `TA-058 E8 の取り直しでは曲を数え直さず、進行状態と P8 の done は total を超えない`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        val serve = h.lanApi.trackScript
+        var first = true
+        h.lanApi.trackScript = {
+            if (it.persistentId == id(2) && first) {
+                first = false
+                TrackScript.Fail(ApiFailure.Stale)
+            } else {
+                serve(it)
+            }
+        }
+
+        h.run()
+
+        val finalProgress = h.finished.single().second
+        assertEquals(3, finalProgress.totalCount)
+        assertEquals(3, finalProgress.doneCount)
+        val sent = h.lanApi.progressBodies.map { assertNotNull(readProgressReport(it)) }
+        assertTrue(sent.isNotEmpty() && sent.all { it.doneTracks <= it.totalTracks })
     }
 
     @Test
@@ -804,6 +848,61 @@ class SyncRunnerTest {
         assertTrue(row.result().hasMore)
     }
 
+    @Test
+    fun `TA-018 T6 を書いた直後に取り消されても、T6 は重ならず T3 は閉じた結果のまま残る`() = runTest {
+        val h = Harness()
+        h.syncWithMissingSecondTrack()
+
+        runCancelledBy(h) { job -> h.store.onIssuesAdded = { job.cancel() } }
+
+        val row = h.runs.single()
+        assertEquals(SyncRun.RESULT_PARTIAL, row.result)
+        assertEquals(1, h.store.issueRows.count { it.kind == RunIssue.KIND_FAILED })
+        assertEquals(1, h.lanApi.reports.size)
+    }
+
+    @Test
+    fun `TA-018 P4 の後の T3 の更新で取り消されても、二度目の記録と報告をせず結果は変わらない`() = runTest {
+        val h = Harness()
+        h.syncWithMissingSecondTrack()
+
+        runCancelledBy(h) { job -> h.store.onRunFinished = { if (it.reported == 1) job.cancel() } }
+
+        val row = h.runs.single()
+        assertEquals(SyncRun.RESULT_PARTIAL, row.result)
+        assertEquals(1, h.store.issueRows.count { it.kind == RunIssue.KIND_FAILED })
+        assertEquals(1, h.lanApi.reports.size)
+    }
+
+    @Test
+    fun `TA-018 P4 の途中の取り消しは送信の失敗として飲まず呼び出し側へ渡し、T3 は閉じた結果のまま残る`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        h.lanApi.onReport = { throw CancellationException("P4 の途中で取り消し") }
+
+        assertFailsWith<CancellationException> { h.run() }
+
+        val row = h.runs.single()
+        assertEquals(SyncRun.RESULT_SUCCESS, row.result)
+        assertEquals(0, row.reported)
+        assertEquals(1, h.lanApi.reports.size)
+    }
+
+    /** 3 曲の同期で 2 曲目だけ PC にファイルが無い（E5）。T6 の `failed` に 1 行残る。 */
+    private fun Harness.syncWithMissingSecondTrack() {
+        sync(tracks)
+        val serve = lanApi.trackScript
+        lanApi.trackScript = { if (it.persistentId == id(2)) TrackScript.Fail(ApiFailure.FileMissing) else serve(it) }
+    }
+
+    /** 同期を走らせ、[install] が受けた [kotlinx.coroutines.Job] を試験側の合図で取り消す。 */
+    private suspend fun kotlinx.coroutines.test.TestScope.runCancelledBy(h: Harness, install: (kotlinx.coroutines.Job) -> Unit) {
+        val job = launch(start = CoroutineStart.LAZY) { h.run() }
+        install(job)
+        job.start()
+        job.join()
+    }
+
     private suspend fun kotlinx.coroutines.test.TestScope.cancelDuringWrite(h: Harness): SyncRun {
         lateinit var job: kotlinx.coroutines.Job
         job = launch(start = CoroutineStart.LAZY) { h.run() }
@@ -842,6 +941,22 @@ class SyncRunnerTest {
         assertEquals(SyncRun.RESULT_SUCCESS, row.result)
         assertEquals(4, h.store.placed.size)
         assertTrue(row.result().removalSkipped)
+    }
+
+    @Test
+    fun `TA-059 消す操作が権限で拒まれた曲は E9 にして残りを続け、T1 の行は残る`() = runTest {
+        val h = Harness()
+        h.seedPlaced((11..13).map { track(it) })
+        h.sync(listOf(track(1)))
+        h.media.deniedDeletes += h.store.placed.getValue(id(12)).mediaUri
+
+        val row = assertNotNull(h.run(deleteApproved = true, approved = 3))
+
+        assertEquals(SyncRun.RESULT_PARTIAL, row.result)
+        assertEquals("E9", row.errorKind)
+        assertEquals(2, row.removed)
+        assertEquals(SyncError.WriteFailed(id(12), "Song 12.mp3", WriteStep.MediaStoreRegistration), row.result().errors.single())
+        assertEquals(setOf(id(1), id(12)), h.store.placed.keys)
     }
 
     @Test
@@ -1177,47 +1292,27 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `TA-239 前面への昇格が拒否されて終えたとき進行状態が消える`() = runTest {
-        val h = Harness()
-        h.promoteResult = false
-        h.sync(tracks)
+    fun `TA-239 何もせず終えるどの経路でも進行状態が消える`() = runTest {
+        // 準備は TA-062（昇格の拒否）、TA-035（手動の実行中）、TA-025（内容が同じ）、TA-063（自動の抑止）と同じ
+        val cases = mapOf<String, () -> Harness>(
+            "前面への昇格の拒否" to { Harness().also { it.promoteResult = false } },
+            "手動が実行中か待機中の自動" to { Harness(SyncTrigger.Auto).also { it.manualActive = true } },
+            "内容が前回と同じ自動" to { Harness(SyncTrigger.Auto).also { it.addRun(digest = "digest-1") } },
+            "自動の抑止" to {
+                Harness(SyncTrigger.Auto).also {
+                    it.addRun(trigger = SyncRun.TRIGGER_MANUAL, startedAt = it.clock - 10 * MIN, endedAt = it.clock - 10 * MIN)
+                }
+            },
+        )
 
-        assertNull(h.run())
+        for ((label, prepare) in cases) {
+            val h = prepare()
+            h.sync(tracks)
 
-        assertNull(h.progress.value)
-    }
+            assertNull(h.run(), label)
 
-    @Test
-    fun `TA-239 手動が実行中か待機中の自動が何もせず終えたとき進行状態が消える`() = runTest {
-        val h = Harness(SyncTrigger.Auto)
-        h.sync(tracks)
-        h.manualActive = true
-
-        assertNull(h.run())
-
-        assertNull(h.progress.value)
-    }
-
-    @Test
-    fun `TA-239 内容が前回と同じ自動が何もせず終えたとき進行状態が消える`() = runTest {
-        val h = Harness(SyncTrigger.Auto)
-        h.sync(tracks)
-        h.addRun(digest = "digest-1")
-
-        assertNull(h.run())
-
-        assertNull(h.progress.value)
-    }
-
-    @Test
-    fun `TA-239 自動の抑止で終えたとき進行状態が消える`() = runTest {
-        val h = Harness(SyncTrigger.Auto)
-        h.sync(tracks)
-        h.addRun(trigger = SyncRun.TRIGGER_MANUAL, startedAt = h.clock - 10 * MIN, endedAt = h.clock - 10 * MIN)
-
-        assertNull(h.run())
-
-        assertNull(h.progress.value)
+            assertNull(h.progress.value, label)
+        }
     }
 
     @Test

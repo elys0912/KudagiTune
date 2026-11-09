@@ -1,6 +1,8 @@
 package playlistsyncfox.android
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import playlistsyncfox.android.db.PendingTransfer
 import playlistsyncfox.android.db.PlacedTrack
 import playlistsyncfox.android.db.Pairing
@@ -115,6 +117,10 @@ class InMemoryStore : SyncStore {
     val relocatedRows = mutableListOf<String>()
     private var nextRunId = 1L
 
+    /** T6・T3 を更新した直後に呼ぶ。取り消しの再現用。 */
+    var onIssuesAdded: () -> Unit = {}
+    var onRunFinished: (SyncRun) -> Unit = {}
+
     override suspend fun placedTracks(deviceId: String) = placed.values.filter { it.deviceId == deviceId }
 
     override suspend fun savePlaced(row: PlacedTrack) {
@@ -161,12 +167,17 @@ class InMemoryStore : SyncStore {
         return saved.runId
     }
 
+    // Room の suspend 関数と同じく、更新の後に取り消されていれば CancellationException を投げる
     override suspend fun finishRun(row: SyncRun) {
         runRows[runRows.indexOfFirst { it.runId == row.runId }] = row
+        onRunFinished(row)
+        currentCoroutineContext().ensureActive()
     }
 
     override suspend fun addIssues(rows: List<RunIssue>) {
         issueRows += rows
+        onIssuesAdded()
+        currentCoroutineContext().ensureActive()
     }
 
     override suspend fun issues(runId: Long) = issueRows.filter { it.runId == runId }
@@ -363,6 +374,9 @@ class FakeApi(val name: String) : SyncApi {
     var playlistsResult: ApiResult<String> = ApiResult.Ok("""{"playlists":[]}""")
     var trackScript: (TrackRequest) -> TrackScript = { TrackScript.Fail(ApiFailure.FileMissing) }
 
+    /** P4 を受けた直後に呼ぶ。取り消しの再現用。 */
+    var onReport: () -> Unit = {}
+
     var digestCalls = 0
     var manifestCalls = 0
 
@@ -418,6 +432,7 @@ class FakeApi(val name: String) : SyncApi {
 
     override suspend fun report(body: String): ApiResult<Unit> {
         reports += body
+        onReport()
         return reportResult
     }
 

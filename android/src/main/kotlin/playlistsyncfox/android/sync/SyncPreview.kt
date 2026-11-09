@@ -2,24 +2,27 @@ package playlistsyncfox.android.sync
 
 import kotlinx.coroutines.withTimeoutOrNull
 import playlistsyncfox.android.db.Pairing
+import playlistsyncfox.android.db.PlacedTrack
 import playlistsyncfox.android.net.ApiFailure
 import playlistsyncfox.android.net.ApiResult
 import playlistsyncfox.android.net.Endpoint
 import playlistsyncfox.android.net.SyncApi
+import playlistsyncfox.shared.diff.Diff
 import playlistsyncfox.shared.diff.SyncRecord
 import playlistsyncfox.shared.diff.computeDiff
+import playlistsyncfox.shared.manifest.Manifest
 import playlistsyncfox.shared.manifest.ManifestReadResult
+import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.manifest.readManifest
 import playlistsyncfox.shared.result.Transport
 
-internal const val LAN = "lan"
-internal const val TAILSCALE = "tailscale"
-internal const val USB = "usb"
-
 /** `last_endpoint` を先頭に、残りは LAN、Tailscale、USB（保存してあるものだけ）。 */
 internal fun endpointOrder(pairing: Pairing): List<String> {
-    val saved = listOf(LAN to pairing.endpointLan, TAILSCALE to pairing.endpointTailscale, USB to pairing.endpointUsb)
-        .filter { it.second != null }.map { it.first }
+    val saved = listOf(
+        PairingKeeper.LAN to pairing.endpointLan,
+        PairingKeeper.TAILSCALE to pairing.endpointTailscale,
+        PairingKeeper.USB to pairing.endpointUsb,
+    ).filter { it.second != null }.map { it.first }
     val last = pairing.lastEndpoint
     return if (last != null && last in saved) listOf(last) + saved.filter { it != last } else saved
 }
@@ -42,6 +45,16 @@ internal sealed interface Reach<out T> {
     class Stopped(val failure: ApiFailure) : Reach<Nothing>
 }
 
+/** 到達確認が開いた接続の入れ物を [block] に渡し、[block] を抜けるときに全部閉じる。 */
+internal suspend fun <T> withOpenedApis(block: suspend (MutableList<SyncApi>) -> T): T {
+    val opened = mutableListOf<SyncApi>()
+    try {
+        return block(opened)
+    } finally {
+        opened.forEach { runCatching { it.close() } }
+    }
+}
+
 /**
  * 到達確認（X6-3 の 2 の 2）。[endpointOrder] の順に、[probe] が成功する接続先を探す。同期本体と画面側が同じ選び方をする。
  * つながった接続先を `last_endpoint` に、NSD で引き直した名が保存と違うときは `endpoint_lan` に保存する。
@@ -56,7 +69,7 @@ internal suspend fun <T> SyncEnvironment.reachPc(
     var mismatch = false
     for (kind in endpointOrder(saved)) {
         val endpoint = when (kind) {
-            LAN -> {
+            PairingKeeper.LAN -> {
                 val service = resolveLan(saved)
                 if (service != null && service.serviceName != saved.endpointLan) {
                     saved = saved.copy(endpointLan = service.serviceName)
@@ -64,7 +77,7 @@ internal suspend fun <T> SyncEnvironment.reachPc(
                 }
                 service?.let { Endpoint(Transport.Lan, it.host, it.port) }
             }
-            TAILSCALE -> parseHostPort(Transport.Tailscale, saved.endpointTailscale)
+            PairingKeeper.TAILSCALE -> parseHostPort(Transport.Tailscale, saved.endpointTailscale)
             else -> parseHostPort(Transport.UsbTethering, saved.endpointUsb)
         } ?: continue
         val candidate = apis.open(endpoint).also { opened += it }
@@ -87,6 +100,29 @@ internal suspend fun <T> SyncEnvironment.reachPc(
     }
     return Reach.Unreachable(mismatch)
 }
+
+internal fun PlacedTrack.toSyncRecord() = SyncRecord(persistentId, sourceSize, sourceModified, relativePath)
+
+/**
+ * マニフェストと、端末に置いた曲（T1）・MediaStore の現状との差分。同期本体と画面側が同じ計算をする。
+ * [isPlayable] は端末で再生できる形式の曲か。渡さなければ全曲を再生できるものとして扱う。
+ */
+internal suspend fun SyncEnvironment.diffFor(
+    manifest: Manifest,
+    placed: List<PlacedTrack>,
+    recordedLibraryId: String?,
+    isPlayable: (ManifestTrack) -> Boolean = { true },
+): Diff = computeDiff(
+    tracks = manifest.tracks,
+    records = placed.map { it.toSyncRecord() },
+    // T1 の曲のうち MediaStore に行が今ある曲（pending も含む）。差分の入力に state は渡さない
+    presentIds = writer.presentIds(placed),
+    manifestLibraryId = manifest.libraryId,
+    recordedLibraryId = recordedLibraryId,
+    removalConfirmThreshold = SyncValues.REMOVAL_CONFIRM_THRESHOLD,
+    unresolvedPlaylists = manifest.unresolvedPlaylists,
+    isPlayable = isPlayable,
+)
 
 /** T4 の `pc_id` の先頭 8 桁と前方一致する PC を NSD から引き直す（X6-3 の 2 の 2）。 */
 private suspend fun SyncEnvironment.resolveLan(pairing: Pairing): LanService? {
@@ -120,33 +156,22 @@ class SyncPreview(private val env: SyncEnvironment) {
         if (!env.aliasExists(pairing.keyAlias)) return RemovalCheck.Failed(reachFailed = false)
         val selectedIds = env.store.selectedPlaylists().map { it.playlistId }
 
-        val opened = mutableListOf<SyncApi>()
-        try {
-            return when (val reach = env.reachPc(pairing, opened) { it.digest(selectedIds) }) {
+        return withOpenedApis { opened ->
+            when (val reach = env.reachPc(pairing, opened) { it.digest(selectedIds) }) {
                 is Reach.Connected -> gateOf(pairing, reach.api, selectedIds)
                 // E2、E4、500：届いているので、ほかの接続先は試さない。ワーカーが記録する
                 is Reach.Stopped -> RemovalCheck.Failed(reachFailed = false)
                 is Reach.Unreachable -> RemovalCheck.Failed(reachFailed = !reach.mismatch)
             }
-        } finally {
-            opened.forEach { runCatching { it.close() } }
         }
     }
 
-    private suspend fun gateOf(pairing: Pairing, api: playlistsyncfox.android.net.SyncApi, selectedIds: List<String>): RemovalCheck {
+    private suspend fun gateOf(pairing: Pairing, api: SyncApi, selectedIds: List<String>): RemovalCheck {
         val body = (api.manifest(selectedIds) as? ApiResult.Ok)?.value ?: return RemovalCheck.Failed(reachFailed = false)
         val manifest = (readManifest(body) as? ManifestReadResult.Loaded)?.manifest ?: return RemovalCheck.Failed(reachFailed = false)
         val placed = env.store.placedTracks(pairing.deviceId)
         // 使うのは toRemove の件数だけ。再生できるかの判定は、端末のデコーダの列挙が走るため渡さない（X6-10）
-        val diff = computeDiff(
-            tracks = manifest.tracks,
-            records = placed.map { SyncRecord(it.persistentId, it.sourceSize, it.sourceModified, it.relativePath) },
-            presentIds = env.writer.presentIds(placed),
-            manifestLibraryId = manifest.libraryId,
-            recordedLibraryId = recordedLibraryId(env.store.runs()),
-            removalConfirmThreshold = SyncValues.REMOVAL_CONFIRM_THRESHOLD,
-            unresolvedPlaylists = manifest.unresolvedPlaylists,
-        )
+        val diff = env.diffFor(manifest, placed, recordedLibraryId(env.store.runs()))
         // 手動は 1 件でも消すなら確認を出す（D19）。`removalGate` は自動の判定に使う
         return if (diff.toRemove.isEmpty()) RemovalCheck.Allowed else RemovalCheck.NeedsConfirmation(diff.toRemove.size)
     }

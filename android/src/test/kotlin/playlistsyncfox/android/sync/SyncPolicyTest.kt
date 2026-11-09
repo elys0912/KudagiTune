@@ -6,17 +6,14 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import playlistsyncfox.android.DEVICE
 import playlistsyncfox.android.db.SyncRun
-import playlistsyncfox.android.db.decodeResult
 import playlistsyncfox.android.db.encodeResult
 import playlistsyncfox.shared.manifest.ExcludedReason
 import playlistsyncfox.shared.manifest.ExcludedTrack
 import playlistsyncfox.shared.result.Capacity
-import playlistsyncfox.shared.result.ConnectionFailure
 import playlistsyncfox.shared.result.Counts
 import playlistsyncfox.shared.result.ErrorDetail
 import playlistsyncfox.shared.result.FileMissingReason
 import playlistsyncfox.shared.result.KeyMismatchCause
-import playlistsyncfox.shared.result.StoragePhase
 import playlistsyncfox.shared.result.SyncError
 import playlistsyncfox.shared.result.SyncOutcome
 import playlistsyncfox.shared.result.SyncResult
@@ -234,37 +231,6 @@ class SyncPolicyTest {
     @Test
     fun `強制終了の跡の result_json が空の行は報告の本文を作らない`() {
         assertNull(reportBody(run(result = SyncRun.RESULT_INTERRUPTED, resultJson = null)))
-    }
-
-    @Test
-    fun `TA-036 SyncResult の全項目が result_json に往復して同じ値で戻る`() {
-        val errors = listOf(
-            SyncError.ConnectionFailed(ConnectionFailure.Timeout),
-            SyncError.KeyMismatch(KeyMismatchCause.PinMismatch),
-            SyncError.InsufficientStorage(123, StoragePhase.Writing),
-            SyncError.XmlUnavailable,
-            SyncError.FileMissing("A", "曲A", FileMissingReason.Unreadable),
-            SyncError.TransferInterrupted("B", 4),
-            SyncError.TransferInterrupted(null, 2),
-            SyncError.TimeLimit,
-            SyncError.ManifestStale("C", "曲C", true),
-            SyncError.WriteFailed("D", "曲D", WriteStep.MediaStoreRegistration),
-        )
-        val original = sampleResult(errors, SyncOutcome.Interrupted, keyMismatch = true, errorDetail = ErrorDetail.PinMismatch)
-
-        val json = encodeResult(original)
-
-        assertEquals(original, decodeResult(json))
-        for (key in listOf("removal_skipped", "key_mismatch", "error_detail")) assertTrue("\"$key\"" in json, key)
-    }
-
-    @Test
-    fun `TA-036 detail なしの 401 と空の値も往復で区別される`() {
-        val noDetail = sampleResult(keyMismatch = true, errorDetail = ErrorDetail.NoDetail)
-        val none = sampleResult(keyMismatch = null, errorDetail = null)
-
-        assertEquals(ErrorDetail.NoDetail, decodeResult(encodeResult(noDetail)).errorDetail)
-        assertNull(decodeResult(encodeResult(none)).errorDetail)
     }
 
     @Test

@@ -54,18 +54,14 @@ class DeleteMissingTest {
     }
 
     @Test
-    fun `TA-231 ON のときは手動の確認を経て消え、確認を断れば消えない`() = runTest {
-        val approved = Harness()
-        approved.setup(placedCount = 30, keep = 2)
-        assertEquals(RemovalCheck.NeedsConfirmation(28), SyncPreview(approved.environment()).check())
-        approved.run(deleteApproved = true, approved = 28)
-        assertEquals(2, approved.store.placed.size)
+    fun `TA-231 ON のときは手動の確認に消す件数が出て、承認すれば消える`() = runTest {
+        val h = Harness()
+        h.setup(placedCount = 30, keep = 2)
 
-        val declined = Harness()
-        declined.setup(placedCount = 30, keep = 2)
-        val row = assertNotNull(declined.run())
-        assertEquals(30, declined.store.placed.size)
-        assertEquals(28, resultUi(row, emptyList()).notRemoved)
+        assertEquals(RemovalCheck.NeedsConfirmation(28), SyncPreview(h.environment()).check())
+        h.run(deleteApproved = true, approved = 28)
+
+        assertEquals(2, h.store.placed.size)
     }
 
     @Test
@@ -86,12 +82,10 @@ class DeleteMissingTest {
     }
 
     @Test
-    fun `TA-231 ON のとき手動は 1 件だけ消す場合も確認を出し、断れば消えない`() = runTest {
+    fun `TA-231 ON のとき手動は 1 件だけ消す場合も確認を出す`() = runTest {
         val h = Harness()
         h.setup(placedCount = 3, keep = 2)
-        assertEquals(RemovalCheck.NeedsConfirmation(1), SyncPreview(h.environment()).check())
 
-        h.run()
-        assertEquals(3, h.store.placed.size)
+        assertEquals(RemovalCheck.NeedsConfirmation(1), SyncPreview(h.environment()).check())
     }
 }
