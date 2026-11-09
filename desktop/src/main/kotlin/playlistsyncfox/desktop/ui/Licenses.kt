@@ -60,7 +60,7 @@ private fun loadText(resource: String): String =
 
 private fun bundledLicenseOf(identifier: String, url: String): BundledLicense? = when {
     identifier == "Apache-2.0" -> BundledLicense.Apache2
-    identifier == "MIT" || url == MIT_URL -> BundledLicense.Mit
+    url == MIT_URL -> BundledLicense.Mit
     url == BOUNCY_CASTLE_URL -> BundledLicense.BouncyCastle
     else -> null
 }

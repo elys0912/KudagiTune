@@ -205,7 +205,7 @@ class PlistLibraryReaderTest {
     }
 
     @Test
-    fun `重複で落としたトラックを参照する並びを読むと、残したトラックへの参照として扱う`() {
+    fun `TS-170 重複で落としたトラックを参照する並びを読むと、残したトラックへの参照として扱う`() {
         val tracks = fileTrack(1, ID_A, "先") + fileTrack(2, ID_A, "後")
 
         val result = read(document(tracks, playlist(PLAYLIST_ID, "一覧", items(1, 2))))
@@ -286,7 +286,7 @@ class PlistLibraryReaderTest {
     }
 
     @Test
-    fun `Track Type が File でないトラックを読むと、Location があっても場所なしになる`() {
+    fun `TS-167 Track Type が File でないトラックを読むと、Location があっても場所なしになる`() {
         val tracks = track(
             1,
             int("Track ID", "1"),
@@ -302,7 +302,7 @@ class PlistLibraryReaderTest {
     }
 
     @Test
-    fun `Playlist Persistent ID が無いプレイリストを読むと、落として不正な項目に数える`() {
+    fun `TS-169 Playlist Persistent ID が無いプレイリストを読むと、落として不正な項目に数える`() {
         val playlists = playlist(null, "ID なし", items(1)) + playlist(PLAYLIST_ID, "一覧")
 
         val result = read(document(standardTracks, playlists))
@@ -312,7 +312,7 @@ class PlistLibraryReaderTest {
     }
 
     @Test
-    fun `Playlist Persistent ID が 15 桁と 17 桁と非 16 進のプレイリストを読むと、落として不正な項目に数える`() {
+    fun `TS-169 Playlist Persistent ID が 15 桁と 17 桁と非 16 進のプレイリストを読むと、落として不正な項目に数える`() {
         val playlists = playlist("111111111111111", "十五") +
             playlist("11111111111111111", "十七") +
             playlist("G111111111111111", "非十六進") +
@@ -326,13 +326,31 @@ class PlistLibraryReaderTest {
     }
 
     @Test
-    fun `Track ID が整数でない並びの要素を読むと、不正な項目を 1 回だけ数える`() {
+    fun `TS-169 Playlist Persistent ID が小文字の 16 桁のプレイリストを読むと、大文字に揃う`() {
+        val result = read(document(standardTracks, playlist("abcdef0123456789", "一覧")))
+
+        assertEquals("ABCDEF0123456789", result.playlists.single().persistentId)
+    }
+
+    @Test
+    fun `TS-171 Track ID が整数でない並びの要素を読むと、不正な項目を 1 回だけ数える`() {
         val brokenItem = "<key>Playlist Items</key><array><dict><key>Track ID</key><integer>x</integer></dict></array>"
 
         val result = read(document(standardTracks, playlist(PLAYLIST_ID, "一覧", brokenItem)))
 
         assertTrue(result.playlists.single().items.isEmpty())
         assertEquals(1, result.diagnostics.malformedEntries)
+    }
+
+    @Test
+    fun `TS-172 重複で落としたトラックと ID 無しのトラックと ID の無いプレイリストを含む文書を読むと、診断の件数は残した分だけになる`() {
+        val tracks = fileTrack(1, ID_A, "先") + fileTrack(2, ID_A, "後") + fileTrack(3, null, "ID 無し") + fileTrack(4, ID_B, "b")
+        val playlists = playlist(null, "ID なし") + playlist(PLAYLIST_ID, "一覧")
+
+        val diagnostics = read(document(tracks, playlists)).diagnostics
+
+        assertEquals(2, diagnostics.trackCount)
+        assertEquals(1, diagnostics.playlistCount)
     }
 
     @Test

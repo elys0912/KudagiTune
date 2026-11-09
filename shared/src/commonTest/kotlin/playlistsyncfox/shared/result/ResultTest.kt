@@ -134,7 +134,7 @@ class ResultTest {
     }
 
     @Test
-    fun `保護付きの曲は曲名と種類と拡張子を保ち理由を Protected にして写す`() {
+    fun `TS-166 保護付きの曲は曲名と種類と拡張子を保ち理由を Protected にして写す`() {
         val protectedTrack = track(pid('A'), name = "曲", extension = "m4p").copy(kind = "Protected AAC")
 
         assertEquals(
@@ -144,7 +144,7 @@ class ResultTest {
     }
 
     @Test
-    fun `再生できない形式の曲は理由を UnsupportedFormat にして保護付きの後ろに写す`() {
+    fun `TS-166 再生できない形式の曲は理由を UnsupportedFormat にして保護付きの後ろに写す`() {
         val protectedTrack = track(pid('A'), name = "保護", extension = "m4p")
         val unsupportedTrack = track(pid('B'), name = "形式", extension = "aiff").copy(kind = "AIFF")
 

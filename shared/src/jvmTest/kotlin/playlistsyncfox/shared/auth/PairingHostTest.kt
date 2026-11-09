@@ -240,12 +240,23 @@ class PairingHostTest {
     }
 
     @Test
-    fun `TS-156 P5 を受けていない P6 は書式の誤りで試行に数えない`() {
+    fun `TS-175 P5 を受けていない P6 は書式の誤りで試行に数えない`() {
         val (crypto, host) = openHost(openedAt)
 
         val step = handlePairingConfirm(crypto, host, DEVICE_ID, ByteArray(32), openedAt) { _, _ -> true }
 
         assertEquals(PairingFailure.BadRequest, step.failure())
         assertEquals(0, assertIs<PairingState.Open>(step.state).failedAttempts)
+    }
+
+    @Test
+    fun `TS-175 P5 と device_id が違う P6 は書式の誤りで試行に数えない`() {
+        val (crypto, step, macD) = started(scalar(0x40))
+        val otherDeviceId = "00000000-0000-4000-8000-000000000002"
+
+        val confirmed = handlePairingConfirm(crypto, step.state, otherDeviceId, macD, openedAt) { _, _ -> true }
+
+        assertEquals(PairingFailure.BadRequest, confirmed.failure())
+        assertEquals(0, assertIs<PairingState.Started>(confirmed.state).open.failedAttempts)
     }
 }

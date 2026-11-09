@@ -135,7 +135,7 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `X2-1 要求の時に XML が無ければ、1 回だけ待って、読み直さずに読めない状態にして戻る`() = runTest {
+    fun `TD-95 要求の時に XML が無ければ、1 回だけ待って、読み直さずに読めない状態にして戻る`() = runTest {
         var reads = 0
         val holder = holder()
         val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { reads++; XML_BYTES }, stable, holder, { null })
@@ -148,7 +148,7 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `X2-1 要求の時の欠けが待っている間に戻れば、そのまま読み直して応える`() = runTest {
+    fun `TD-95 要求の時の欠けが待っている間に戻れば、そのまま読み直して応える`() = runTest {
         var reads = 0
         var checks = 0
         val holder = holder()
@@ -165,7 +165,7 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `X2-1 要求が XML の無いまま戻っても、監視の待ちは続き、XML が戻れば読み直す`() = runTest {
+    fun `TD-95 要求が XML の無いまま戻っても、監視の待ちは続き、XML が戻れば読み直す`() = runTest {
         var reads = 0
         var present = false
         val holder = holder()
@@ -185,7 +185,7 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `X2-3 読めない状態の間は、更新日時が保持値と同じでも要求のたびに読み直す`() = runTest {
+    fun `TD-96 読めない状態の間は、更新日時が保持値と同じでも要求のたびに読み直す`() = runTest {
         var reads = 0
         val holder = holder()
         val old = Instant.parse("2026-01-01T00:00:00Z")
@@ -204,7 +204,7 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `X2-2 読めたときは、読んだ件数の診断を 1 行ログに書く`() = runTest {
+    fun `TD-94 読めたときは、読んだ件数の診断を 1 行ログに書く`() = runTest {
         LibraryLoader(xml, log) { XML_BYTES }.load()
 
         val messages = log.lines.value.map { it.message }
@@ -213,7 +213,7 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `X2-2 読み取りの失敗と読み直しと諦めを、回数つきでログに書く`() = runTest {
+    fun `TD-94 読み取りの失敗と読み直しと諦めを、回数つきでログに書く`() = runTest {
         LibraryLoader(xml, log) { throw IOException("読めない") }.load()
 
         assertEquals(
@@ -231,14 +231,14 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `X2-2 構文の不正は、失敗の理由としてログに書く`() = runTest {
+    fun `TD-94 構文の不正は、失敗の理由としてログに書く`() = runTest {
         LibraryLoader(xml, log) { "<plist><dict>".encodeToByteArray() }.load()
 
         assertEquals("XML を読めない attempt=1/3 reason=InvalidSyntax", log.lines.value.first().message)
     }
 
     @Test
-    fun `TD-48短い間に同じファイルの通知が続けて届いても、読み直しは 1 回`() = runTest {
+    fun `TD-48 短い間に同じファイルの通知が続けて届いても、読み直しは 1 回`() = runTest {
         var reads = 0
         val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { reads++; XML_BYTES }, stable, holder(), { null })
 

@@ -90,7 +90,7 @@ class ManifestReaderTest {
     }
 
     @Test
-    fun `同じ ID のプレイリストが 2 件あると最初の 1 件だけ残り曲の落とした件数は変わらない`() {
+    fun `TS-161 同じ ID のプレイリストが 2 件あると最初の 1 件だけ残り曲の落とした件数は変わらない`() {
         val first = playlist("D000000000000001", "first", listOf(idA))
         val dup = sampleManifest(listOf(track(idA)), listOf(first, playlist("D000000000000001", "second")))
 
@@ -101,7 +101,7 @@ class ManifestReaderTest {
     }
 
     @Test
-    fun `同じ ID の未解決のプレイリストが 2 件あると最初の 1 件だけ残る`() {
+    fun `TS-161 同じ ID の未解決のプレイリストが 2 件あると最初の 1 件だけ残る`() {
         val first = UnresolvedPlaylist("C000000000000001", "first")
         val dup = sampleManifest().copy(unresolvedPlaylists = listOf(first, UnresolvedPlaylist("C000000000000001", "second")))
 

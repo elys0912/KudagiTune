@@ -16,7 +16,7 @@ class CryptoVectorsTest {
     }
 
     @Test
-    fun `SHA-256 の値からも先頭 12 バイトの 24 桁を 4 桁ずつ空白で区切った指紋になる`() {
+    fun `TS-177 SHA-256 の値からも先頭 12 バイトの 24 桁を 4 桁ずつ空白で区切った指紋になる`() {
         val sha256OfAbc = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".hexToByteArray()
 
         assertEquals("ba78 16bf 8f01 cfea 4141 40de", formatFingerprintOfHash(sha256OfAbc))

@@ -287,7 +287,7 @@ class PcAppTest {
     // ---- 画面向けの状態と警告（X5-2、X5-3、X5-4、X5-22） ----
 
     @Test
-    fun `X5-22 起動すると、サーバーを起動した行が画面のログの欄に入る`() = runTest {
+    fun `TD-91 起動すると、サーバーを起動した行が画面のログの欄に入る`() = runTest {
         val h = harness()
 
         h.app.start()
@@ -299,7 +299,7 @@ class PcAppTest {
     }
 
     @Test
-    fun `X5-22 鍵を新しく作った起動で端末があれば、証明書の作り直しの警告が出る`() = runTest {
+    fun `TD-86 鍵を新しく作った起動で端末があれば、証明書の作り直しの警告が出る`() = runTest {
         val h = harness()
         h.addPairedDevice()
 
@@ -310,7 +310,7 @@ class PcAppTest {
     }
 
     @Test
-    fun `X5-22 鍵を新しく作った起動でも端末が無ければ、証明書の作り直しの警告は出ない`() = runTest {
+    fun `TD-86 鍵を新しく作った起動でも端末が無ければ、証明書の作り直しの警告は出ない`() = runTest {
         val h = harness()
 
         h.app.start()
@@ -320,7 +320,7 @@ class PcAppTest {
     }
 
     @Test
-    fun `X5-2 端末を解除して再ペアリングを済ませると、証明書の作り直しの警告が消えたままになる`() = runTest {
+    fun `TD-86 端末を解除して再ペアリングを済ませると、証明書の作り直しの警告が消えたままになる`() = runTest {
         val h = harness()
         h.addPairedDevice()
         h.app.start()
@@ -336,7 +336,7 @@ class PcAppTest {
     }
 
     @Test
-    fun `X5-22 設定を読めなかった起動では、退避して初期設定で起動した警告が出て、ログにも残る`() = runTest {
+    fun `TD-92 設定を読めなかった起動では、退避して初期設定で起動した警告が出て、ログにも残る`() = runTest {
         val h = harness()
         Files.writeString(h.paths.settingsFile, "これは JSON ではない")
 
@@ -349,7 +349,7 @@ class PcAppTest {
     }
 
     @Test
-    fun `X5-4 ポートの使用中以外の起動の失敗も、警告を出して待機中と表示せず、ログに理由を残す`() = runTest {
+    fun `TD-85 ポートの使用中以外の起動の失敗も、警告を出して待機中と表示せず、ログに理由を残す`() = runTest {
         val h = harness()
         h.launchFailure = IllegalStateException("TLS を組めない")
 
@@ -365,7 +365,7 @@ class PcAppTest {
     }
 
     @Test
-    fun `X5-3 端末がある間は、ペアリングコードを開かず、受付中の広告も出さない`() = runTest {
+    fun `TD-87 端末がある間は、ペアリングコードを開かず、受付中の広告も出さない`() = runTest {
         val h = harness()
         h.addPairedDevice()
         h.app.start()
@@ -378,7 +378,7 @@ class PcAppTest {
     }
 
     @Test
-    fun `X5-3 端末が無ければ、ペアリングコードを開いて受付中を広告する`() = runTest {
+    fun `TD-87 端末が無ければ、ペアリングコードを開いて受付中を広告する`() = runTest {
         val h = harness()
         h.app.start()
         runCurrent()
@@ -392,7 +392,7 @@ class PcAppTest {
     // ---- XML の場所の保存（X5-18、X5-9） ----
 
     @Test
-    fun `X5-18 W5 で読める XML の場所を保存すると、その XML を読み直して読めた状態になる`() = runTest {
+    fun `TD-71 W5 で読める XML の場所を保存すると、その XML を読み直して読めた状態になる`() = runTest {
         val h = harness()
         h.app.start()
         // 既定の場所に XML が無いまま V6 の回数（間隔 1 秒を 2 回）を読んで諦める
@@ -409,7 +409,7 @@ class PcAppTest {
     }
 
     @Test
-    fun `X5-9 XML の場所が未設定なら、実際に読んでいる既定の場所を返す`() = runTest {
+    fun `TD-89 XML の場所が未設定なら、実際に読んでいる既定の場所を返す`() = runTest {
         val h = harness()
         h.app.start()
         runCurrent()
@@ -418,7 +418,7 @@ class PcAppTest {
     }
 
     @Test
-    fun `X5-9 XML の場所を保存した後は、保存した場所を返す`() = runTest {
+    fun `TD-89 XML の場所を保存した後は、保存した場所を返す`() = runTest {
         val h = harness()
         h.app.start()
         runCurrent()
@@ -431,7 +431,7 @@ class PcAppTest {
     // ---- ログイン時の起動の結線（X5-19） ----
 
     @Test
-    fun `X5-19 ログイン時の起動の切り替えは、Run キーの解除と登録と設定の保存に届く`() = runTest {
+    fun `TD-90 ログイン時の起動の切り替えは、Run キーの解除と登録と設定の保存に届く`() = runTest {
         val h = harness()
         h.app.start()
         runCurrent()
@@ -446,7 +446,7 @@ class PcAppTest {
     }
 
     @Test
-    fun `X5-19 起動のとき、設定が有効なら Run キーを現在のパスに書き直す`() = runTest {
+    fun `TD-90 起動のとき、設定が有効なら Run キーを現在のパスに書き直す`() = runTest {
         val h = harness()
         h.runKey.set("playlist-sync-fox", "\"C:\\old\\app.exe\" --background")
 
@@ -457,7 +457,7 @@ class PcAppTest {
     }
 
     @Test
-    fun `X5-19 起動のとき、設定が無効なら Run キーを解除する`() = runTest {
+    fun `TD-90 起動のとき、設定が無効なら Run キーを解除する`() = runTest {
         val h = harness()
         SettingsStore(h.paths.settingsFile).also { it.load() }.update { it.copy(launchOnLogin = false) }
         h.runKey.set("playlist-sync-fox", "\"C:\\old\\app.exe\" --background")
