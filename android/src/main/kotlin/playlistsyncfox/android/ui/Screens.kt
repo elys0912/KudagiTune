@@ -581,17 +581,38 @@ private fun Issues(title: String, list: IssueList) {
 @Composable
 private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     val state by model.settings.state.collectAsState()
-    val syncing by model.syncing.collectAsState()
     val ui = state
     if (ui == null) {
         Label("読み込んでいます")
         Back(model)
         return
     }
+    SyncOptionsSection(model.settings, ui)
+    StorageSection(model, ui)
+    if (ui.notificationsOff) {
+        Label("通知がオフになっています")
+        Action("通知を許可する", actions.onNotificationHelp)
+    }
+    PairingSection(model, ui)
+    CleanupSection(ui.cleanup, actions)
+    LogSection(model, actions, ui.logBytes)
+    Action("ライセンス", model::openLicenses)
+    Action("ホームへ", model::back)
+}
+
+/** 自動同期と「PC にない曲を端末から削除する」の切り替え。 */
+@Composable
+private fun SyncOptionsSection(presenter: SettingsPresenter, ui: SettingsUiState) {
     Label("自動同期：${if (ui.autoEnabled) "オン" else "オフ"}（Wi-Fi など従量制でない回線のとき、約 6 時間ごと）")
-    Action(if (ui.autoEnabled) "オフにする" else "オンにする") { model.settings.toggleAuto(!ui.autoEnabled) }
+    Action(if (ui.autoEnabled) "オフにする" else "オンにする") { presenter.toggleAuto(!ui.autoEnabled) }
     Label("PC にない曲を端末から削除する：${if (ui.deleteMissing) "オン" else "オフ"}（プレイリストから外した曲も対象です）")
-    Action(if (ui.deleteMissing) "オフにする" else "オンにする") { model.settings.setDeleteMissing(!ui.deleteMissing) }
+    Action(if (ui.deleteMissing) "オフにする" else "オンにする") { presenter.setDeleteMissing(!ui.deleteMissing) }
+}
+
+/** 保存先の選択と、前の保存先に残った曲の削除（D16）。 */
+@Composable
+private fun StorageSection(model: AppViewModel, ui: SettingsUiState) {
+    val syncing by model.syncing.collectAsState()
     Label("保存先のフォルダ：${ui.saveFolder}")
     ui.storage.options.forEach { option ->
         val chosen = option.volume == ui.storage.selected
@@ -612,22 +633,28 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
             )
         }
     }
-    if (ui.notificationsOff) {
-        Label("通知がオフになっています")
-        Action("通知を許可する", actions.onNotificationHelp)
-    }
-    if (ui.pcName != null) {
-        Label("ペアリング中の PC：${ui.pcName}", bold = true)
-        ui.fingerprint?.let { Label("確認コード：$it") }
-        ConfirmedAction(
-            label = "解除する",
-            prompt = "ペアリングを解除します。曲とプレイリストは端末に残ります。PC の画面の「端末」でも解除してください",
-            ok = "解除する",
-            onConfirmed = model::unpair,
-        )
-    }
+}
+
+/** ペアリング中の PC と解除。未ペアリングなら何も出さない。 */
+@Composable
+private fun PairingSection(model: AppViewModel, ui: SettingsUiState) {
+    if (ui.pcName == null) return
+
+    Label("ペアリング中の PC：${ui.pcName}", bold = true)
+    ui.fingerprint?.let { Label("確認コード：$it") }
+    ConfirmedAction(
+        label = "解除する",
+        prompt = "ペアリングを解除します。曲とプレイリストは端末に残ります。PC の画面の「端末」でも解除してください",
+        ok = "解除する",
+        onConfirmed = model::unpair,
+    )
+}
+
+/** 以前のインストールで保存した曲の整理。 */
+@Composable
+private fun CleanupSection(cleanup: CleanupState, actions: ScreenActions) {
     Label("以前のインストールで保存した曲の整理", bold = true)
-    when (val cleanup = ui.cleanup) {
+    when (cleanup) {
         CleanupState.NeedsPermission -> {
             Label("一覧を出すには、音楽ファイルの読み取りの許可が必要です")
             Action("許可して一覧を出す", actions.onRequestRead)
@@ -635,7 +662,12 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
         CleanupState.Denied -> Label("読み取りが許可されていないため、整理できません")
         is CleanupState.Found -> Cleanup(cleanup.items, actions)
     }
-    Label("ログ（${formatBytes(ui.logBytes)}）", bold = true)
+}
+
+/** ログの閲覧とファイルへの保存。 */
+@Composable
+private fun LogSection(model: AppViewModel, actions: ScreenActions, logBytes: Long) {
+    Label("ログ（${formatBytes(logBytes)}）", bold = true)
     Action("ログを見る", model::openLog)
     ConfirmedAction(
         label = "ファイルに保存する",
@@ -643,8 +675,6 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
         ok = "保存する",
         onConfirmed = actions.onSaveLog,
     )
-    Action("ライセンス", model::openLicenses)
-    Action("ホームへ", model::back)
 }
 
 @Composable
