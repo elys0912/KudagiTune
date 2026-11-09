@@ -178,6 +178,16 @@ class AppLogTest {
     }
 
     @Test
+    fun `TA-136 消去すると画面の欄も消え、消した旨の 1 行だけが残る`() {
+        val log = log(tempDir())
+        repeat(3) { log.log(LogLevel.Info, "sync", "メッセージ $it") }
+
+        log.clear()
+
+        assertTrue(log.recent.value.single().message.contains("ログを消去した"))
+    }
+
+    @Test
     fun `TA-136 画面の欄は直近 200 行までで 1 行超えると古い行から消える`() {
         val log = log(tempDir())
 

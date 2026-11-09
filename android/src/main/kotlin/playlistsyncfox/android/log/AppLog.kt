@@ -77,8 +77,10 @@ class AppLog(
 
     fun sizeBytes(): Long = generationFiles().filter { it.exists() }.sumOf { it.length() }
 
-    /** 全世代を消し、消した旨を新しい世代に書く。 */
+    /** 全世代と画面の欄を消し、消した旨を新しい世代と画面の欄に書く。 */
     fun clear() {
+        // 呼んだ後の行は、ファイルでも消去の後に書かれる。画面の欄も呼んだ時点で空にして、その順に合わせる
+        screenLines.value = emptyList()
         executor.execute {
             runCatching { generationFiles().forEach { it.delete() } }
             log(LogLevel.Info, "log", "ログを消去した")
