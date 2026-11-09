@@ -21,7 +21,8 @@ private const val UNCOMPRESSED_POINT_BYTES = 65
  * どの操作も例外にしない。スカラーは位数で割った余りに直し、途中の点が無限遠点になっても演算を続ける
  * （P5 の応答の形が入力で変わると、コードを当てる手がかりになるため）。
  */
-class PcCrypto(private val random: SecureRandom = SecureRandom()) : CryptoProvider {
+class PcCrypto : CryptoProvider {
+    private val random = SecureRandom()
     private val params = CustomNamedCurves.getByName("secp256r1")
     private val curve = params.curve
     private val order = params.n

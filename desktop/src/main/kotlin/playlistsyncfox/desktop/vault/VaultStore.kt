@@ -37,7 +37,7 @@ class DpapiCipher : SecretCipher {
 
     override fun decrypt(encrypted: ByteArray): ByteArray = try {
         Crypt32Util.cryptUnprotectData(encrypted, ENTROPY, 0, null)
-    } catch (e: RuntimeException) {
+    } catch (_: RuntimeException) {
         throw SecretStoreException("DPAPI の復号に失敗した")
     }
 

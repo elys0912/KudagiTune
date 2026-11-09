@@ -9,6 +9,9 @@ import playlistsyncfox.shared.manifest.Manifest
 import playlistsyncfox.shared.manifest.PlaylistNode
 import java.time.Clock
 
+/** `library_id_fallback` の乱数のバイト数（B2-4）。16 進の文字列にして保存する。 */
+private const val LIBRARY_ID_FALLBACK_BYTES = 16
+
 /**
  * P1・P3・P7 の処理（X5-1）。読み直し済みの XML と、要求の本文で渡された選択から、M1 にマニフェストを作らせる。
  * 選択は保存しない。
@@ -37,6 +40,7 @@ class ManifestService(
     private suspend fun build(selectedIds: List<String>): BuiltManifest? {
         val held = library() ?: return null
         return withContext(Dispatchers.IO) {
+            // knownNames の保護に加え、libraryIdOf の乱数の生成と保存も直列にする（並行する要求が別々の値を作らないため）
             synchronized(knownNames) {
                 held.result.playlists.forEach { knownNames[it.persistentId] = it.name }
                 builder.build(held, selectedIds, libraryIdOf(held), knownNames.toMap(), clock.instant())
@@ -48,5 +52,5 @@ class ManifestService(
     private fun libraryIdOf(held: HeldLibrary): String =
         held.result.libraryPersistentId
             ?: settings.current.libraryIdFallback
-            ?: crypto.randomBytes(16).toHexString().also { fallback -> settings.update { it.copy(libraryIdFallback = fallback) } }
+            ?: crypto.randomBytes(LIBRARY_ID_FALLBACK_BYTES).toHexString().also { fallback -> settings.update { it.copy(libraryIdFallback = fallback) } }
 }

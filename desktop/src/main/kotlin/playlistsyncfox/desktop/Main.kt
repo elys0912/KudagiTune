@@ -49,6 +49,9 @@ import kotlin.system.exitProcess
 private const val OPEN_SIGNAL_FILE = "open-window.signal"
 private const val LOCK_FILE = "app.lock"
 
+/** 2 つ目の起動が残す印（[OPEN_SIGNAL_FILE]）を確かめる間隔。 */
+private const val SIGNAL_POLL_MILLIS = 1_000L
+
 /** 利用者に見える製品名。識別子（パッケージ名、フォルダ名、Run キーの値の名前）は変えない。 */
 private const val PRODUCT_NAME = "KudagiTune"
 
@@ -167,6 +170,6 @@ private fun shutdown(app: PcApp, exit: () -> Unit) {
 private fun CoroutineScope.launchSignalWatcher(signal: Path, onSignal: () -> Unit) = launch {
     while (true) {
         if (Files.deleteIfExists(signal)) onSignal()
-        delay(1_000)
+        delay(SIGNAL_POLL_MILLIS)
     }
 }
