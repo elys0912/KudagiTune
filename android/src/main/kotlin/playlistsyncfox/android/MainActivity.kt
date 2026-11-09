@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
 
     private val readLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) readDenied = true
-        model.refreshSettings(notificationsAllowed(), readGranted(), denied = !granted)
+        model.settings.refresh(notificationsAllowed(), readGranted(), denied = !granted)
     }
 
     private val saveLogLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
@@ -64,7 +64,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val deleteLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
-        model.refreshSettings(notificationsAllowed(), readGranted())
+        model.settings.refresh(notificationsAllowed(), readGranted())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -169,8 +169,8 @@ class MainActivity : ComponentActivity() {
                 prefs.edit().putBoolean(KEY_ASKED_READ, true).apply()
                 readLauncher.launch(permission)
             }
-            PermissionStep.Granted -> model.refreshSettings(notificationsAllowed(), readGranted())
-            PermissionStep.GuideToSettings, PermissionStep.SkipDenied -> model.refreshSettings(notificationsAllowed(), readGranted(), denied = true)
+            PermissionStep.Granted -> model.settings.refresh(notificationsAllowed(), readGranted())
+            PermissionStep.GuideToSettings, PermissionStep.SkipDenied -> model.settings.refresh(notificationsAllowed(), readGranted(), denied = true)
         }
     }
 

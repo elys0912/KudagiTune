@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import playlistsyncfox.android.AppGraph
@@ -18,7 +17,6 @@ import playlistsyncfox.android.discovery.checkManualEndpoint
 import playlistsyncfox.android.log.LogEntry
 import playlistsyncfox.android.notify.SyncNotifications
 import playlistsyncfox.android.sync.SyncServices
-import playlistsyncfox.android.sync.SyncValues
 
 const val NO_SELECTION_NOTICE = "同期するプレイリストを選んでください"
 const val STORAGE_MISSING_NOTICE = "保存先の SD カードが見つかりません。SD カードを確認するか、設定で保存先を変更してください"
@@ -77,7 +75,6 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val result = MutableStateFlow(ResultScreen(null, emptyList()))
-    val settings = MutableStateFlow<SettingsUiState?>(null)
     val logLines = MutableStateFlow<List<String>>(emptyList())
 
     /** S3 のログの欄（X7-1-4）。同期のワーカーと同じ `AppLog` の流れ。 */
@@ -96,6 +93,19 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         store = store,
         fetch = { withContext(Dispatchers.IO) { graph.fetchPlaylists() } },
         now = System::currentTimeMillis,
+    )
+
+    val settings = SettingsPresenter(
+        scope = viewModelScope,
+        store = store,
+        setAutoEnabled = graph.scheduler::setAutoEnabled,
+        mountedVolumes = graph.volumes::mounted,
+        storageVolume = graph::storageVolume,
+        logBytes = graph.log::sizeBytes,
+        cleanupWriter = graph::cleanupWriter,
+        syncing = { syncing.value },
+        unpairDevice = graph.keeper::unpair,
+        showMessage = { message.value = it },
     )
 
     private val manualSync = ManualSyncFlow(
@@ -189,70 +199,12 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun openSettings(notificationsAllowed: Boolean, readGranted: Boolean) {
         screen.value = Screen.Settings
-        refreshSettings(notificationsAllowed, readGranted)
-    }
-
-    fun refreshSettings(notificationsAllowed: Boolean, readGranted: Boolean, denied: Boolean = false) {
-        viewModelScope.launch {
-            val cleanup = when {
-                denied -> CleanupState.Denied
-                !readGranted -> CleanupState.NeedsPermission
-                else -> CleanupState.Found(withContext(Dispatchers.IO) { graph.cleanupWriter().leftovers() })
-            }
-            settings.value = settingsUi(
-                autoSetting = store.setting(playlistsyncfox.android.sync.SyncScheduler.AUTO_ENABLED_KEY),
-                deleteMissingSetting = store.setting(SyncValues.DELETE_MISSING_KEY),
-                relocatedCount = store.relocatedUris().size,
-                storage = storageUi(graph.volumes.mounted(), graph.storageVolume()),
-                pairing = store.pairing(),
-                notificationsAllowed = notificationsAllowed,
-                logBytes = graph.log.sizeBytes(),
-                cleanup = cleanup,
-            )
-        }
-    }
-
-    fun toggleAuto(enabled: Boolean) {
-        viewModelScope.launch {
-            val ok = graph.scheduler.setAutoEnabled(enabled)
-            if (!ok) message.value = "自動同期の設定に失敗しました"
-            settings.update { it?.copy(autoEnabled = store.setting(playlistsyncfox.android.sync.SyncScheduler.AUTO_ENABLED_KEY) == SyncValues.SETTING_ON) }
-        }
-    }
-
-    /** 「PC に無い曲を端末から消す」の切り替え。 */
-    fun setDeleteMissing(enabled: Boolean) {
-        viewModelScope.launch {
-            store.putSetting(SyncValues.DELETE_MISSING_KEY, enabled.toString())
-            settings.update { it?.copy(deleteMissing = enabled) }
-        }
-    }
-
-    /** 「以前の場所の曲を消す」。確認は画面が済ませてある。同期が走っている間は消さない。 */
-    fun deleteRelocated() {
-        viewModelScope.launch {
-            val deleted = withContext(Dispatchers.IO) { cleanRelocated(graph.cleanupWriter(), syncing.value) }
-            message.value = if (deleted == null) "同期中は削除できません" else "前の保存先から $deleted 件を削除しました"
-            settings.update { it?.copy(relocatedCount = store.relocatedUris().size) }
-        }
-    }
-
-    /** 保存先の切り替え（D16）。T1、T2 は動かさず、次の同期が新しい場所へ取り直す。 */
-    fun setStorage(volume: String) {
-        viewModelScope.launch {
-            store.putSetting(SyncValues.STORAGE_VOLUME_KEY, volume)
-            settings.update { it?.copy(storage = storageUi(graph.volumes.mounted(), volume)) }
-            message.value = storageChangedNotice(store.relocatedUris().size)
-        }
+        settings.refresh(notificationsAllowed, readGranted)
     }
 
     fun unpair() {
         viewModelScope.launch {
-            if (graph.keeper.unpair()) {
-                screen.value = Screen.Home
-            } else {
-                message.value = "鍵の削除に失敗したため、解除できませんでした"
-            }
+            if (settings.unpair()) screen.value = Screen.Home
         }
     }
 

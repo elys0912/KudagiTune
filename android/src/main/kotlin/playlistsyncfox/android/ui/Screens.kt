@@ -569,7 +569,7 @@ private fun Issues(title: String, list: IssueList) {
 
 @Composable
 private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
-    val state by model.settings.collectAsState()
+    val state by model.settings.state.collectAsState()
     var confirmUnpair by remember { mutableStateOf(false) }
     var confirmRelocated by remember { mutableStateOf(false) }
     var confirmSaveLog by remember { mutableStateOf(false) }
@@ -581,21 +581,21 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
         return
     }
     Label("自動同期：${if (ui.autoEnabled) "オン" else "オフ"}（Wi-Fi など従量制でない回線のとき、約 6 時間ごと）")
-    Action(if (ui.autoEnabled) "オフにする" else "オンにする") { model.toggleAuto(!ui.autoEnabled) }
+    Action(if (ui.autoEnabled) "オフにする" else "オンにする") { model.settings.toggleAuto(!ui.autoEnabled) }
     Label("PC にない曲を端末から削除する：${if (ui.deleteMissing) "オン" else "オフ"}（プレイリストから外した曲も対象です）")
-    Action(if (ui.deleteMissing) "オフにする" else "オンにする") { model.setDeleteMissing(!ui.deleteMissing) }
+    Action(if (ui.deleteMissing) "オフにする" else "オンにする") { model.settings.setDeleteMissing(!ui.deleteMissing) }
     Label("保存先のフォルダ：${ui.saveFolder}")
     ui.storage.options.forEach { option ->
         val chosen = option.volume == ui.storage.selected
         Label("${if (chosen) "[x]" else "[ ]"} ${option.label}")
-        if (!chosen && option.available) Action("${option.label}に変更する") { model.setStorage(option.volume) }
+        if (!chosen && option.available) Action("${option.label}に変更する") { model.settings.setStorage(option.volume) }
     }
     Label("保存先を変更すると、次の同期で新しい保存先へ全曲を転送し直します。前の保存先の曲は自動では削除されません")
     if (ui.relocatedCount > 0) {
         Label("前の保存先に残っている曲とプレイリスト：${ui.relocatedCount} 件")
         if (syncing) Label("同期中は削除できません") else Action("前の保存先の曲を削除する") { confirmRelocated = true }
         if (confirmRelocated) {
-            Confirm("前の保存先から、このアプリが保存した ${ui.relocatedCount} 件を削除します。よろしいですか？", "削除する", { confirmRelocated = false; model.deleteRelocated() }, { confirmRelocated = false })
+            Confirm("前の保存先から、このアプリが保存した ${ui.relocatedCount} 件を削除します。よろしいですか？", "削除する", { confirmRelocated = false; model.settings.deleteRelocated() }, { confirmRelocated = false })
         }
     }
     if (ui.notificationsOff) {

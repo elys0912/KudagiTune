@@ -1,8 +1,15 @@
 package playlistsyncfox.android.ui
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import playlistsyncfox.android.db.Pairing
+import playlistsyncfox.android.db.SyncStore
 import playlistsyncfox.android.storage.MediaWriter
 import playlistsyncfox.android.storage.StoredFile
+import playlistsyncfox.android.sync.SyncScheduler
 import playlistsyncfox.android.sync.SyncValues
 import playlistsyncfox.shared.crypto.formatFingerprintOfHash
 
@@ -84,3 +91,86 @@ fun settingsUi(autoSetting: String?, deleteMissingSetting: String?, relocatedCou
  * 消すのは T9 の行（このアプリが書いたもの）だけで、持ち主が違って消せない行は残る。
  */
 suspend fun cleanRelocated(writer: MediaWriter, syncing: Boolean): Int? = if (syncing) null else writer.deleteRelocated()
+
+/**
+ * S5 の操作（X7-1-6）。画面の状態 [state] を持ち、知らせは [showMessage] に出す。
+ * 解除の後の遷移は呼び出し側が行う（[unpair] の戻り値）。
+ */
+class SettingsPresenter(
+    private val scope: CoroutineScope,
+    private val store: SyncStore,
+    /** 自動同期の切り替え（T7 の更新と登録）。成功なら真。 */
+    private val setAutoEnabled: suspend (Boolean) -> Boolean,
+    private val mountedVolumes: () -> Set<String>,
+    private val storageVolume: suspend () -> String,
+    private val logBytes: () -> Long,
+    /** 以前の曲の整理に使う書き込み役。 */
+    private val cleanupWriter: suspend () -> MediaWriter,
+    private val syncing: () -> Boolean,
+    /** 鍵の削除と T4 の解除。成功なら真。 */
+    private val unpairDevice: suspend () -> Boolean,
+    private val showMessage: (String) -> Unit,
+) {
+    private val mutableState = MutableStateFlow<SettingsUiState?>(null)
+    val state: StateFlow<SettingsUiState?> = mutableState
+
+    fun refresh(notificationsAllowed: Boolean, readGranted: Boolean, denied: Boolean = false) {
+        scope.launch {
+            val cleanup = when {
+                denied -> CleanupState.Denied
+                !readGranted -> CleanupState.NeedsPermission
+                else -> CleanupState.Found(cleanupWriter().leftovers())
+            }
+            mutableState.value = settingsUi(
+                autoSetting = store.setting(SyncScheduler.AUTO_ENABLED_KEY),
+                deleteMissingSetting = store.setting(SyncValues.DELETE_MISSING_KEY),
+                relocatedCount = store.relocatedUris().size,
+                storage = storageUi(mountedVolumes(), storageVolume()),
+                pairing = store.pairing(),
+                notificationsAllowed = notificationsAllowed,
+                logBytes = logBytes(),
+                cleanup = cleanup,
+            )
+        }
+    }
+
+    fun toggleAuto(enabled: Boolean) {
+        scope.launch {
+            if (!setAutoEnabled(enabled)) showMessage("自動同期の設定に失敗しました")
+            mutableState.update { it?.copy(autoEnabled = store.setting(SyncScheduler.AUTO_ENABLED_KEY) == SyncValues.SETTING_ON) }
+        }
+    }
+
+    /** 「PC に無い曲を端末から消す」の切り替え。 */
+    fun setDeleteMissing(enabled: Boolean) {
+        scope.launch {
+            store.putSetting(SyncValues.DELETE_MISSING_KEY, enabled.toString())
+            mutableState.update { it?.copy(deleteMissing = enabled) }
+        }
+    }
+
+    /** 「以前の場所の曲を消す」。確認は画面が済ませてある。同期が走っている間は消さない。 */
+    fun deleteRelocated() {
+        scope.launch {
+            val deleted = cleanRelocated(cleanupWriter(), syncing())
+            showMessage(if (deleted == null) "同期中は削除できません" else "前の保存先から $deleted 件を削除しました")
+            mutableState.update { it?.copy(relocatedCount = store.relocatedUris().size) }
+        }
+    }
+
+    /** 保存先の切り替え（D16）。T1、T2 は動かさず、次の同期が新しい場所へ取り直す。 */
+    fun setStorage(volume: String) {
+        scope.launch {
+            store.putSetting(SyncValues.STORAGE_VOLUME_KEY, volume)
+            mutableState.update { it?.copy(storage = storageUi(mountedVolumes(), volume)) }
+            showMessage(storageChangedNotice(store.relocatedUris().size))
+        }
+    }
+
+    /** ペアリングの解除。解除できなければ知らせを出して偽を返す。 */
+    suspend fun unpair(): Boolean {
+        val unpaired = unpairDevice()
+        if (!unpaired) showMessage("鍵の削除に失敗したため、解除できませんでした")
+        return unpaired
+    }
+}
