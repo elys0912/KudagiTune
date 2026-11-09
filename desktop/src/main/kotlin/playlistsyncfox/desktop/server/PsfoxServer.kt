@@ -243,12 +243,15 @@ private fun decodeBase64Url(text: String): ByteArray? = try {
     null
 }
 
+/** 検査 1 で読んだ本文を文字列にしたもの。 */
+private fun ApplicationCall.bodyText(): String = attributes[BodyKey].decodeToString()
+
 private suspend fun ApplicationCall.fail(status: HttpStatusCode, errorNumber: Int, detail: String? = null) =
     respondText(json.encodeToString(ErrorBody.serializer(), ErrorBody("E$errorNumber", detail)), ContentType.Application.Json, status)
 
 /** P1・P3 の本文（選んだ ID の配列）の検査。署名の検証の後に、境界で行う。誤りは 400 で、本文の中身は応答にもログにも出さない。 */
 private suspend fun selectedIds(call: ApplicationCall): List<String>? =
-    when (val parsed = parsePlaylistIds(call.attributes[BodyKey].decodeToString(), DesktopValues.MAX_PLAYLIST_IDS)) {
+    when (val parsed = parsePlaylistIds(call.bodyText(), DesktopValues.MAX_PLAYLIST_IDS)) {
         is PlaylistIdsResult.Ids -> parsed.ids
         PlaylistIdsResult.Invalid -> {
             call.respond(HttpStatusCode.BadRequest)
@@ -298,7 +301,7 @@ private suspend fun sendTrack(env: ServerEnv, call: ApplicationCall) {
 /** P4。必須項目の欠けと型の違いは 400（E なし）で保存しない。保存済みより古い報告は上書きせず 204。 */
 private suspend fun saveReport(env: ServerEnv, call: ApplicationCall) {
     val report = try {
-        json.decodeFromString(LastSync.serializer(), call.attributes[BodyKey].decodeToString())
+        json.decodeFromString(LastSync.serializer(), call.bodyText())
     } catch (_: SerializationException) {
         return call.respond(HttpStatusCode.BadRequest)
     }
@@ -325,7 +328,7 @@ private suspend fun saveReport(env: ServerEnv, call: ApplicationCall) {
 
 /** P8（B4-4 の 5b）。境界で検査し、メモリの [ProgressBoard] に置く。保存しない。 */
 private suspend fun saveProgress(env: ServerEnv, call: ApplicationCall) {
-    val report = readProgressReport(call.attributes[BodyKey].decodeToString()) ?: return call.respond(HttpStatusCode.BadRequest)
+    val report = readProgressReport(call.bodyText()) ?: return call.respond(HttpStatusCode.BadRequest)
     env.progress.update(report)
     call.respond(HttpStatusCode.NoContent)
 }
@@ -344,7 +347,7 @@ private fun parseReportTime(text: String): Instant? =
 /** P5。失敗の順と本文は X4-2-2。 */
 private suspend fun pairingStart(env: ServerEnv, call: ApplicationCall) {
     val request = try {
-        json.decodeFromString(PairingStartRequest.serializer(), call.attributes[BodyKey].decodeToString())
+        json.decodeFromString(PairingStartRequest.serializer(), call.bodyText())
     } catch (_: SerializationException) {
         return call.respond(HttpStatusCode.BadRequest)
     }
@@ -363,7 +366,7 @@ private suspend fun pairingStart(env: ServerEnv, call: ApplicationCall) {
 /** P6。成功の応答の前に、K1 の保存と `devices` への追加を済ませる（shared が保存を呼んでから MAC_p を返す）。 */
 private suspend fun pairingConfirm(env: ServerEnv, call: ApplicationCall) {
     val request = try {
-        json.decodeFromString(PairingConfirmRequest.serializer(), call.attributes[BodyKey].decodeToString())
+        json.decodeFromString(PairingConfirmRequest.serializer(), call.bodyText())
     } catch (_: SerializationException) {
         return call.respond(HttpStatusCode.BadRequest)
     }
