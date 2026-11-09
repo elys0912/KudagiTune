@@ -95,6 +95,13 @@ class ManifestBuilder(
         return Selection(resolved, unresolved)
     }
 
+    /** 除外の表の鍵。ID を持つ曲は Persistent ID、持たない曲は [LibraryReadResult.unidentifiedTracks] の位置。 */
+    private sealed interface ExcludedKey {
+        data class Id(val persistentId: String) : ExcludedKey
+
+        data class Index(val index: Int) : ExcludedKey
+    }
+
     /**
      * 曲を `tracks`（配る）と `excluded`（配らない）に振り分ける。同じ曲は 1 度だけ確かめる。
      * 除外の表は、ID を持つ曲と持たない曲の登場順を保つため、1 つの表にする。
@@ -103,12 +110,12 @@ class ManifestBuilder(
         private val trackById = result.tracks.associateBy { it.persistentId }
         val tracks = LinkedHashMap<String, ManifestTrack>()
         val entries = LinkedHashMap<String, TrackEntry>()
-        val excluded = LinkedHashMap<Any, ExcludedTrack>()
+        val excluded = LinkedHashMap<ExcludedKey, ExcludedTrack>()
 
         /** プレイリストの並びに載せる曲の ID を返す。除外の曲は null。 */
         fun collect(ref: TrackRef): String? = when (ref) {
             is TrackRef.Unidentified -> {
-                excluded.getOrPut(ref.index) {
+                excluded.getOrPut(ExcludedKey.Index(ref.index)) {
                     val track = result.unidentifiedTracks[ref.index]
                     ExcludedTrack(track.name, track.artist, ExcludedReason.NO_ID)
                 }
@@ -119,7 +126,7 @@ class ManifestBuilder(
 
         private fun collectIdentified(id: String): String? {
             if (id in tracks) return id
-            if (id in excluded) return null
+            if (ExcludedKey.Id(id) in excluded) return null
 
             val track = trackById.getValue(id)
             return when (val checked = check(track)) {
@@ -129,7 +136,7 @@ class ManifestBuilder(
                     id
                 }
                 is Checked.Excluded -> {
-                    excluded[id] = ExcludedTrack(track.name, track.artist, checked.reason)
+                    excluded[ExcludedKey.Id(id)] = ExcludedTrack(track.name, track.artist, checked.reason)
                     null
                 }
             }
