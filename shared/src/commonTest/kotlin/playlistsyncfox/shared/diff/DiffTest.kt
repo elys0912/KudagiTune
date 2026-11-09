@@ -23,7 +23,8 @@ class DiffTest {
         manifestLibraryId: String = "L1",
         recordedLibraryId: String? = "L1",
         unresolved: List<UnresolvedPlaylist> = emptyList(),
-    ): Diff = computeDiff(tracks, records, present, manifestLibraryId, recordedLibraryId, V20, unresolved)
+        isPlayable: (ManifestTrack) -> Boolean = { true },
+    ): Diff = computeDiff(tracks, records, present, manifestLibraryId, recordedLibraryId, V20, unresolved, isPlayable)
 
     private fun ids(tracks: List<ManifestTrack>) = tracks.map { it.persistentId }
 
@@ -102,6 +103,33 @@ class DiffTest {
 
         assertEquals(listOf(a), ids(result.unplayable))
         assertTrue(result.toRemove.isEmpty())
+    }
+
+    @Test
+    fun `再生できない形式の曲は転送せず unsupported に入る`() {
+        val alac = track(a, extension = "m4a")
+
+        val result = diff(listOf(alac, track(b)), isPlayable = { it.persistentId != a })
+
+        assertEquals(listOf(a), ids(result.unsupported))
+        assertEquals(listOf(b), ids(result.toAdd))
+        assertTrue(result.unplayable.isEmpty())
+    }
+
+    @Test
+    fun `記録のある再生できない形式の曲は置き換えにも消すにも入らない`() {
+        val result = diff(listOf(track(a, size = 999)), listOf(record(a, size = 100)), isPlayable = { false })
+
+        assertEquals(listOf(a), ids(result.unsupported))
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `保護付きの曲は再生できるかを問わず unplayable に入り unsupported には入らない`() {
+        val result = diff(listOf(track(a, isProtected = true)), isPlayable = { false })
+
+        assertEquals(listOf(a), ids(result.unplayable))
+        assertTrue(result.unsupported.isEmpty())
     }
 
     @Test

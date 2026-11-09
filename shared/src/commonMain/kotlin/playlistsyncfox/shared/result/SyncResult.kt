@@ -125,9 +125,13 @@ fun toReport(result: SyncResult): SyncReport = SyncReport(
     excludedCount = result.excluded.size,
 )
 
-/** 保護付きの曲を、再生できない曲の一覧の形に写す。 */
-fun toUnplayable(tracks: List<ManifestTrack>): List<UnplayableTrack> =
-    tracks.map { UnplayableTrack(it.name, it.kind, it.extension, UnplayableReason.Protected) }
+/** 保護付きの曲と再生できない形式の曲を、再生できない曲の一覧の形に写す。保護付きが先に並ぶ。 */
+fun toUnplayable(protected: List<ManifestTrack>, unsupported: List<ManifestTrack> = emptyList()): List<UnplayableTrack> =
+    protected.map { toUnplayableTrack(it, UnplayableReason.Protected) } +
+        unsupported.map { toUnplayableTrack(it, UnplayableReason.UnsupportedFormat) }
+
+private fun toUnplayableTrack(track: ManifestTrack, reason: UnplayableReason) =
+    UnplayableTrack(track.name, track.kind, track.extension, reason)
 
 private fun trackNameOf(error: SyncError): String? = when (error) {
     is SyncError.FileMissing -> error.name
