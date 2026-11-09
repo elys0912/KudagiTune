@@ -321,7 +321,7 @@
 - `reach_failed` は `SyncResult` の項目ではない。手動の同期で、画面側の到達確認で全部の接続先が応えず、証明書の不一致が 1 つも無かったこと（不一致が 1 つでもあれば `reach_failed` を付けず、E2 になる。J36）を `SyncWorker` に渡す入力データ（X6-3 の入口の表、手順 6 の 1）で、T3 にも P4 にも載せない
 - 失敗の内訳（E の番号ごとの件数と最初の曲名）は `errors` から作る関数 `breakdown` で出す。結果に別の項目として持たない（二重の持ち方を避ける）
 - 画面に出す件数の上限（V21）の適用は M4（B3-6）
-- `UnplayableTrack` の理由は 2 つ。`protected`（規則 1）は X3-2 の `unplayable` から、`unsupported_format`（規則 2）は `unsupported` から、関数 `toUnplayable(protected, unsupported = 空)` で写す（保護付きが先に並ぶ）。`unsupported` は M4 が端末の再生能力の判定（B3）を `isPlayable` に入れて `computeDiff` へ渡した結果で、M1 は調べない。その曲は転送せず（保護付きと同じ）、端末にある曲は消さない（review-15 の X6-10。2 周目で、転送する扱いから改めた）
+- `UnplayableTrack` の理由は 2 つ。`protected`（規則 1）は X3-2 の `unplayable` から、`unsupported_format`（規則 2）は `unsupported` から、関数 `toUnplayable(protected, unsupported)` で写す（保護付きが先に並ぶ）。`unsupported` は M4 が端末の再生能力の判定（B3）を `isPlayable` に入れて `computeDiff` へ渡した結果で、M1 は調べない。その曲は転送せず（保護付きと同じ）、端末にある曲は消さない（review-15 の X6-10。2 周目で、転送する扱いから改めた）
 
 区分の判定（関数 `classifyOutcome`。M1。純粋）：
 

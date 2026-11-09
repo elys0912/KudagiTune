@@ -8,7 +8,7 @@ Windows の iTunes（12.x）のプレイリストを、曲ごと Android 端末�
 
 | 文書 | 内容 |
 |---|---|
-| [docs/design-overview.md](docs/design-overview.md) | 概要設計。動機、範囲、決定 D1〜D18、用語 |
+| [docs/design-overview.md](docs/design-overview.md) | 概要設計。動機、範囲、決定 D1〜D22、用語 |
 | [docs/requirements.md](docs/requirements.md) | 要件 F1〜F6、N1〜N5 |
 | [docs/open-questions.md](docs/open-questions.md) | 論点 Q1〜Q16 と結論 |
 | [docs/basic-design.md](docs/basic-design.md) | 基本設計の索引（B1）。B2〜B4 は同じフォルダの `basic-design-*.md` |
