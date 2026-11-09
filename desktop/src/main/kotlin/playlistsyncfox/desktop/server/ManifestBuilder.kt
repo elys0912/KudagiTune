@@ -2,6 +2,7 @@ package playlistsyncfox.desktop.server
 
 import playlistsyncfox.desktop.watch.HeldLibrary
 import playlistsyncfox.itunes.library.LibraryPlaylist
+import playlistsyncfox.itunes.library.LibraryReadResult
 import playlistsyncfox.itunes.library.LibraryTrack
 import playlistsyncfox.itunes.library.PlaylistKind
 import playlistsyncfox.itunes.library.TrackRef
@@ -51,39 +52,11 @@ class ManifestBuilder(
         now: Instant,
     ): BuiltManifest {
         val result = library.result
-        val trackById = result.tracks.associateBy { it.persistentId }
         val selection = resolveSelection(result.playlists, selectedIds, lastKnownNames)
 
-        val tracks = LinkedHashMap<String, ManifestTrack>()
-        val entries = LinkedHashMap<String, TrackEntry>()
-        val excluded = LinkedHashMap<Any, ExcludedTrack>()
+        val collector = TrackCollector(result)
         val playlists = selection.resolved.map { playlist ->
-            val ids = mutableListOf<String>()
-            for (ref in playlist.items) {
-                when (ref) {
-                    is TrackRef.Unidentified -> excluded.getOrPut(ref.index) {
-                        val track = result.unidentifiedTracks[ref.index]
-                        ExcludedTrack(track.name, track.artist, ExcludedReason.NO_ID)
-                    }
-                    is TrackRef.Identified -> {
-                        val id = ref.persistentId
-                        if (id in tracks) {
-                            ids += id
-                        } else if (id !in excluded) {
-                            val track = trackById.getValue(id)
-                            when (val checked = check(track)) {
-                                is Checked.Ok -> {
-                                    tracks[id] = checked.manifestTrack
-                                    entries[id] = checked.entry
-                                    ids += id
-                                }
-                                is Checked.Excluded -> excluded[id] = ExcludedTrack(track.name, track.artist, checked.reason)
-                            }
-                        }
-                    }
-                }
-            }
-            ManifestPlaylist(playlist.persistentId, playlist.name, ids)
+            ManifestPlaylist(playlist.persistentId, playlist.name, playlist.items.mapNotNull(collector::collect))
         }
 
         val withoutDigest = Manifest(
@@ -92,12 +65,12 @@ class ManifestBuilder(
             libraryId = libraryId,
             xmlModifiedAt = formatIsoMillis(library.xmlModified),
             contentDigest = "",
-            tracks = tracks.values.toList(),
+            tracks = collector.tracks.values.toList(),
             playlists = playlists,
             unresolvedPlaylists = selection.unresolved,
-            excluded = excluded.values.toList(),
+            excluded = collector.excluded.values.toList(),
         )
-        return BuiltManifest(withoutDigest.copy(contentDigest = computeContentDigest(crypto, withoutDigest)), entries)
+        return BuiltManifest(withoutDigest.copy(contentDigest = computeContentDigest(crypto, withoutDigest)), collector.entries)
     }
 
     private class Selection(val resolved: List<LibraryPlaylist>, val unresolved: List<UnresolvedPlaylist>)
@@ -120,6 +93,47 @@ class ManifestBuilder(
             }
         }
         return Selection(resolved, unresolved)
+    }
+
+    /**
+     * 曲を `tracks`（配る）と `excluded`（配らない）に振り分ける。同じ曲は 1 度だけ確かめる。
+     * 除外の表は、ID を持つ曲と持たない曲の登場順を保つため、1 つの表にする。
+     */
+    private inner class TrackCollector(private val result: LibraryReadResult) {
+        private val trackById = result.tracks.associateBy { it.persistentId }
+        val tracks = LinkedHashMap<String, ManifestTrack>()
+        val entries = LinkedHashMap<String, TrackEntry>()
+        val excluded = LinkedHashMap<Any, ExcludedTrack>()
+
+        /** プレイリストの並びに載せる曲の ID を返す。除外の曲は null。 */
+        fun collect(ref: TrackRef): String? = when (ref) {
+            is TrackRef.Unidentified -> {
+                excluded.getOrPut(ref.index) {
+                    val track = result.unidentifiedTracks[ref.index]
+                    ExcludedTrack(track.name, track.artist, ExcludedReason.NO_ID)
+                }
+                null
+            }
+            is TrackRef.Identified -> collectIdentified(ref.persistentId)
+        }
+
+        private fun collectIdentified(id: String): String? {
+            if (id in tracks) return id
+            if (id in excluded) return null
+
+            val track = trackById.getValue(id)
+            return when (val checked = check(track)) {
+                is Checked.Ok -> {
+                    tracks[id] = checked.manifestTrack
+                    entries[id] = checked.entry
+                    id
+                }
+                is Checked.Excluded -> {
+                    excluded[id] = ExcludedTrack(track.name, track.artist, checked.reason)
+                    null
+                }
+            }
+        }
     }
 
     private sealed interface Checked {
