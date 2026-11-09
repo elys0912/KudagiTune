@@ -32,6 +32,7 @@ import playlistsyncfox.shared.result.SyncError
 import playlistsyncfox.shared.result.SyncOutcome
 import playlistsyncfox.shared.result.SyncTrigger
 import playlistsyncfox.shared.result.Transport
+import playlistsyncfox.shared.result.UnplayableReason
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -1337,6 +1338,56 @@ class SyncRunnerTest {
         assertEquals(setOf(id(2), id(3)), h.store.placed.keys)
         assertTrue(h.store.pendingRows.isEmpty())
         assertEquals(2, h.media.entries.size)
+    }
+
+    @Test
+    fun `X6-9 マニフェストの版違いで止めたとき結果に印を残し、壊れた本文では印を付けない`() = runTest {
+        val mismatch = Harness()
+        mismatch.lanApi.manifestResults.clear()
+        mismatch.lanApi.manifestResults += ApiResult.Ok("""{"format_version":99}""")
+        val mismatchRow = assertNotNull(mismatch.run())
+        assertEquals(SyncRun.RESULT_FAILED, mismatchRow.result)
+        assertNull(mismatchRow.errorKind)
+        assertTrue(mismatchRow.result().manifestVersionMismatch)
+
+        val broken = Harness()
+        broken.lanApi.manifestResults.clear()
+        broken.lanApi.manifestResults += ApiResult.Ok("not json")
+        val brokenRow = assertNotNull(broken.run())
+        assertEquals(SyncRun.RESULT_FAILED, brokenRow.result)
+        assertFalse(brokenRow.result().manifestVersionMismatch)
+    }
+
+    @Test
+    fun `X6-10 端末が再生できない形式の曲は転送し、T6 と結果の unplayable に unsupported_format で載せる`() = runTest {
+        val h = Harness()
+        val alac = track(2, extension = "m4a").copy(kind = "Apple Lossless audio file")
+        val aac = track(3, extension = "m4a").copy(kind = "AAC audio file")
+        h.sync(listOf(track(1), alac, aac, track(9).copy(isProtected = true)))
+        // 端末にデコーダが無い
+        val noDecoder = Playability { false }
+        h.isPlayable = noDecoder::isPlayable
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(setOf(id(1), id(2), id(3)), h.lanApi.trackRequests.map { it.persistentId }.toSet())
+        val reasons = h.store.issueRows.filter { it.kind == RunIssue.KIND_UNPLAYABLE }.associate { it.persistentId to it.reason }
+        assertEquals(mapOf(id(9) to "protected", id(2) to "unsupported_format"), reasons)
+        assertEquals(listOf(UnplayableReason.Protected, UnplayableReason.UnsupportedFormat), row.result().unplayable.map { it.reason })
+    }
+
+    @Test
+    fun `X6-10 端末にデコーダがあれば ALAC は unsupported_format に載せない`() = runTest {
+        val h = Harness()
+        h.sync(listOf(track(2, extension = "m4a").copy(kind = "Apple Lossless audio file")))
+        val allDecoders = Playability { true }
+        h.isPlayable = allDecoders::isPlayable
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(listOf(id(2)), h.lanApi.trackRequests.map { it.persistentId })
+        assertTrue(row.result().unplayable.isEmpty())
+        assertTrue(h.store.issueRows.none { it.kind == RunIssue.KIND_UNPLAYABLE })
     }
 
     private fun sampleJson(startedAt: String): String {

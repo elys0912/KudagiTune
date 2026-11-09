@@ -149,6 +149,7 @@ class SyncRunner(private val env: SyncEnvironment) {
         private var freeBefore: Long? = null
         private var skippedUnchanged = false
         private var recorded = false
+        private var manifestVersionMismatch = false
 
         // 曲ごとの行と、転送中の曲のこの実行での転送量（done_bytes に足す。X6-3 の SyncProgress）
         private var rows: List<TrackRow> = emptyList()
@@ -357,6 +358,7 @@ class SyncRunner(private val env: SyncEnvironment) {
                 recordedLibraryId = recordedLibraryId(runs),
                 removalConfirmThreshold = SyncValues.REMOVAL_CONFIRM_THRESHOLD,
                 unresolvedPlaylists = manifest.unresolvedPlaylists,
+                isPlayable = env.isPlayable,
             )
 
         /** 全部の曲の後、E8 になった曲があれば、マニフェストを取り直して 1 回だけ行う。 */
@@ -544,8 +546,13 @@ class SyncRunner(private val env: SyncEnvironment) {
                 when (val response = api.manifest(selectedIds)) {
                     is ApiResult.Ok -> return when (val read = readManifest(response.value)) {
                         is ManifestReadResult.Loaded -> Fetch.Loaded(read)
-                        // 版が合わない、壊れている：端末の更新の案内が要る。E なしで止める
-                        else -> Fetch.Stop(TrackStep.Stop(null))
+                        // 版が合わない：端末の更新の案内が要る。印を残し、E なしで止める（X6-9）
+                        is ManifestReadResult.VersionMismatch -> {
+                            manifestVersionMismatch = true
+                            Fetch.Stop(TrackStep.Stop(null))
+                        }
+                        // 壊れている：印は付けず、E なしで止める
+                        is ManifestReadResult.Broken -> Fetch.Stop(TrackStep.Stop(null))
                     }
                     is ApiResult.Fail -> {
                         if (response.failure != ApiFailure.Disconnected) return Fetch.Stop(stopFor(response.failure))
@@ -747,7 +754,7 @@ class SyncRunner(private val env: SyncEnvironment) {
                 capacity = Capacity(plannedBytes, bytesTransferred, freeBefore, if (transferStarted && !afterCancel) env.freeBytes() else freeBefore),
                 errors = errors.toList(),
                 excluded = loaded?.excluded.orEmpty(),
-                unplayable = finalDiff?.let { toUnplayable(it.unplayable) }.orEmpty(),
+                unplayable = finalDiff?.let { toUnplayable(it.unplayable, it.unsupported) }.orEmpty(),
                 libraryId = libraryId,
                 contentDigest = loaded?.contentDigest,
                 unresolvedPlaylists = loaded?.unresolvedPlaylists?.map { it.lastKnownName }.orEmpty(),
@@ -755,6 +762,7 @@ class SyncRunner(private val env: SyncEnvironment) {
                 removalSkipped = removalSkipped,
                 keyMismatch = keyMismatch.takeIf { errors.any { it is SyncError.KeyMismatch } },
                 errorDetail = errorDetail.takeIf { errors.any { it is SyncError.KeyMismatch } },
+                manifestVersionMismatch = manifestVersionMismatch,
             )
 
             val resultText = when {
@@ -823,17 +831,8 @@ class SyncRunner(private val env: SyncEnvironment) {
                     kind = RunIssue.KIND_EXCLUDED,
                 )
             }
-            finalDiff?.unplayable?.forEach {
-                issues += RunIssue(
-                    runId = runId,
-                    persistentId = it.persistentId,
-                    title = it.name ?: it.fileName,
-                    artist = it.artist,
-                    reason = "protected",
-                    format = it.kind ?: it.extension,
-                    kind = RunIssue.KIND_UNPLAYABLE,
-                )
-            }
+            finalDiff?.unplayable?.forEach { issues += unplayableIssue(runId, it, UNPLAYABLE_PROTECTED) }
+            finalDiff?.unsupported?.forEach { issues += unplayableIssue(runId, it, UNPLAYABLE_UNSUPPORTED_FORMAT) }
             for (error in trackErrors) {
                 val (id, name) = when (error) {
                     is SyncError.FileMissing -> error.persistentId to error.name
@@ -845,6 +844,17 @@ class SyncRunner(private val env: SyncEnvironment) {
             }
             return issues
         }
+
+        /** T6 の `unplayable` の行。[reason] は `protected`（転送しない）か `unsupported_format`（転送する）。 */
+        private fun unplayableIssue(runId: Long, track: ManifestTrack, reason: String) = RunIssue(
+            runId = runId,
+            persistentId = track.persistentId,
+            title = track.name ?: track.fileName,
+            artist = track.artist,
+            reason = reason,
+            format = track.kind ?: track.extension,
+            kind = RunIssue.KIND_UNPLAYABLE,
+        )
 
         private fun progressNow(stage: SyncStage, title: String? = null, shortage: Long? = null) = SyncProgress(
             stage = stage,
@@ -917,6 +927,9 @@ class SyncRunner(private val env: SyncEnvironment) {
     }
 
 }
+
+private const val UNPLAYABLE_PROTECTED = "protected"
+private const val UNPLAYABLE_UNSUPPORTED_FORMAT = "unsupported_format"
 
 private fun SyncRun.isAfterRun(other: SyncRun) =
     startedAt > other.startedAt || (startedAt == other.startedAt && runId > other.runId)

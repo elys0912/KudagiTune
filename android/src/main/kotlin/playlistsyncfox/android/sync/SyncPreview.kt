@@ -145,6 +145,7 @@ class SyncPreview(private val env: SyncEnvironment) {
             recordedLibraryId = recordedLibraryId(env.store.runs()),
             removalConfirmThreshold = SyncValues.REMOVAL_CONFIRM_THRESHOLD,
             unresolvedPlaylists = manifest.unresolvedPlaylists,
+            isPlayable = env.isPlayable,
         )
         // 手動は 1 件でも消すなら確認を出す（D19）。`removalGate` は自動の判定に使う
         return if (diff.toRemove.isEmpty()) RemovalCheck.Allowed else RemovalCheck.NeedsConfirmation(diff.toRemove.size)
