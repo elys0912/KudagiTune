@@ -142,6 +142,32 @@ fun Application.psfoxModule(env: ServerEnv) {
     }
 }
 
+/** 要求の宛先の種別。署名が要るかと、既知かどうかを決める。 */
+private enum class RouteKind { Signed, Pairing, Unknown }
+
+private fun routeKindOf(path: String): RouteKind = when {
+    path == PATH_PAIRING_START || path == PATH_PAIRING_CONFIRM -> RouteKind.Pairing
+    path == PATH_MANIFEST || path == PATH_DIGEST || path == PATH_PLAYLISTS || path == PATH_REPORTS || path == PATH_PROGRESS -> RouteKind.Signed
+    path.startsWith(PATH_TRACKS) && path.length > PATH_TRACKS.length && '/' !in path.substring(PATH_TRACKS.length) -> RouteKind.Signed
+    else -> RouteKind.Unknown
+}
+
+/** 検査 4 を通った、署名つき要求のヘッダ 4 種。[timestamp] は数値、[nonce] は復号済み、[signature] は送られた文字列のまま。 */
+private class ParsedSignatureHeaders(val deviceId: String, val timestamp: Long, val nonce: ByteArray, val signature: String)
+
+/** 検査 4：ヘッダ 4 種の書式。1 つでも欠けるか書式が違えば null。 */
+private fun parseSignatureHeaders(call: ApplicationCall): ParsedSignatureHeaders? {
+    val deviceId = call.request.header(SignatureHeaderNames.DEVICE)
+    val timestamp = call.request.header(SignatureHeaderNames.TIMESTAMP)
+    val nonce = call.request.header(SignatureHeaderNames.NONCE)?.let(::decodeBase64Url)
+    val signature = call.request.header(SignatureHeaderNames.SIGNATURE)
+    if (deviceId == null || !uuidPattern.matches(deviceId)) return null
+    if (timestamp == null || !timestampPattern.matches(timestamp)) return null
+    if (nonce == null || nonce.size != NONCE_BYTES) return null
+    if (signature == null || decodeBase64Url(signature)?.size != SIGNATURE_BYTES) return null
+    return ParsedSignatureHeaders(deviceId, timestamp.toLong(), nonce, signature)
+}
+
 /** 検査 1〜7（P1〜P4、P7、P8）と、P5・P6 の前段。通ればルートへ進めるため真を返す。 */
 private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean {
     // 1. 本文の大きさ
@@ -154,14 +180,10 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
 
     // 2. 既知のルート
     val path = call.request.path()
-    val needsSignature = when {
-        path == PATH_PAIRING_START || path == PATH_PAIRING_CONFIRM -> false
-        path == PATH_MANIFEST || path == PATH_DIGEST || path == PATH_PLAYLISTS || path == PATH_REPORTS || path == PATH_PROGRESS -> true
-        path.startsWith(PATH_TRACKS) && path.length > PATH_TRACKS.length && '/' !in path.substring(PATH_TRACKS.length) -> true
-        else -> {
-            call.respond(HttpStatusCode.NotFound)
-            return false
-        }
+    val routeKind = routeKindOf(path)
+    if (routeKind == RouteKind.Unknown) {
+        call.respond(HttpStatusCode.NotFound)
+        return false
     }
 
     // 3. 署名失敗の待ち
@@ -171,22 +193,15 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
         return false
     }
 
-    if (!needsSignature) {
+    if (routeKind == RouteKind.Pairing) {
         // P5 の連続は署名の失敗と同じ数に入れる。P6 は数えず、P5 の連続を途切れさせる
         if (path == PATH_PAIRING_START) env.failures.recordPairingStart(address) else env.failures.recordPairingConfirm(address)
         return true
     }
 
     // 4. ヘッダ 4 種の書式
-    val deviceId = call.request.header(SignatureHeaderNames.DEVICE)
-    val timestamp = call.request.header(SignatureHeaderNames.TIMESTAMP)
-    val nonce = call.request.header(SignatureHeaderNames.NONCE)?.let(::decodeBase64Url)
-    val signature = call.request.header(SignatureHeaderNames.SIGNATURE)
-    val malformed = deviceId == null || !uuidPattern.matches(deviceId) ||
-        timestamp == null || !timestampPattern.matches(timestamp) ||
-        nonce == null || nonce.size != NONCE_BYTES ||
-        signature == null || decodeBase64Url(signature)?.size != SIGNATURE_BYTES
-    if (malformed) {
+    val headers = parseSignatureHeaders(call)
+    if (headers == null) {
         call.respond(HttpStatusCode.BadRequest)
         return false
     }
@@ -195,13 +210,13 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
     val request = SignedRequest(
         method = call.request.httpMethod.value,
         pathAndQuery = call.request.uri,
-        timestamp = timestamp!!.toLong(),
-        nonce = nonce!!,
-        deviceId = deviceId!!,
+        timestamp = headers.timestamp,
+        nonce = headers.nonce,
+        deviceId = headers.deviceId,
         body = body,
     )
     val result = verifyRequest(
-        env.crypto, request, signature!!,
+        env.crypto, request, headers.signature,
         now = env.clock.instant().epochSecond,
         serverStartedAt = env.serverStartedAt.epochSecond,
         findKey = env.keyRing::find,
@@ -209,13 +224,13 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
     )
     if (result is AuthResult.Failure) {
         env.failures.recordFailure(address)
-        env.log.warn("server", "署名の検証に失敗 device=$deviceId detail=${result.reason.detail ?: "none"}", 2)
+        env.log.warn("server", "署名の検証に失敗 device=${headers.deviceId} detail=${result.reason.detail ?: "none"}", 2)
         call.fail(HttpStatusCode.Unauthorized, 2, result.reason.detail)
         return false
     }
     env.failures.recordSuccess(address)
     env.activity.signedRequest()
-    call.attributes.put(DeviceKey, deviceId)
+    call.attributes.put(DeviceKey, headers.deviceId)
     return true
 }
 
