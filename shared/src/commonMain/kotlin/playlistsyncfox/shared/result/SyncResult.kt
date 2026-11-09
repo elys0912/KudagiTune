@@ -128,7 +128,7 @@ fun toReport(result: SyncResult): SyncReport = SyncReport(
 )
 
 /** 保護付きの曲と再生できない形式の曲を、再生できない曲の一覧の形に写す。保護付きが先に並ぶ。 */
-fun toUnplayable(protected: List<ManifestTrack>, unsupported: List<ManifestTrack> = emptyList()): List<UnplayableTrack> =
+fun toUnplayable(protected: List<ManifestTrack>, unsupported: List<ManifestTrack>): List<UnplayableTrack> =
     protected.map { toUnplayableTrack(it, UnplayableReason.Protected) } +
         unsupported.map { toUnplayableTrack(it, UnplayableReason.UnsupportedFormat) }
 
