@@ -8,6 +8,7 @@ import playlistsyncfox.desktop.settings.LastSync
 import playlistsyncfox.desktop.settings.Settings
 import playlistsyncfox.desktop.watch.XmlStatus
 import playlistsyncfox.shared.result.ProgressReport
+import java.time.Duration
 import java.time.Instant
 
 // 画面の状態は 1 つの「PC の状態」にまとめ、画面はそれを写すだけにする（X5-5）。
@@ -37,6 +38,8 @@ class PcState(
     val xml: XmlStatus,
     val device: DeviceState?,
     val pairing: PairingView,
+    /** [pairing] が [PairingView.Open] のときのコードの残り秒（0 以上。V3）。それ以外は 0。 */
+    val pairingSecondsLeft: Long,
     val syncing: Boolean,
     val warnings: List<Warning>,
     /** W4 の接続先（IPv4 とポート）。 */
@@ -82,6 +85,8 @@ fun buildPcState(inputs: PcInputs, now: Instant): PcState {
     val device = settings.devices.firstOrNull()?.let {
         DeviceState(it.deviceId, it.displayName, inputs.activity.isConnected(now), it.deviceId in inputs.keyMissing, it.lastSync)
     }
+    val pairing = inputs.pairing
+    val pairingSecondsLeft = if (pairing is PairingView.Open) Duration.between(now, pairing.expiresAt).seconds.coerceAtLeast(0) else 0L
     val warnings = buildList {
         if (inputs.xml is XmlStatus.Stale) add(Warning.XmlStale)
         if (inputs.server == ServerStatus.Failed(ServerFailureKind.PortInUse)) add(Warning.PortInUse)
@@ -95,7 +100,8 @@ fun buildPcState(inputs: PcInputs, now: Instant): PcState {
         server = inputs.server,
         xml = inputs.xml,
         device = device,
-        pairing = inputs.pairing,
+        pairing = pairing,
+        pairingSecondsLeft = pairingSecondsLeft,
         syncing = inputs.activity.isSyncing(now),
         warnings = warnings,
         endpoints = inputs.endpoints,

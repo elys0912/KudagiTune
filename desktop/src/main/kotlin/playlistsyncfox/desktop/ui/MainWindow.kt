@@ -59,7 +59,6 @@ import playlistsyncfox.desktop.watch.XmlStatus
 import playlistsyncfox.shared.result.ProgressReport
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
-import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -222,8 +221,7 @@ private fun DeviceSection(app: PcApp, state: PcState) = Section("端末") {
 private fun PairingSection(app: PcApp, state: PcState) = Section("ペアリング") {
     when (val pairing = state.pairing) {
         is PairingView.Open -> {
-            val remaining = Duration.between(Instant.now(), pairing.expiresAt).seconds.coerceAtLeast(0)
-            Text("ペアリングコード：${pairing.code}（残り $remaining 秒、失敗 ${pairing.failedAttempts} 回）", style = MaterialTheme.typography.headlineSmall, fontFamily = FontFamily.Monospace)
+            Text("ペアリングコード：${pairing.code}（残り ${state.pairingSecondsLeft} 秒、失敗 ${pairing.failedAttempts} 回）", style = MaterialTheme.typography.headlineSmall, fontFamily = FontFamily.Monospace)
             state.fingerprint?.let { fingerprint ->
                 Text("確認コード：$fingerprint", fontFamily = FontFamily.Monospace)
                 SecondaryButton("確認コードをコピー") { copyToClipboard(fingerprint) }
