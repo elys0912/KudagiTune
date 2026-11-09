@@ -26,6 +26,17 @@ sealed interface CleanupState {
     data class Found(val items: List<StoredFile>) : CleanupState
 }
 
+/** 音楽ファイルの読み取りの権限の状態。 */
+enum class ReadAccess {
+    Granted,
+
+    /** 無いが、求められる。 */
+    Requestable,
+
+    /** 拒否済みで、同じ起動の間は求めない（X7-4-2）。 */
+    Denied,
+}
+
 /** 保存先の選択肢（S5。D16）。[available] が偽は、選んでいるが今は見つからない SD。 */
 data class StorageOption(val volume: String, val label: String, val available: Boolean)
 
@@ -114,12 +125,12 @@ class SettingsPresenter(
     private val mutableState = MutableStateFlow<SettingsUiState?>(null)
     val state: StateFlow<SettingsUiState?> = mutableState
 
-    fun refresh(notificationsAllowed: Boolean, readGranted: Boolean, denied: Boolean = false) {
+    fun refresh(notificationsAllowed: Boolean, readAccess: ReadAccess) {
         scope.launch {
-            val cleanup = when {
-                denied -> CleanupState.Denied
-                !readGranted -> CleanupState.NeedsPermission
-                else -> CleanupState.Found(cleanupWriter().leftovers())
+            val cleanup = when (readAccess) {
+                ReadAccess.Denied -> CleanupState.Denied
+                ReadAccess.Requestable -> CleanupState.NeedsPermission
+                ReadAccess.Granted -> CleanupState.Found(cleanupWriter().leftovers())
             }
             mutableState.value = settingsUi(
                 autoSetting = store.setting(SyncScheduler.AUTO_ENABLED_KEY),

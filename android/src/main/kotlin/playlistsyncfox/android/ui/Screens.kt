@@ -58,6 +58,7 @@ import playlistsyncfox.shared.manifest.leafIds
 /** 画面から Activity（権限、共有、削除の同意）へ頼む操作。 */
 class ScreenActions(
     val onSyncButton: () -> Unit,
+    val onOpenSettings: () -> Unit,
     val onNotificationHelp: () -> Unit,
     val onRequestRead: () -> Unit,
     val onDeleteLeftovers: (List<StoredFile>) -> Unit,
@@ -72,7 +73,7 @@ class ScreenActions(
 )
 
 @Composable
-fun AppScreen(model: AppViewModel, actions: ScreenActions, notificationsAllowed: () -> Boolean, readGranted: () -> Boolean) {
+fun AppScreen(model: AppViewModel, actions: ScreenActions) {
     val screen by model.screen.collectAsState()
     val message by model.message.collectAsState()
     PsfoxTheme {
@@ -86,7 +87,7 @@ fun AppScreen(model: AppViewModel, actions: ScreenActions, notificationsAllowed:
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     when (current) {
-                        Screen.Home -> HomeScreen(model, actions, notificationsAllowed, readGranted)
+                        Screen.Home -> HomeScreen(model, actions)
                         Screen.Pairing -> PairingScreen(model)
                         is Screen.Result -> ResultScreen(model, actions)
                         Screen.Settings -> SettingsScreen(model, actions)
@@ -215,7 +216,7 @@ private fun Back(model: AppViewModel) = Action("戻る", model::back)
 
 
 @Composable
-private fun HomeScreen(model: AppViewModel, actions: ScreenActions, notificationsAllowed: () -> Boolean, readGranted: () -> Boolean) {
+private fun HomeScreen(model: AppViewModel, actions: ScreenActions) {
     val c = LocalPsfoxColors.current
     val state by model.home.collectAsState()
     when (state.kind) {
@@ -262,7 +263,7 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions, notification
         buildList {
             if (state.kind != HomeKind.Unpaired) add("プレイリストを選ぶ" to { model.openSelection() })
             if (state.last != null) add("結果を見る" to { model.openResult(null) })
-            add("設定" to { model.openSettings(notificationsAllowed(), readGranted()) })
+            add("設定" to actions.onOpenSettings)
         },
     )
     RemovalConfirm(model)

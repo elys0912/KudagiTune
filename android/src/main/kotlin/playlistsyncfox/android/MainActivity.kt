@@ -35,6 +35,7 @@ import playlistsyncfox.android.ui.LICENSE_TEXT_DIR
 import playlistsyncfox.android.ui.LightColors
 import playlistsyncfox.android.ui.NOTICE_DIR
 import playlistsyncfox.android.ui.PermissionStep
+import playlistsyncfox.android.ui.ReadAccess
 import playlistsyncfox.android.ui.Screen
 import playlistsyncfox.android.ui.ScreenActions
 import playlistsyncfox.android.ui.parseLicenses
@@ -56,7 +57,7 @@ class MainActivity : ComponentActivity() {
 
     private val readLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) readDenied = true
-        model.settings.refresh(notificationsAllowed(), readGranted(), denied = !granted)
+        model.settings.refresh(notificationsAllowed(), if (granted) ReadAccess.Granted else ReadAccess.Denied)
     }
 
     private val saveLogLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
@@ -64,7 +65,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val deleteLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
-        model.settings.refresh(notificationsAllowed(), readGranted())
+        model.settings.refresh(notificationsAllowed(), readAccess())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -78,6 +79,7 @@ class MainActivity : ComponentActivity() {
 
         val actions = ScreenActions(
             onSyncButton = ::onSyncButton,
+            onOpenSettings = { model.openSettings(notificationsAllowed(), readAccess()) },
             onNotificationHelp = ::openNotificationSettings,
             onRequestRead = ::requestRead,
             onDeleteLeftovers = ::deleteLeftovers,
@@ -97,7 +99,7 @@ class MainActivity : ComponentActivity() {
             val dark = isSystemInDarkTheme()
             SideEffect { applySystemBars(dark) }
             BackHandler(enabled = screen != Screen.Home) { model.back() }
-            AppScreen(model, actions, ::notificationsAllowed, ::readGranted)
+            AppScreen(model, actions)
         }
     }
 
@@ -121,9 +123,7 @@ class MainActivity : ComponentActivity() {
      * 未ペアリングは S2、選択が空は S6 へ進んで同期が始まらないので、求めない（X7-3）。
      */
     private fun onSyncButton() {
-        val home = model.home.value
-        val startsSync = !home.syncButtonGoesToPairing && home.selectedCount > 0
-        if (startsSync && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (model.home.value.startsSync && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val permission = Manifest.permission.POST_NOTIFICATIONS
             val step = permissionStep(
                 granted = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED,
@@ -156,6 +156,8 @@ class MainActivity : ComponentActivity() {
 
     private fun readGranted() = checkSelfPermission(readPermission()) == PackageManager.PERMISSION_GRANTED
 
+    private fun readAccess() = if (readGranted()) ReadAccess.Granted else ReadAccess.Requestable
+
     /** S5 の「以前の曲の整理」を開いたときの読み取りの権限。拒否なら項目を閉じる。 */
     private fun requestRead() {
         val permission = readPermission()
@@ -169,8 +171,8 @@ class MainActivity : ComponentActivity() {
                 prefs.edit().putBoolean(KEY_ASKED_READ, true).apply()
                 readLauncher.launch(permission)
             }
-            PermissionStep.Granted -> model.settings.refresh(notificationsAllowed(), readGranted())
-            PermissionStep.GuideToSettings, PermissionStep.SkipDenied -> model.settings.refresh(notificationsAllowed(), readGranted(), denied = true)
+            PermissionStep.Granted -> model.settings.refresh(notificationsAllowed(), ReadAccess.Granted)
+            PermissionStep.GuideToSettings, PermissionStep.SkipDenied -> model.settings.refresh(notificationsAllowed(), ReadAccess.Denied)
         }
     }
 

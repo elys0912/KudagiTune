@@ -49,6 +49,17 @@ class HomeStateTest {
     }
 
     @Test
+    fun `TA-250 同期ボタンで同期が始まるのは、ペアリング済みで選択があるときだけ`() {
+        val unpaired = homeState(null, emptyList(), emptyList(), selectedCount = 1, syncing = false)
+        val noSelection = homeState(pairing(), emptyList(), emptyList(), selectedCount = 0, syncing = false)
+        val selected = homeState(pairing(), emptyList(), emptyList(), selectedCount = 1, syncing = false)
+
+        assertFalse(unpaired.startsSync)
+        assertFalse(noSelection.startsSync)
+        assertTrue(selected.startsSync)
+    }
+
+    @Test
     fun `TA-124 接続先は last_endpoint が指す方式の値で、空なら未接続と出す`() {
         val usb = pairing(lastEndpoint = "usb", usb = "192.0.2.20:47800")
 

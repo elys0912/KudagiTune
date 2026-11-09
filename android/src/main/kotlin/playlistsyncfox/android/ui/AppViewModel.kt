@@ -197,9 +197,9 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         }
     }
 
-    fun openSettings(notificationsAllowed: Boolean, readGranted: Boolean) {
+    fun openSettings(notificationsAllowed: Boolean, readAccess: ReadAccess) {
         screen.value = Screen.Settings
-        settings.refresh(notificationsAllowed, readGranted)
+        settings.refresh(notificationsAllowed, readAccess)
     }
 
     fun unpair() {

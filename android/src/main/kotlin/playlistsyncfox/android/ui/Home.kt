@@ -30,6 +30,9 @@ data class HomeUiState(
 ) {
     /** 同期ボタンの遷移先。未ペアリングだけ S2 で、同期中は S3 へ「進み具合を見る」。 */
     val syncButtonGoesToPairing get() = kind == HomeKind.Unpaired
+
+    /** 同期ボタンで同期が始まるか。未ペアリングは S2、選択が空は S6 へ進むだけで、始まらない（X7-3）。 */
+    val startsSync get() = !syncButtonGoesToPairing && selectedCount > 0
 }
 
 /** 同期が動いているか。`finished` を過ぎた状態は動いていない。 */
