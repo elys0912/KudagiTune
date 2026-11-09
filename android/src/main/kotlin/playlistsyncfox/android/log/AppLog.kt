@@ -8,6 +8,7 @@ import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
@@ -59,8 +60,13 @@ class AppLog(
         return collected.takeLast(maxLines)
     }
 
-    /** ファイルに保存する本文（X7-5）。全世代の全行を古い順に並べる。閲覧と共有の行数の切り詰め（V51）は受けない。 */
-    fun exportText(): String =
+    /**
+     * ファイルに保存する本文（X7-5）。全世代の全行を古い順に並べる。閲覧と共有の行数の切り詰め（V51）は受けない。
+     * 世代送りの途中のファイルを読まないよう、読み取りは書き込みと同じ executor で行い、結果を待つ。呼び出しは IO のスレッドから。
+     */
+    fun exportText(): String = CompletableFuture.supplyAsync({ readAllGenerations() }, executor).join()
+
+    private fun readAllGenerations(): String =
         generationFiles().asReversed().filter { it.exists() }.flatMap { it.readLines() }.joinToString("") { "$it\n" }
 
     fun sizeBytes(): Long = generationFiles().filter { it.exists() }.sumOf { it.length() }

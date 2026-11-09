@@ -3,7 +3,11 @@ package playlistsyncfox.android.log
 import java.io.File
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -111,6 +115,25 @@ class AppLogTest {
     @Test
     fun `X7-5 ログがまだ無いときの保存の本文は空`() {
         assertEquals("", log(tempDir()).exportText())
+    }
+
+    @Test
+    fun `TA-253 保存の本文の読み取りは、先に投げた書き込みが済んでから行う`() {
+        val queued = ConcurrentLinkedQueue<Runnable>()
+        // 書き込み 3 件と読み取り 1 件が並ぶまで、何も実行しない executor
+        val submitted = CountDownLatch(4)
+        val deferred = Executor { task ->
+            queued.add(task)
+            submitted.countDown()
+        }
+        val log = AppLog(tempDir(), now = { 0L }, executor = deferred)
+        repeat(3) { log.log(LogLevel.Info, "m", "行 $it") }
+        val text = CompletableFuture.supplyAsync { log.exportText() }
+
+        assertTrue(submitted.await(5, TimeUnit.SECONDS), "読み取りも executor に投げる")
+        queued.forEach { it.run() }
+
+        assertEquals(3, text.get(5, TimeUnit.SECONDS).lines().dropLast(1).size)
     }
 
     @Test
