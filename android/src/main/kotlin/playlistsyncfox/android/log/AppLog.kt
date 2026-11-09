@@ -1,9 +1,9 @@
 package playlistsyncfox.android.log
 
-import playlistsyncfox.android.sync.SyncLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import playlistsyncfox.android.sync.SyncLogger
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId

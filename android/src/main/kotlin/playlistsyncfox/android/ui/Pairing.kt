@@ -164,10 +164,9 @@ class PairingPresenter(
         val stage = when (event) {
             is PairingEvent.Fingerprint -> current.copy(fingerprint = event.text)
             is PairingEvent.Completed -> PairingStage.Done(event.pcName, showCleanupHint = nothingPlaced(event.deviceId))
-            PairingEvent.CodeMismatch -> if (++mismatches >= CODE_ATTEMPTS) {
-                PairingStage.AttemptsExhausted
-            } else {
-                current.copy(codeError = "ペアリングコードが違います")
+            PairingEvent.CodeMismatch -> {
+                mismatches++
+                if (mismatches >= CODE_ATTEMPTS) PairingStage.AttemptsExhausted else current.copy(codeError = "ペアリングコードが違います")
             }
             PairingEvent.AttemptsExhausted -> PairingStage.AttemptsExhausted
             PairingEvent.Waiting -> PairingStage.Waiting

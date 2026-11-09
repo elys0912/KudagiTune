@@ -87,18 +87,18 @@ fun AppScreen(model: AppViewModel, actions: ScreenActions) {
 /** 上の帯（アプリ名。X7-1-1 の 8）。 */
 @Composable
 private fun TitleBand() {
-    val c = LocalPsfoxColors.current
-    Column(Modifier.fillMaxWidth().background(c.band)) {
+    val colors = LocalPsfoxColors.current
+    Column(Modifier.fillMaxWidth().background(colors.band)) {
         Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
-            BasicText(stringResource(R.string.app_name), style = TextStyle(color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Medium))
+            BasicText(stringResource(R.string.app_name), style = TextStyle(color = colors.text, fontSize = 17.sp, fontWeight = FontWeight.Medium))
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(colors.border))
     }
 }
 
 @Composable
 private fun HomeScreen(model: AppViewModel, actions: ScreenActions) {
-    val c = LocalPsfoxColors.current
+    val colors = LocalPsfoxColors.current
     val state by model.home.collectAsState()
     when (state.kind) {
         HomeKind.Unpaired -> Label("PC とペアリングしてください")
@@ -106,16 +106,16 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions) {
             Card {
                 Caption("接続先の PC")
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.size(8.dp).background(c.success, RoundedCornerShape(4.dp)))
+                    Box(Modifier.size(8.dp).background(colors.success, RoundedCornerShape(4.dp)))
                     Label(state.pcName.orEmpty(), bold = true)
                 }
-                Label("接続先：${state.endpoint.orEmpty()}", color = c.muted)
-                if (state.kind == HomeKind.Syncing) Label("同期中", color = c.muted)
+                Label("接続先：${state.endpoint.orEmpty()}", color = colors.muted)
+                if (state.kind == HomeKind.Syncing) Label("同期中", color = colors.muted)
                 val last = state.last
                 if (last == null) {
-                    Label("まだ同期していません", color = c.muted)
+                    Label("まだ同期していません", color = colors.muted)
                 } else {
-                    Label("前回の同期：${formatTime(last.atMillis)} ${last.word}", color = c.muted)
+                    Label("前回の同期：${formatTime(last.atMillis)} ${last.word}", color = colors.muted)
                 }
             }
             Card {
@@ -128,7 +128,7 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions) {
                     state.playlists.forEach {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Label(it.name)
-                            Label("${it.trackCount} 曲", color = c.muted)
+                            Label("${it.trackCount} 曲", color = colors.muted)
                         }
                     }
                 }

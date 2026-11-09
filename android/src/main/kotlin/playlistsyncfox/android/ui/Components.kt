@@ -52,21 +52,21 @@ internal fun Action(label: String, onClick: () -> Unit) = ActionCell(label, Modi
 
 @Composable
 private fun ActionCell(label: String, modifier: Modifier, onClick: () -> Unit) {
-    val c = LocalPsfoxColors.current
+    val colors = LocalPsfoxColors.current
     Box(
-        modifier.heightIn(min = 44.dp).border(1.dp, c.buttonBorder, RoundedCornerShape(4.dp)).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier.heightIn(min = 44.dp).border(1.dp, colors.buttonBorder, RoundedCornerShape(4.dp)).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        BasicText(label, style = TextStyle(color = c.text, fontSize = 14.sp, textAlign = TextAlign.Center))
+        BasicText(label, style = TextStyle(color = colors.text, fontSize = 14.sp, textAlign = TextAlign.Center))
     }
 }
 
 /** 主ボタン（白文字）。 */
 @Composable
 internal fun PrimaryAction(label: String, onClick: () -> Unit) {
-    val c = LocalPsfoxColors.current
+    val colors = LocalPsfoxColors.current
     Box(
-        Modifier.fillMaxWidth().height(48.dp).background(c.primary, RoundedCornerShape(4.dp)).clickable(role = Role.Button, onClick = onClick),
+        Modifier.fillMaxWidth().height(48.dp).background(colors.primary, RoundedCornerShape(4.dp)).clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         BasicText(label, style = TextStyle(color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium))
@@ -88,9 +88,9 @@ internal fun ActionGrid(actions: List<Pair<String, () -> Unit>>) {
 
 @Composable
 internal fun Card(content: @Composable () -> Unit) {
-    val c = LocalPsfoxColors.current
+    val colors = LocalPsfoxColors.current
     Column(
-        Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(6.dp)).border(1.dp, c.border, RoundedCornerShape(6.dp)).padding(horizontal = 16.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().background(colors.card, RoundedCornerShape(6.dp)).border(1.dp, colors.border, RoundedCornerShape(6.dp)).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) { content() }
 }
@@ -98,30 +98,30 @@ internal fun Card(content: @Composable () -> Unit) {
 /** 棒。[fraction] は 0〜1。 */
 @Composable
 internal fun Bar(fraction: Float, height: Int) {
-    val c = LocalPsfoxColors.current
-    Box(Modifier.fillMaxWidth().height(height.dp).background(c.barGroove, RoundedCornerShape((height / 2).dp))) {
-        Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(height.dp).background(c.accent, RoundedCornerShape((height / 2).dp)))
+    val colors = LocalPsfoxColors.current
+    Box(Modifier.fillMaxWidth().height(height.dp).background(colors.barGroove, RoundedCornerShape((height / 2).dp))) {
+        Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(height.dp).background(colors.accent, RoundedCornerShape((height / 2).dp)))
     }
 }
 
 @Composable
 internal fun Field(value: String, onChange: (String) -> Unit) {
-    val c = LocalPsfoxColors.current
+    val colors = LocalPsfoxColors.current
     BasicTextField(
         value = value,
         onValueChange = onChange,
         singleLine = true,
-        textStyle = TextStyle(color = c.text, fontSize = 15.sp),
-        cursorBrush = SolidColor(c.text),
-        modifier = Modifier.fillMaxWidth().border(1.dp, c.buttonBorder, RoundedCornerShape(4.dp)).padding(10.dp),
+        textStyle = TextStyle(color = colors.text, fontSize = 15.sp),
+        cursorBrush = SolidColor(colors.text),
+        modifier = Modifier.fillMaxWidth().border(1.dp, colors.buttonBorder, RoundedCornerShape(4.dp)).padding(10.dp),
     )
 }
 
 @Composable
 internal fun Confirm(text: String, ok: String, onOk: () -> Unit, onCancel: () -> Unit, cancel: String = "取り消す") {
-    val c = LocalPsfoxColors.current
+    val colors = LocalPsfoxColors.current
     Column(
-        Modifier.fillMaxWidth().border(2.dp, c.accent, RoundedCornerShape(6.dp)).padding(12.dp),
+        Modifier.fillMaxWidth().border(2.dp, colors.accent, RoundedCornerShape(6.dp)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Label(text)

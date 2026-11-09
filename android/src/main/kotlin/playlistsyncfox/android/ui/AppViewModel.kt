@@ -72,8 +72,8 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         .map { it?.let(::progressUi) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    private val mutableResult = MutableStateFlow(ResultScreen(null, emptyList()))
-    val result: StateFlow<ResultScreen> = mutableResult.asStateFlow()
+    private val mutableResult = MutableStateFlow(ResultScreenState(null, emptyList()))
+    val result: StateFlow<ResultScreenState> = mutableResult.asStateFlow()
 
     private val mutableLogLines = MutableStateFlow<List<String>>(emptyList())
     val logLines: StateFlow<List<String>> = mutableLogLines.asStateFlow()

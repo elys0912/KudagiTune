@@ -184,17 +184,17 @@ private fun removalNote(trigger: String) =
 /** 過去の実行の一覧の 1 行。 */
 data class PastRun(val runId: Long, val word: String, val atMillis: Long)
 
-data class ResultScreen(val current: ResultUiState?, val past: List<PastRun>)
+data class ResultScreenState(val current: ResultUiState?, val past: List<PastRun>)
 
 /**
  * S4 の読み込み。[runId] が null なら既定（最後の同期の行）、あれば過去の実行からその行の T3 と T6。
  */
-suspend fun loadResult(store: SyncStore, runId: Long?, syncing: Boolean): ResultScreen {
+suspend fun loadResult(store: SyncStore, runId: Long?, syncing: Boolean): ResultScreenState {
     val runs = store.runs()
     val target = if (runId != null) runs.firstOrNull { it.runId == runId } else latestRun(runs, syncing)?.run
-    return ResultScreen(
+    return ResultScreenState(
         current = target?.let { resultUi(it, store.issues(it.runId)) },
-        past = runs.filter { it.endedAt != null }.map { PastRun(it.runId, resultWord(it.result), it.endedAt!!) },
+        past = runs.mapNotNull { run -> run.endedAt?.let { PastRun(run.runId, resultWord(run.result), it) } },
     )
 }
 
