@@ -1289,6 +1289,28 @@ class SyncRunnerTest {
     }
 
     @Test
+    fun `TA-240 続きの位置を 416 で断られて最初から取り直しても、先に受けた分を落とさず足し上げる`() = runTest {
+        val h = Harness()
+        val one = listOf(track(1))
+        h.sync(one)
+        var requests = 0
+        // 1 回目は 40 バイトで切れ、2 回目は続きの位置を断られ（416）、3 回目に最初から全部を受ける
+        h.lanApi.trackScript = {
+            when (requests++) {
+                0 -> TrackScript.Body(Harness.contentOf(one[0]), disconnectAfter = 40)
+                1 -> TrackScript.Fail(ApiFailure.RangeNotSatisfiable)
+                else -> TrackScript.Body(Harness.contentOf(one[0]), startAt = it.rangeFrom)
+            }
+        }
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(listOf(0L, 40L, 0L), h.lanApi.trackRequests.map { it.rangeFrom })
+        assertEquals(140, row.bytesTransferred)
+        assertEquals(140, h.finished.single().second.doneBytes)
+    }
+
+    @Test
     fun `X6-7 利用者の中断では、先に曲単位の失敗があっても error_kind が空で、失敗は件数と一覧に残る`() = runTest {
         val h = Harness()
         h.sync(tracks)

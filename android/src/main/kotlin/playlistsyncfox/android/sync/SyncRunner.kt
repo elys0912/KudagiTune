@@ -154,7 +154,6 @@ class SyncRunner(private val env: SyncEnvironment) {
         // 曲ごとの行と、転送中の曲のこの実行での転送量（done_bytes に足す。X6-3 の SyncProgress）
         private var rows: List<TrackRow> = emptyList()
         private var inFlightBytes = 0L
-        private var trackBase = 0L
 
         // P8 の送信の状態（X6-3。同じ stage は V28 以上あけ、送っている途中は送らない）
         private var progressSentAt: Long? = null
@@ -462,7 +461,8 @@ class SyncRunner(private val env: SyncEnvironment) {
             val name = track.name ?: track.fileName
             var failures = 0
             var fromScratch = false
-            var baseKnown = false
+            // この曲にこの実行で受けた量のうち、終わった取得の分。切断からの再開や最初からの取り直しを挟んでも足し上げる（X6-6）
+            var received = 0L
             updateRow(track.persistentId) { it.copy(state = TrackState.Transferring, receivedBytes = 0, errorNumber = null) }
             env.log.line("転送を始めた：$name")
 
@@ -476,11 +476,6 @@ class SyncRunner(private val env: SyncEnvironment) {
                     Attempt.Wrote(env.writer.write(plan, null))
                 } else {
                     transferStarted = true
-                    // 再開の位置が初めの値。切断からの再開でも、この実行の初めの位置から数える
-                    if (!baseKnown) {
-                        trackBase = plan.resumeFrom
-                        baseKnown = true
-                    }
                     updateRow(track.persistentId) { it.copy(receivedBytes = plan.resumeFrom) }
                     publish(SyncStage.Transfer, title = name)
                     val expectedSize = (plan as? WritePlan.Resume)?.pending?.expectedSize ?: track.size
@@ -489,10 +484,8 @@ class SyncRunner(private val env: SyncEnvironment) {
                         if (body.sizeHeader != expectedSize || body.modifiedAtHeader != expectedModified) {
                             Attempt.Stale
                         } else {
-                            val written = env.writer.write(plan, TrackBody(body.startAt, counting(track.persistentId, name, body.startAt, body.source, tally)))
-                            // 切断からの再開を挟んでも、この実行で受けた分の全部を数える（最後の接続の分だけにしない）
-                            if (written is TrackWriteResult.Placed) bytesTransferred += track.size - trackBase
-                            Attempt.Wrote(written)
+                            val counted = counting(track.persistentId, name, body.startAt, body.source, tally, received)
+                            Attempt.Wrote(env.writer.write(plan, TrackBody(body.startAt, counted)))
                         }
                     }
                     when (response) {
@@ -517,7 +510,10 @@ class SyncRunner(private val env: SyncEnvironment) {
                         return TrackStep.Failed(SyncError.ManifestStale(track.persistentId, name, retried))
                     }
                     is Attempt.Wrote -> when (val result = outcome.result) {
-                        is TrackWriteResult.Placed -> return TrackStep.Done
+                        is TrackWriteResult.Placed -> {
+                            bytesTransferred += received + tally.bytes
+                            return TrackStep.Done
+                        }
                         is TrackWriteResult.Failed -> return TrackStep.Failed(SyncError.WriteFailed(track.persistentId, name, result.step))
                         is TrackWriteResult.OutOfSpace -> return TrackStep.Stop(SyncError.InsufficientStorage(result.missingBytes, StoragePhase.Writing))
                         TrackWriteResult.NeedRestart -> fromScratch = true
@@ -529,6 +525,8 @@ class SyncRunner(private val env: SyncEnvironment) {
                     }
                     null -> Unit
                 }
+
+                received += tally.bytes
 
                 // E6（切断）と取り直し：同じ接続先に、V10 の回数まで再開する。超えたら同期全体を止める（行と T5 は残す）
                 failures++
@@ -568,8 +566,18 @@ class SyncRunner(private val env: SyncEnvironment) {
             rows = rows.map { if (it.persistentId == id) change(it) else it }
         }
 
-        /** 受け取った量を数える（MediaWriter は変えない）。書き込みの 1 区切りごとに行を更新する。 */
-        private fun counting(id: String, name: String, startAt: Long, inner: TrackSource, tally: BodyTally) = object : TrackSource {
+        /**
+         * 受け取った量を数える（MediaWriter は変えない）。書き込みの 1 区切りごとに行を更新する。
+         * [receivedBefore] はこの曲に、これより前の取得で受けた量。
+         */
+        private fun counting(
+            id: String,
+            name: String,
+            startAt: Long,
+            inner: TrackSource,
+            tally: BodyTally,
+            receivedBefore: Long,
+        ) = object : TrackSource {
             private var position = startAt
 
             override suspend fun read(buffer: ByteArray): Int {
@@ -578,7 +586,7 @@ class SyncRunner(private val env: SyncEnvironment) {
                 if (count > 0) {
                     tally.bytes += count
                     position += count
-                    inFlightBytes = (position - trackBase).coerceAtLeast(0)
+                    inFlightBytes = receivedBefore + tally.bytes
                     updateRow(id) { it.copy(receivedBytes = position) }
                     publish(SyncStage.Transfer, title = name)
                 }
