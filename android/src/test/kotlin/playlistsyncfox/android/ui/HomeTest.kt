@@ -16,6 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 private fun run(
@@ -273,5 +274,33 @@ class StartManualSyncTest {
         }
 
         assertEquals(running, progress.value)
+    }
+}
+
+class StaleFinishedTest {
+    private val finished = SyncProgress(SyncStage.Finished)
+
+    @Test
+    fun `TA-104 押した時点の完了が同じまま残っているときは、その完了を返す`() {
+        assertSame(finished, staleFinished(atPress = finished, now = finished))
+    }
+
+    @Test
+    fun `TA-104 押した後に進捗が消えたか入れ替わったときは、前の完了として扱わない`() {
+        assertNull(staleFinished(atPress = finished, now = null))
+        assertNull(staleFinished(atPress = finished, now = SyncProgress(SyncStage.Connecting)))
+    }
+
+    @Test
+    fun `TA-104 内容が同じでも別の完了は、新しい実行の完了として扱う`() {
+        assertNull(staleFinished(atPress = finished, now = SyncProgress(SyncStage.Finished)))
+    }
+
+    @Test
+    fun `TA-104 押した時点で完了でなければ、何も無視しない`() {
+        val running = SyncProgress(SyncStage.Transfer)
+
+        assertNull(staleFinished(atPress = running, now = running))
+        assertNull(staleFinished(atPress = null, now = null))
     }
 }

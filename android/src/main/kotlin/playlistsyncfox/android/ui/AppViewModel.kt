@@ -17,6 +17,7 @@ import playlistsyncfox.android.AppGraph
 import playlistsyncfox.android.discovery.checkManualEndpoint
 import playlistsyncfox.android.log.LogEntry
 import playlistsyncfox.android.notify.SyncNotifications
+import playlistsyncfox.android.sync.SyncProgress
 import playlistsyncfox.android.sync.SyncServices
 
 /** 画面の遷移は S1 を起点にする（X7-1-1 の 4）。 */
@@ -25,8 +26,11 @@ sealed interface Screen {
 
     data object Pairing : Screen
 
-    /** [awaitingStart] はこの画面から開始した直後で、ワーカーの最初の進捗を待っている間。 */
-    data class Progress(val awaitingStart: Boolean, val notice: String? = null) : Screen
+    /**
+     * [awaitingStart] はこの画面から開始した直後で、ワーカーの最初の進捗を待っている間。
+     * [staleFinished] は同期ボタンを押した時点から残っている前の実行の完了で、S4 へ進む判定から外す。
+     */
+    data class Progress(val awaitingStart: Boolean, val notice: String? = null, val staleFinished: SyncProgress? = null) : Screen
 
     data class Result(val runId: Long? = null) : Screen
 
@@ -136,7 +140,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         viewModelScope.launch {
             SyncServices.progress.combine(screen) { progress, current -> progress to current }.collect { (progress, current) ->
                 if (current !is Screen.Progress) return@collect
-                when (progressNav(progress, current.awaitingStart)) {
+                when (progressNav(progress, current.awaitingStart, current.staleFinished)) {
                     ProgressNav.ToResult -> openResult(null)
                     ProgressNav.ToHome -> mutableScreen.value = Screen.Home
                     ProgressNav.Started -> mutableScreen.value = current.copy(awaitingStart = false)
@@ -162,22 +166,29 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     }
 
     fun syncPressed() {
-        viewModelScope.launch { apply(manualSync.press(paired = store.pairing() != null)) }
+        val shownAtPress = SyncServices.progress.value
+        viewModelScope.launch { apply(manualSync.press(paired = store.pairing() != null), shownAtPress) }
     }
 
     fun answerConfirm(approved: Boolean) {
         val pending = confirm.value ?: return
         mutableConfirm.value = null
-        viewModelScope.launch { apply(manualSync.answer(pending, approved)) }
+        val shownAtPress = SyncServices.progress.value
+        viewModelScope.launch { apply(manualSync.answer(pending, approved), shownAtPress) }
     }
 
-    private fun apply(outcome: PressOutcome) {
+    /** [shownAtPress] は同期ボタンを押した時点の進捗。 */
+    private fun apply(outcome: PressOutcome, shownAtPress: SyncProgress?) {
         when (outcome) {
             PressOutcome.ToPairing -> {
                 mutableScreen.value = Screen.Pairing
                 pairing.open()
             }
-            is PressOutcome.ToProgress -> mutableScreen.value = Screen.Progress(awaitingStart = SyncServices.progress.value == null, notice = outcome.notice)
+            is PressOutcome.ToProgress -> {
+                val now = SyncServices.progress.value
+                val stale = staleFinished(shownAtPress, now)
+                mutableScreen.value = Screen.Progress(awaitingStart = now == null || stale != null, notice = outcome.notice, staleFinished = stale)
+            }
             is PressOutcome.Confirm -> mutableConfirm.value = outcome
             PressOutcome.ToSelection -> openSelection(NO_SELECTION_NOTICE)
             PressOutcome.StorageMissing -> mutableMessage.value = STORAGE_MISSING_NOTICE

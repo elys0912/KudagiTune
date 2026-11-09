@@ -44,6 +44,15 @@ class ProgressTest {
     }
 
     @Test
+    fun `TA-104 押した時点から残っている前の完了は、待ちの間に S4 へ進む判定に使わない`() {
+        val stale = SyncProgress(SyncStage.Finished)
+
+        assertEquals(ProgressNav.Stay, progressNav(stale, awaitingStart = true, staleFinished = stale))
+        assertEquals(ProgressNav.ToResult, progressNav(SyncProgress(SyncStage.Finished), awaitingStart = true, staleFinished = stale))
+        assertEquals(ProgressNav.Started, progressNav(SyncProgress(SyncStage.Connecting), awaitingStart = true, staleFinished = stale))
+    }
+
+    @Test
     fun `TA-105 near_limit が真のときだけ注記が出る`() {
         assertNotNull(progressUi(SyncProgress(SyncStage.Transfer, nearLimit = true)).nearLimitNote)
         assertNull(progressUi(SyncProgress(SyncStage.Transfer, nearLimit = false)).nearLimitNote)

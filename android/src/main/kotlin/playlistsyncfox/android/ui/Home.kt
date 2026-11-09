@@ -145,3 +145,11 @@ suspend fun startManualSync(progress: MutableStateFlow<SyncProgress?>, start: su
     if (result == ManualStart.Started) progress.compareAndSet(before, null)
     return result
 }
+
+/**
+ * 同期ボタンを押した時点の進捗 [atPress] が、開始の処理の後（[now]）も同じ完了（`finished`）のまま残っているときに、その完了を返す。
+ * 自動が始まる直前だと進捗が消されず、S3 が前の実行の完了を新しい実行の完了と取り違えて S4 へ進むため、S3 が無視する。
+ * 進捗が入れ替わっていれば null。内容が同じでも別の完了は、新しい実行のものとして扱う。
+ */
+fun staleFinished(atPress: SyncProgress?, now: SyncProgress?): SyncProgress? =
+    atPress?.takeIf { it.stage == SyncStage.Finished && it === now }
