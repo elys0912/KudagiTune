@@ -85,10 +85,17 @@ class SyncRunner(private val env: SyncEnvironment) {
         class Stop(val step: TrackStep.Stop) : Fetch
     }
 
+    /** 1 回の取得の結果。[Stale]・[Wrote] は取得できた応答、[Retry]・[End] は取得できなかった場合。 */
     private sealed interface Attempt {
         data object Stale : Attempt
 
         class Wrote(val result: TrackWriteResult) : Attempt
+
+        /** 切断など。[fromScratch] なら次の取得は最初から取り直す。 */
+        class Retry(val fromScratch: Boolean) : Attempt
+
+        /** この曲をここで終える（E5、同期全体の停止）。 */
+        class End(val step: TrackStep) : Attempt
     }
 
     /** 1 回の取得の本文の受け取り。[bytes] は受けた量、[endedNormally] は取得元が切れずに閉じたか（X6-11）。 */
@@ -455,45 +462,15 @@ class SyncRunner(private val env: SyncEnvironment) {
                 fromScratch = false
                 val tally = BodyTally()
 
-                val outcome: Attempt? = if (plan is WritePlan.Complete) {
-                    // 書き終えていた（IS_PENDING の切り替えの前後で落ちた）。取得せずに読み戻しへ進む
-                    Attempt.Wrote(env.writer.write(plan, null))
-                } else {
-                    transferStarted = true
-                    updateRow(track.persistentId) { it.copy(receivedBytes = plan.resumeFrom) }
-                    publish(SyncStage.Transfer, title = name)
-                    val expectedSize = (plan as? WritePlan.Resume)?.pending?.expectedSize ?: track.size
-                    val expectedModified = (plan as? WritePlan.Resume)?.pending?.sourceModified ?: track.modifiedAt
-                    val response = api.track(track.persistentId, track.size, track.modifiedAt, plan.resumeFrom) { body ->
-                        if (body.sizeHeader != expectedSize || body.modifiedAtHeader != expectedModified) {
-                            Attempt.Stale
-                        } else {
-                            val counted = counting(track.persistentId, name, body.startAt, body.source, tally, received)
-                            Attempt.Wrote(env.writer.write(plan, TrackBody(body.startAt, counted)))
-                        }
-                    }
-                    when (response) {
-                        is ApiResult.Ok -> response.value
-                        is ApiResult.Fail -> when (val failure = response.failure) {
-                            ApiFailure.Disconnected -> null
-                            ApiFailure.RangeNotSatisfiable, ApiFailure.RangeMismatch -> {
-                                fromScratch = true
-                                null
-                            }
-                            ApiFailure.FileMissing -> return TrackStep.Failed(SyncError.FileMissing(track.persistentId, name, FileMissingReason.NotFound))
-                            ApiFailure.Stale -> Attempt.Stale
-                            else -> return stopFor(failure)
-                        }
-                    }
-                }
-
-                when (outcome) {
+                when (val attempt = fetchOnce(api, track, plan, tally, received)) {
                     Attempt.Stale -> {
                         // 再開の曲が E8 になったときは pending の行と T5 を消す
                         if (plan is WritePlan.Resume) env.writer.discardPending(track.persistentId)
                         return TrackStep.Failed(SyncError.ManifestStale(track.persistentId, name, retried))
                     }
-                    is Attempt.Wrote -> when (val result = outcome.result) {
+                    is Attempt.End -> return attempt.step
+                    is Attempt.Retry -> fromScratch = attempt.fromScratch
+                    is Attempt.Wrote -> when (val result = attempt.result) {
                         is TrackWriteResult.Placed -> {
                             bytesTransferred += received + tally.bytes
                             return TrackStep.Done
@@ -507,7 +484,6 @@ class SyncRunner(private val env: SyncEnvironment) {
                             return TrackStep.Failed(SyncError.WriteFailed(track.persistentId, name, WriteStep.TempFileWrite))
                         }
                     }
-                    null -> Unit
                 }
 
                 received += tally.bytes
@@ -519,6 +495,43 @@ class SyncRunner(private val env: SyncEnvironment) {
                     return TrackStep.Stop(SyncError.TransferInterrupted(track.persistentId, failures))
                 }
                 env.wait(SyncValues.RETRY_WAITS_MS[failures - 1])
+            }
+        }
+
+        /**
+         * 取得を 1 回行う（P2 と書き込み）。[receivedBefore] はこの曲に、これより前の取得で受けた量。
+         * 受けた量は [tally] に数える。
+         */
+        private suspend fun fetchOnce(api: SyncApi, track: ManifestTrack, plan: WritePlan, tally: BodyTally, receivedBefore: Long): Attempt {
+            if (plan is WritePlan.Complete) {
+                // 書き終えていた（IS_PENDING の切り替えの前後で落ちた）。取得せずに読み戻しへ進む
+                return Attempt.Wrote(env.writer.write(plan, null))
+            }
+
+            val name = track.name ?: track.fileName
+            transferStarted = true
+            updateRow(track.persistentId) { it.copy(receivedBytes = plan.resumeFrom) }
+            publish(SyncStage.Transfer, title = name)
+            val expectedSize = (plan as? WritePlan.Resume)?.pending?.expectedSize ?: track.size
+            val expectedModified = (plan as? WritePlan.Resume)?.pending?.sourceModified ?: track.modifiedAt
+            val response = api.track(track.persistentId, track.size, track.modifiedAt, plan.resumeFrom) { body ->
+                if (body.sizeHeader != expectedSize || body.modifiedAtHeader != expectedModified) {
+                    Attempt.Stale
+                } else {
+                    val counted = counting(track.persistentId, name, body.startAt, body.source, tally, receivedBefore)
+                    Attempt.Wrote(env.writer.write(plan, TrackBody(body.startAt, counted)))
+                }
+            }
+
+            return when (response) {
+                is ApiResult.Ok -> response.value
+                is ApiResult.Fail -> when (val failure = response.failure) {
+                    ApiFailure.Disconnected -> Attempt.Retry(fromScratch = false)
+                    ApiFailure.RangeNotSatisfiable, ApiFailure.RangeMismatch -> Attempt.Retry(fromScratch = true)
+                    ApiFailure.FileMissing -> Attempt.End(TrackStep.Failed(SyncError.FileMissing(track.persistentId, name, FileMissingReason.NotFound)))
+                    ApiFailure.Stale -> Attempt.Stale
+                    else -> Attempt.End(stopFor(failure))
+                }
             }
         }
 
