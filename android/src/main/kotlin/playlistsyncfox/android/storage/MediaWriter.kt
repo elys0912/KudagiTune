@@ -247,7 +247,12 @@ class MediaWriter(
         }
 
         // 索引の更新を促す（IS_PENDING の切り替え。これで足りるかは実機で確かめる。C-2）
-        val stored = files.publish(target) ?: return@withContext PlaylistWriteResult.Failed
+        val stored = files.publish(target)
+        if (stored == null) {
+            if (uri == null) runCatching { files.delete(target) }
+            return@withContext PlaylistWriteResult.Failed
+        }
+
         val row = WrittenPlaylist(
             deviceId = deviceId,
             playlistId = playlist.persistentId,
