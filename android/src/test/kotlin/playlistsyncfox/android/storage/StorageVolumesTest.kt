@@ -13,7 +13,7 @@ class StorageVolumesTest {
     }
 
     @Test
-    fun `getAllocatableBytes が使えないときは、StatFs の空きを返す`() {
+    fun `TA-241 getAllocatableBytes が使えないときは、StatFs の空きを返す`() {
         val free = primaryFreeBytes(allocatable = { throw IOException("測れない") }, statFs = { 300L })
 
         assertEquals(300L, free)
