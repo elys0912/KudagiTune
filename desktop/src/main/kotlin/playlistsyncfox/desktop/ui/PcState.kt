@@ -80,6 +80,12 @@ class PcInputs(
     val fingerprint: String?,
 )
 
+private fun warningOf(kind: ServerFailureKind): Warning = when (kind) {
+    ServerFailureKind.PortInUse -> Warning.PortInUse
+    ServerFailureKind.Other -> Warning.ServerStartFailed
+    ServerFailureKind.KeyStorage -> Warning.KeyStorageFailed
+}
+
 fun buildPcState(inputs: PcInputs, now: Instant): PcState {
     val settings = inputs.settings
     val device = settings.devices.firstOrNull()?.let {
@@ -89,9 +95,7 @@ fun buildPcState(inputs: PcInputs, now: Instant): PcState {
     val pairingSecondsLeft = if (pairing is PairingView.Open) Duration.between(now, pairing.expiresAt).seconds.coerceAtLeast(0) else 0L
     val warnings = buildList {
         if (inputs.xml is XmlStatus.Stale) add(Warning.XmlStale)
-        if (inputs.server == ServerStatus.Failed(ServerFailureKind.PortInUse)) add(Warning.PortInUse)
-        if (inputs.server == ServerStatus.Failed(ServerFailureKind.Other)) add(Warning.ServerStartFailed)
-        if (inputs.server == ServerStatus.Failed(ServerFailureKind.KeyStorage)) add(Warning.KeyStorageFailed)
+        (inputs.server as? ServerStatus.Failed)?.let { add(warningOf(it.kind)) }
         if (inputs.keyMissing.isNotEmpty()) add(Warning.KeyMissing)
         if (inputs.certificateRegenerated && settings.devices.isNotEmpty()) add(Warning.CertificateRegenerated)
         if (inputs.settingsReset) add(Warning.SettingsReset)
