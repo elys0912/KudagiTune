@@ -46,7 +46,7 @@ class PlaylistCatalogTest {
     }
 
     @Test
-    fun `X6-13 E2 のうち時計のずれと再送の検出と回数の制限は理由つきで返し、鍵の不一致と 403 は従来のまま`() = runTest {
+    fun `TA-247 E2 のうち時計のずれと再送の検出と回数の制限は理由つきで返し、鍵の不一致と 403 は従来のまま`() = runTest {
         val h = Harness()
         h.tailApi.playlistsResult = ApiResult.Ok(writePlaylistTree(TREE))
         for (detail in listOf(ErrorDetail.ClockSkew, ErrorDetail.Replay, ErrorDetail.RateLimited)) {
@@ -62,7 +62,7 @@ class PlaylistCatalogTest {
     }
 
     @Test
-    fun `X6-4 つながった接続先を last_endpoint に記録し NSD の名が変わっていれば endpoint_lan も更新する`() = runTest {
+    fun `TA-243 つながった接続先を last_endpoint に記録し NSD の名が変わっていれば endpoint_lan も更新する`() = runTest {
         val viaTailscale = Harness()
         viaTailscale.lanApi.playlistsResult = ApiResult.Fail(ApiFailure.Disconnected)
         viaTailscale.tailApi.playlistsResult = ApiResult.Ok(writePlaylistTree(TREE))

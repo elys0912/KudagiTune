@@ -173,7 +173,7 @@ class ResultUiTest {
     }
 
     @Test
-    fun `X6-9 マニフェストの版違いで止まった行だけ、版を合わせる案内を出す`() {
+    fun `TA-251 マニフェストの版違いで止まった行だけ、版を合わせる案内を出す`() {
         val mismatch = resultUi(finishedRun(1, result = SyncRun.RESULT_FAILED, json = resultJson(manifestVersionMismatch = true)), emptyList())
         val other = resultUi(finishedRun(1, result = SyncRun.RESULT_FAILED, json = resultJson()), emptyList())
 

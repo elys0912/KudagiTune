@@ -92,7 +92,7 @@ class SelectionTest {
     }
 
     @Test
-    fun `X6-13 取得が E2 で断られたときの語と案内は S3 と同じ noticeOf で、ほかの失敗には案内を足さない`() {
+    fun `TA-249 取得が E2 で断られたときの語と案内は S3 と同じ noticeOf で、ほかの失敗には案内を足さない`() {
         val clockSkew = CatalogResult.Rejected(ErrorDetail.ClockSkew)
         val rateLimited = CatalogResult.Rejected(ErrorDetail.RateLimited)
 
