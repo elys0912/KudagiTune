@@ -75,14 +75,15 @@ private val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 fun formatTime(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String =
     dateFormat.format(Instant.ofEpochMilli(epochMillis).atZone(zone))
 
-/** T4 の `spki_hash`（小文字の 16 進 64 桁）から、画面に出す確認コード（旧称「指紋」。D18）を作る。X4-4 の表示形式（先頭 12 バイトを 4 桁ごと）。 */
-fun fingerprintOf(spkiHash: String): String = spkiHash.take(24).chunked(4).joinToString(" ")
-
-/** S6 で一覧を取れなかった理由の表示語。 */
+/** S6 で一覧を取れなかった理由の表示語。E2 の理由（[CatalogResult.Rejected]）は S3 と同じ [noticeOf] の見出し。 */
 fun catalogWord(result: CatalogResult): String = when (result) {
     is CatalogResult.Loaded -> ""
     CatalogResult.Unreachable -> "PC に接続できません"
     CatalogResult.KeyMismatch -> "ペアリングのやり直しが必要です"
+    is CatalogResult.Rejected -> noticeOf(result.detail).title
     CatalogResult.XmlUnavailable -> "PC の iTunes ライブラリ（XML）を読めません"
     CatalogResult.Other -> "プレイリストの一覧を取得できませんでした"
 }
+
+/** S6 の取得の失敗に添える案内。[CatalogResult.Rejected] のときだけ、S3 と同じ [noticeOf] の案内を出す。 */
+fun catalogGuidance(result: CatalogResult): String? = (result as? CatalogResult.Rejected)?.let { noticeOf(it.detail).guidance }

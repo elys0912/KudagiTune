@@ -59,6 +59,7 @@ class ProgressTest {
 private fun resultJson(
     removalSkipped: Boolean = false,
     detail: ErrorDetail? = null,
+    manifestVersionMismatch: Boolean = false,
 ) = encodeResult(
     SyncResult(
         startedAt = "2026-11-07T00:00:00.000Z",
@@ -79,6 +80,7 @@ private fun resultJson(
         removalSkipped = removalSkipped,
         keyMismatch = null,
         errorDetail = detail,
+        manifestVersionMismatch = manifestVersionMismatch,
     ),
 )
 
@@ -171,6 +173,15 @@ class ResultUiTest {
     }
 
     @Test
+    fun `X6-9 マニフェストの版違いで止まった行だけ、版を合わせる案内を出す`() {
+        val mismatch = resultUi(finishedRun(1, result = SyncRun.RESULT_FAILED, json = resultJson(manifestVersionMismatch = true)), emptyList())
+        val other = resultUi(finishedRun(1, result = SyncRun.RESULT_FAILED, json = resultJson()), emptyList())
+
+        assertEquals("PC と端末のアプリの版を合わせてください", mismatch.versionMismatchNote)
+        assertNull(other.versionMismatchNote)
+    }
+
+    @Test
     fun `TA-107 強制終了の跡の行は件数と容量を出さず、結果の区分だけを出す`() {
         val trace = finishedRun(1, result = SyncRun.RESULT_INTERRUPTED, json = null)
 
@@ -205,6 +216,20 @@ class ResultUiTest {
         assertEquals("証明書の変更", label(ErrorDetail.PinMismatch))
         assertEquals("一時的な拒否", label(ErrorDetail.RateLimited))
         assertEquals("署名の不一致", label(ErrorDetail.NoDetail))
+    }
+
+    @Test
+    fun `X7-2 E2 の原因欄も error_detail ごとの語で出し、時計のずれを再ペアリングの案内にしない`() {
+        fun cause(detail: ErrorDetail?) =
+            resultUi(finishedRun(1, result = SyncRun.RESULT_FAILED, errorKind = "E2", json = resultJson(detail = detail)), emptyList()).errorWord
+
+        assertEquals("端末と PC の時刻がずれています", cause(ErrorDetail.ClockSkew))
+        assertEquals("同じ通信が重複して届きました", cause(ErrorDetail.Replay))
+        assertEquals("短い間に接続が続いたため、PC が一時的に断りました", cause(ErrorDetail.RateLimited))
+        assertEquals("PC の証明書が変わりました", cause(ErrorDetail.PinMismatch))
+        assertEquals("ペアリングをやり直してください", cause(ErrorDetail.NoDetail))
+        // error_detail を持たない行は E の番号の語
+        assertEquals("ペアリングのやり直しが必要です", cause(null))
     }
 
     @Test

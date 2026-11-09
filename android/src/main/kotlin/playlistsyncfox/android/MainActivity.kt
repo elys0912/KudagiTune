@@ -12,6 +12,7 @@ import android.os.storage.StorageManager
 import android.provider.MediaStore
 import android.provider.Settings
 import android.view.WindowInsetsController
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -24,11 +25,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import playlistsyncfox.android.log.logFileName
 import playlistsyncfox.android.notify.SyncNotifications
 import playlistsyncfox.android.storage.StoredFile
 import playlistsyncfox.android.ui.AppScreen
 import playlistsyncfox.android.ui.AppViewModel
 import playlistsyncfox.android.ui.DarkColors
+import playlistsyncfox.android.ui.LICENSE_TEXT_DIR
 import playlistsyncfox.android.ui.LightColors
 import playlistsyncfox.android.ui.PermissionStep
 import playlistsyncfox.android.ui.Screen
@@ -55,6 +58,10 @@ class MainActivity : ComponentActivity() {
         model.refreshSettings(notificationsAllowed(), readGranted(), denied = !granted)
     }
 
+    private val saveLogLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) model.saveLog { text -> writeText(uri, text) }
+    }
+
     private val deleteLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
         model.refreshSettings(notificationsAllowed(), readGranted())
     }
@@ -74,11 +81,13 @@ class MainActivity : ComponentActivity() {
             onRequestRead = ::requestRead,
             onDeleteLeftovers = ::deleteLeftovers,
             onShareLog = ::shareLog,
+            onSaveLog = { saveLogLauncher.launch(logFileName(System.currentTimeMillis())) },
             onOpenStorageSettings = { startActivity(Intent(StorageManager.ACTION_MANAGE_STORAGE)) },
             licenses = {
                 // 資産が読めなければ null（「読み込めない」を出す。アプリは止めない）
                 runCatching { assets.open("artifacts.json").bufferedReader().use { it.readText() } }.getOrNull()?.let(::parseLicenses)
             },
+            licenseText = { file -> runCatching { assets.open("$LICENSE_TEXT_DIR/$file").bufferedReader().use { it.readText() } }.getOrNull() },
         )
         setContent {
             val screen by model.screen.collectAsState()
@@ -101,9 +110,10 @@ class MainActivity : ComponentActivity() {
         model.openFromNotification(intent.getStringExtra(SyncNotifications.EXTRA_OPEN))
     }
 
-    /** 手動の同期の前に、通知の許可を 1 回だけ確かめる。拒否でも同期は続ける。 */
+    /** 手動の同期の前に、通知の許可を確かめる。拒否でも同期は続ける。未ペアリングは同期でなくペアリングへ進むので、求めない（X7-3）。 */
     private fun onSyncButton() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val startsSync = !model.home.value.syncButtonGoesToPairing
+        if (startsSync && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val permission = Manifest.permission.POST_NOTIFICATIONS
             val step = permissionStep(
                 granted = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED,
@@ -116,7 +126,9 @@ class MainActivity : ComponentActivity() {
                     notificationLauncher.launch(permission)
                     return
                 }
-                PermissionStep.GuideToSettings -> model.message.value = "通知が出ない。出すには設定アプリで通知を許可してほしい"
+                // 直後に S3 へ移っても消えないよう、画面の知らせでなくトーストで出す（X7-1）
+                PermissionStep.GuideToSettings ->
+                    Toast.makeText(this, "通知が出ない。出すには設定アプリで通知を許可してほしい", Toast.LENGTH_LONG).show()
                 PermissionStep.Granted, PermissionStep.SkipDenied -> Unit
             }
         }
@@ -163,6 +175,12 @@ class MainActivity : ComponentActivity() {
     private fun shareLog(text: String) {
         val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
         startActivity(Intent.createChooser(send, null))
+    }
+
+    /** 「ファイルに保存する」で利用者が選んだ場所へ書く。開けなければ例外にして、画面に失敗を出す。権限は要らない（保存先の選択が許可になる）。 */
+    private fun writeText(uri: Uri, text: String) {
+        val output = contentResolver.openOutputStream(uri, "wt") ?: error("保存先を開けない")
+        output.use { it.write(text.toByteArray()) }
     }
 
     private companion object {

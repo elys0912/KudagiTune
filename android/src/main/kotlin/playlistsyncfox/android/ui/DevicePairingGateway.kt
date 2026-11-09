@@ -12,6 +12,7 @@ import playlistsyncfox.shared.auth.confirmPairing
 import playlistsyncfox.shared.auth.finishPairing
 import playlistsyncfox.shared.auth.startPairing
 import playlistsyncfox.shared.crypto.CryptoProvider
+import playlistsyncfox.shared.crypto.formatFingerprintOfHash
 import java.util.UUID
 
 private const val DEVICE_ID_KEY = "device_id"
@@ -48,7 +49,7 @@ class DevicePairingGateway(
             else -> return emit(refusal(call))
         }
         val spkiHash = client.spkiHash ?: return emit(Failed(ConnectFailed))
-        emit(PairingEvent.Fingerprint(fingerprintOf(spkiHash.toHexString())))
+        emit(PairingEvent.Fingerprint(formatFingerprintOfHash(spkiHash)))
 
         val confirmation = confirmPairing(crypto, initiation, reply.pcId, reply.y, spkiHash) ?: return emit(Failed(BadReply))
         val macP = when (val call = client.confirm(deviceId, confirmation.macD)) {

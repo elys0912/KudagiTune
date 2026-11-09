@@ -41,6 +41,25 @@ class SettingsUiTest {
         assertEquals("0000 0000 0000 0000 0000 0000", state.fingerprint)
         assertFalse(state.autoEnabled)
     }
+
+    @Test
+    fun `X4-5 確認コードは T4 の spki_hash の先頭 12 バイトを 4 桁ごとに区切る`() {
+        val hash = "0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9"
+
+        val state = settingsUi(null, null, 0, storageUi(emptySet(), SyncValues.VOLUME_PRIMARY), pairing().copy(spkiHash = hash), notificationsAllowed = true, logBytes = 0, cleanup = CleanupState.Denied)
+
+        assertEquals("0a1b 2c3d 4e5f 6071 8293 a4b5", state.fingerprint)
+    }
+
+    @Test
+    fun `X6-19 保存先を変えたとき、前の場所に曲が残っていれば先に消す案内を足し、無ければ足さない`() {
+        assertEquals(STORAGE_CHANGED_NOTICE, storageChangedNotice(0))
+
+        val withLeftover = storageChangedNotice(1)
+
+        assertTrue(withLeftover.startsWith(STORAGE_CHANGED_NOTICE))
+        assertTrue(withLeftover.contains("先に前の場所の曲を消してください"))
+    }
 }
 
 class PermissionStepTest {

@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import java.io.File
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
@@ -20,7 +22,6 @@ data class LogEntry(val at: Long, val level: LogLevel, val module: String, val m
  */
 class AppLog(
     private val dir: File,
-    private val enabled: () -> Boolean,
     private val now: () -> Long,
     private val maxBytes: Long = MAX_FILE_BYTES,
     private val executor: Executor = Executors.newSingleThreadExecutor(),
@@ -31,7 +32,6 @@ class AppLog(
     val recent: StateFlow<List<LogEntry>> = screenLines
 
     fun log(level: LogLevel, module: String, message: String, errorNumber: Int? = null) {
-        if (!enabled()) return
         val at = now()
         val text = clean(message)
         val line = listOf(Instant.ofEpochMilli(at).toString(), level.text, module, text, errorNumber?.let { "E$it" }.orEmpty())
@@ -58,6 +58,10 @@ class AppLog(
         }
         return collected.takeLast(maxLines)
     }
+
+    /** ファイルに保存する本文（X7-5）。全世代の全行を古い順に並べる。閲覧と共有の行数の切り詰め（V51）は受けない。 */
+    fun exportText(): String =
+        generationFiles().asReversed().filter { it.exists() }.flatMap { it.readLines() }.joinToString("") { "$it\n" }
 
     fun sizeBytes(): Long = generationFiles().filter { it.exists() }.sumOf { it.length() }
 
@@ -105,6 +109,12 @@ class AppLog(
         const val SCREEN_LINES = 200
     }
 }
+
+private val exportTimeFormat = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+
+/** 「ファイルに保存する」の既定の名前（端末の地方時）。例：`kudagitune-log-20261109-153045.txt`。 */
+fun logFileName(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String =
+    "kudagitune-log-${exportTimeFormat.format(Instant.ofEpochMilli(epochMillis).atZone(zone))}.txt"
 
 // 鍵、ペアリングコード、曲のパス、署名の値、MAC、IP は書かない（N1-6）。呼び出し側が誤って渡しても行に出さない
 private val SECRET_PATTERNS = listOf(

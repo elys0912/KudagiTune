@@ -58,7 +58,7 @@ class AppGraph(val application: Application) {
         Room.databaseBuilder(app, AppDatabase::class.java, "playlist-sync-fox.db").addMigrations(MIGRATION_1_2).build().syncDao(),
     )
     val volumes = StorageVolumes(app)
-    val log = AppLog(File(app.filesDir, "logs"), enabled = { true }, now = System::currentTimeMillis)
+    val log = AppLog(File(app.filesDir, "logs"), now = System::currentTimeMillis)
     val discovery = PcDiscovery(app)
     val scheduler = SyncScheduler(WorkManager.getInstance(app), store)
 

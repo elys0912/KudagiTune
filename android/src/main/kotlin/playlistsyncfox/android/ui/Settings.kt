@@ -4,6 +4,7 @@ import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.storage.MediaWriter
 import playlistsyncfox.android.storage.StoredFile
 import playlistsyncfox.android.sync.SyncValues
+import playlistsyncfox.shared.crypto.formatFingerprintOfHash
 
 // S5 設定（X7-1-6）。
 
@@ -39,6 +40,13 @@ fun storageUi(mounted: Set<String>, saved: String): StorageUi {
     return StorageUi(saved, options)
 }
 
+/**
+ * 保存先を変えた後の案内。前の場所（T9）に曲が残っていれば、次の同期の前に消す案内を足す。
+ * 残したまま元の場所へ戻すと、旧ファイルとの衝突で全曲が接尾辞つきの重複になる（X6-19）。変更は止めない。
+ */
+fun storageChangedNotice(relocatedCount: Int): String =
+    if (relocatedCount > 0) "$STORAGE_CHANGED_NOTICE。$STORAGE_LEFTOVER_NOTICE" else STORAGE_CHANGED_NOTICE
+
 data class SettingsUiState(
     val autoEnabled: Boolean,
     /** 「PC に無い曲を端末から消す」。既定は OFF。 */
@@ -64,7 +72,8 @@ fun settingsUi(autoSetting: String?, deleteMissingSetting: String?, relocatedCou
         storage = storage,
         saveFolder = SyncValues.MEDIA_ROOT,
         pcName = pairing?.pcName,
-        fingerprint = pairing?.let { fingerprintOf(it.spkiHash) },
+        // T4 の `spki_hash` は小文字の 16 進 64 桁。M1 の共通の関数で確認コードにする（PC と同じ表示。X4-5）
+        fingerprint = pairing?.let { formatFingerprintOfHash(it.spkiHash.hexToByteArray()) },
         notificationsOff = !notificationsAllowed,
         logBytes = logBytes,
         cleanup = cleanup,

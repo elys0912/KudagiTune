@@ -25,6 +25,9 @@ import playlistsyncfox.android.sync.SyncStage
 const val NO_SELECTION_NOTICE = "同期するプレイリストを選んでください"
 const val STORAGE_MISSING_NOTICE = "保存先の SD カードが見つかりません。SD カードを確認するか、設定で保存先を変更してください"
 const val STORAGE_CHANGED_NOTICE = "保存先を変更しました。次の同期で、新しい保存先へ全曲を転送し直します"
+const val STORAGE_LEFTOVER_NOTICE = "前の場所に曲が残っています。次の同期の前に、「前の保存先の曲を削除する」で、先に前の場所の曲を消してください"
+const val LOG_SAVED_NOTICE = "ログをファイルに保存しました"
+const val LOG_SAVE_FAILED_NOTICE = "ログを保存できませんでした"
 
 /** 画面の遷移は S1 を起点にする（X7-1-1 の 4）。 */
 sealed interface Screen {
@@ -238,7 +241,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         viewModelScope.launch {
             store.putSetting(SyncValues.STORAGE_VOLUME_KEY, volume)
             settings.update { it?.copy(storage = storageUi(graph.volumes.mounted(), volume)) }
-            message.value = STORAGE_CHANGED_NOTICE
+            message.value = storageChangedNotice(store.relocatedUris().size)
         }
     }
 
@@ -259,6 +262,14 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
 
     /** 共有する本文。閲覧と同じ切り詰め。 */
     fun logText(): String = graph.log.tail().joinToString("\n")
+
+    /** 「ファイルに保存する」。本文は全世代の全行。書き込み先は [write] が持ち、失敗は画面の下の知らせに出す。 */
+    fun saveLog(write: (String) -> Unit) {
+        viewModelScope.launch {
+            val saved = withContext(Dispatchers.IO) { runCatching { write(graph.log.exportText()) }.isSuccess }
+            message.value = if (saved) LOG_SAVED_NOTICE else LOG_SAVE_FAILED_NOTICE
+        }
+    }
 
     fun clearLog() {
         graph.log.clear()

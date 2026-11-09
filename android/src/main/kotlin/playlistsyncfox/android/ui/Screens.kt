@@ -38,6 +38,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import playlistsyncfox.android.R
 import playlistsyncfox.android.log.LogLevel
 import playlistsyncfox.android.storage.StoredFile
 import playlistsyncfox.android.sync.SyncServices
@@ -61,8 +63,11 @@ class ScreenActions(
     val onRequestRead: () -> Unit,
     val onDeleteLeftovers: (List<StoredFile>) -> Unit,
     val onShareLog: (String) -> Unit,
+    val onSaveLog: () -> Unit,
     val onOpenStorageSettings: () -> Unit,
     val licenses: () -> List<LicenseEntry>?,
+    /** 同梱の全文（[LicenseEntry.textFiles] の 1 件）。読めなければ null。 */
+    val licenseText: (String) -> String?,
 )
 
 @Composable
@@ -102,7 +107,7 @@ private fun TitleBand() {
     val c = LocalPsfoxColors.current
     Column(Modifier.fillMaxWidth().background(c.band)) {
         Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
-            BasicText("playlist-sync-fox", style = TextStyle(color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Medium))
+            BasicText(stringResource(R.string.app_name), style = TextStyle(color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Medium))
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
     }
@@ -221,6 +226,7 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions, notification
                     Box(Modifier.size(8.dp).background(c.success, RoundedCornerShape(4.dp)))
                     Label(state.pcName.orEmpty(), bold = true)
                 }
+                Label("接続先：${state.endpoint.orEmpty()}", color = c.muted)
                 if (state.kind == HomeKind.Syncing) Label("同期中", color = c.muted)
                 val last = state.last
                 if (last == null) {
@@ -342,6 +348,7 @@ private fun SelectionScreen(model: AppViewModel, current: Screen.Selection) {
         }
         is SelectionStage.Failed -> {
             Label(catalogWord(s.reason), bold = true)
+            catalogGuidance(s.reason)?.let { Label(it) }
             s.rows.forEach { row ->
                 Label(row.name)
                 Action("外す") { model.selection.remove(row.playlistId) }
@@ -532,6 +539,7 @@ private fun ResultScreen(model: AppViewModel, actions: ScreenActions) {
     } else {
         Label("${state.word}（${state.trigger}）　${formatTime(state.atMillis)}", bold = true)
         state.removalNote?.let { Label(it, bold = true) }
+        state.versionMismatchNote?.let { Label(it, bold = true) }
         if (state.notRemoved > 0) Label("削除しなかった曲：${state.notRemoved} 件")
         state.counts?.let { Label("追加 ${it.added}　更新 ${it.replaced}　削除 ${it.removed}　失敗 ${it.failed}") }
         state.bytes?.let { Label("転送量 ${formatBytes(it)}") }
@@ -563,6 +571,7 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     val state by model.settings.collectAsState()
     var confirmUnpair by remember { mutableStateOf(false) }
     var confirmRelocated by remember { mutableStateOf(false) }
+    var confirmSaveLog by remember { mutableStateOf(false) }
     val syncing = isSyncing(SyncServices.progress.collectAsState().value)
     val ui = state
     if (ui == null) {
@@ -611,6 +620,10 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     }
     Label("ログ（${formatBytes(ui.logBytes)}）", bold = true)
     Action("ログを見る", model::openLog)
+    Action("ファイルに保存する") { confirmSaveLog = true }
+    if (confirmSaveLog) {
+        Confirm("ログには曲名が含まれます。ファイルに保存しますか？", "保存する", { confirmSaveLog = false; actions.onSaveLog() }, { confirmSaveLog = false })
+    }
     Action("ライセンス", model::openLicenses)
     Action("ホームへ", model::back)
 }
@@ -658,8 +671,11 @@ private fun LicensesScreen(model: AppViewModel, actions: ScreenActions) {
     when {
         entries == null -> Label("ライセンスの一覧を読み込めません")
         chosen != null -> {
+            // 全文は選ばれたときに読む。再描画のたびには読まない
+            val texts = remember(chosen) { chosen.textFiles.map(actions.licenseText) }
             Label("${chosen.name} ${chosen.version}", bold = true)
             Label(chosen.body)
+            texts.forEach { Label(it ?: "ライセンスの全文を読み込めません", mono = true) }
             Action("一覧へ") { open = null }
         }
         else -> entries.forEach { Action("${it.name} ${it.version}　${it.license}") { open = it } }

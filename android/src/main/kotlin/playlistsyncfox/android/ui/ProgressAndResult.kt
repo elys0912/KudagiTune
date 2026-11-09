@@ -134,6 +134,8 @@ data class ResultUiState(
     /** E2 の表示語（`error_detail` から選ぶ）。 */
     val noticeLabel: String?,
     val removalNote: String?,
+    /** マニフェストの版違いで止まったときの案内（X6-9）。それ以外は null。 */
+    val versionMismatchNote: String?,
     /** 消さなかった件数（差分の「消す」のうち実行しなかった分）。0 なら出さない。 */
     val notRemoved: Int,
     val excluded: IssueList,
@@ -143,6 +145,9 @@ data class ResultUiState(
     data class Counts(val added: Int, val replaced: Int, val removed: Int, val failed: Int)
 }
 
+/** マニフェストの版違い（X6-9）。壊れたマニフェストは対象外で、汎用の表示のまま。 */
+const val VERSION_MISMATCH_NOTICE = "PC と端末のアプリの版を合わせてください"
+
 /** V21 結果の一覧の表示件数の上限。 */
 const val ISSUE_LIMIT = 100
 
@@ -150,7 +155,8 @@ private fun issueList(lines: List<IssueLine>, limit: Int) = IssueList(lines.take
 
 fun resultUi(run: SyncRun, issues: List<RunIssue>, limit: Int = ISSUE_LIMIT): ResultUiState {
     val stored = run.resultJson?.takeIf { it.isNotEmpty() }?.let { runCatching { decodeResult(it) }.getOrNull() }
-    val e2Detail = stored?.errorDetail.takeIf { run.errorKind == "E2" }
+    // E2 は原因欄も詳細も `error_detail` の語で出す（S3 と同じ関数）。`error_detail` が無い行は E の番号の語
+    val e2Notice = stored?.errorDetail.takeIf { run.errorKind == "E2" }?.let(::noticeOf)
     return ResultUiState(
         runId = run.runId,
         word = resultWord(if (run.endedAt == null) SyncRun.RESULT_INTERRUPTED else run.result),
@@ -158,9 +164,10 @@ fun resultUi(run: SyncRun, issues: List<RunIssue>, limit: Int = ISSUE_LIMIT): Re
         atMillis = run.endedAt ?: run.startedAt,
         counts = ResultUiState.Counts(run.added, run.replaced, run.removed, run.failed).takeIf { stored != null },
         bytes = run.bytesTransferred.takeIf { stored != null },
-        errorWord = errorWord(run.errorKind),
-        noticeLabel = e2Detail?.let { noticeOf(it).label },
+        errorWord = e2Notice?.title ?: errorWord(run.errorKind),
+        noticeLabel = e2Notice?.label,
         removalNote = removalNote(run.trigger).takeIf { stored?.removalSkipped == true },
+        versionMismatchNote = VERSION_MISMATCH_NOTICE.takeIf { stored?.manifestVersionMismatch == true },
         notRemoved = if (stored == null) 0 else (stored.counts.toRemove - run.removed).coerceAtLeast(0),
         excluded = issueList(
             issues.filter { it.kind == RunIssue.KIND_EXCLUDED }
