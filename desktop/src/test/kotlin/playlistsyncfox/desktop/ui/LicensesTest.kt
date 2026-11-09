@@ -7,6 +7,7 @@ import kotlin.io.path.writeText
 import kotlin.test.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -105,6 +106,32 @@ class LicensesTest {
         val texts = bundledLicenseTexts(emptyList(), javaHome)
 
         assertContains(texts.last().text, "ASSEMBLY EXCEPTION")
+    }
+
+    @Test
+    fun 配布物の資源に依存部品のNOTICEの一覧が入っている() {
+        assertNotNull(LicenseEntry::class.java.getResourceAsStream("/dependency-notices/index.txt"))
+    }
+
+    @Test
+    fun 依存部品のNOTICEは一覧の順に読み同じ本文は1件にまとめて部品の名前を並べる() {
+        val resources = mapOf(
+            "/dependency-notices/index.txt" to "a-1.0\nb-2.0\nc-3.0\n",
+            "/dependency-notices/a-1.0.txt" to "NOTICE X",
+            "/dependency-notices/b-2.0.txt" to "NOTICE Y",
+            "/dependency-notices/c-3.0.txt" to "NOTICE X",
+        )
+
+        val notices = dependencyNotices { resources[it] }
+
+        assertEquals(listOf("NOTICE X", "NOTICE Y"), notices.map { it.text })
+        assertEquals(listOf(listOf("a-1.0", "c-3.0"), listOf("b-2.0")), notices.map { it.componentNames })
+    }
+
+    @Test
+    fun 依存部品のNOTICEが1件も集まっていなければ空を返す() {
+        assertTrue(dependencyNotices { if (it.endsWith("index.txt")) "" else null }.isEmpty())
+        assertTrue(dependencyNotices { null }.isEmpty())
     }
 
     @Test

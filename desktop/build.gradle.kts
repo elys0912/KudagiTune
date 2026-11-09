@@ -1,3 +1,6 @@
+import java.io.File
+import java.util.zip.ZipFile
+
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
@@ -59,6 +62,43 @@ compose.desktop {
     }
 }
 
+// 依存の jar の `META-INF/NOTICE*` を集める。Apache-2.0 の部品は NOTICE の添付を求める（B4-7）。ネットワークは使わない。
+// jar ごとに `<jar の名前>.txt` を書き、名前の一覧を `index.txt` に書く。1 件も無ければ index.txt は空のままで、ビルドは落ちない
+abstract class CollectDependencyNotices : DefaultTask() {
+    @get:Classpath
+    abstract val jars: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun collect() {
+        val directory = outputDirectory.get().asFile
+        directory.deleteRecursively()
+        directory.mkdirs()
+
+        val noticeEntry = Regex("META-INF/NOTICE[^/]*", RegexOption.IGNORE_CASE)
+        val componentNames = jars.files.filter { it.isFile && it.extension == "jar" }.sortedBy { it.name }.mapNotNull { jar ->
+            val notices = ZipFile(jar).use { zip ->
+                zip.entries().asSequence().filter { noticeEntry.matches(it.name) }.map { entry ->
+                    zip.getInputStream(entry).use { it.readBytes().decodeToString() }
+                }.toList()
+            }
+            if (notices.isEmpty()) return@mapNotNull null
+
+            File(directory, "${jar.nameWithoutExtension}.txt").writeText(notices.joinToString("\n\n"))
+            jar.nameWithoutExtension
+        }
+        File(directory, "index.txt").writeText(componentNames.joinToString("\n"))
+    }
+}
+
+val collectDependencyNotices by tasks.registering(CollectDependencyNotices::class) {
+    jars.from(configurations.named("runtimeClasspath"))
+    outputDirectory.set(layout.buildDirectory.dir("generated/dependency-notices"))
+}
+
 tasks.processResources {
     from(tasks.named("licensee")) { include("artifacts.json") }
+    from(collectDependencyNotices) { into("dependency-notices") }
 }

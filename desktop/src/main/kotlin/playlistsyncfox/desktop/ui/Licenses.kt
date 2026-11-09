@@ -15,7 +15,7 @@ import kotlin.io.path.readBytes
 
 // ライセンスの表示（B4-7、N4-4）。資源の `artifacts.json`（Licensee の出力。名前、版、許諾の名前と URL だけで、本文は無い）を読んで並べ、
 // 許諾ごとの全文は資源の `bundled-licenses/` から添える。全文の入手にネットワークは使わない。
-// 同梱の Java 実行環境の通知は実行時に `java.home` の `legal/` から読む。
+// 依存部品の NOTICE は資源の `dependency-notices/`（ビルドが jar から集める）から、同梱の Java 実行環境の通知は実行時に `java.home` の `legal/` から読む。
 
 /** 全文を同梱している許諾。Licensee が許す許諾（build.gradle.kts の `licensee`）に合わせる。 */
 enum class BundledLicense(val title: String, val resource: String) {
@@ -34,6 +34,11 @@ data class LicenseText(val title: String, val componentNames: List<String>, val 
 
 private const val TEXT_DIRECTORY = "/bundled-licenses/"
 private const val TEXT_UNAVAILABLE = "全文を読み込めません"
+
+// ビルドが依存の jar から集めた NOTICE（build.gradle.kts の `collectDependencyNotices`）。`index.txt` に部品の名前を 1 行ずつ、`<部品の名前>.txt` に本文を置く
+private const val NOTICE_DIRECTORY = "/dependency-notices/"
+private const val NOTICE_INDEX = "index.txt"
+private const val NOTICE_TITLE = "NOTICE"
 
 // 配布物が同梱する Java 実行環境（jpackage が jlink で作る）。Licensee の一覧には出ないので、通知を常に最後に足す。
 // 通知は実行環境の `legal/<モジュール>/` を実行時に読む。配布物の実行環境と常に一致する
@@ -56,7 +61,7 @@ fun loadBundledLicenses(): List<LicenseEntry>? =
     LicenseEntry::class.java.getResourceAsStream("/artifacts.json")?.use { parseLicenses(it.readBytes().decodeToString()) }
 
 /**
- * 許諾ごとに全文 1 件。その許諾を持つ部品の名前を添える。最後に同梱の Java 実行環境の通知を置く。
+ * 許諾ごとに全文 1 件。その許諾を持つ部品の名前を添える。続けて依存部品の NOTICE、最後に同梱の Java 実行環境の通知を置く。
  * [javaHome] は Java 実行環境の場所。通知はその下の `legal/` から読む（試験で差し替える）。
  */
 fun bundledLicenseTexts(entries: List<LicenseEntry>, javaHome: Path = Path.of(System.getProperty("java.home"))): List<LicenseText> {
@@ -64,7 +69,16 @@ fun bundledLicenseTexts(entries: List<LicenseEntry>, javaHome: Path = Path.of(Sy
         val names = entries.filter { license in it.bundled }.map { it.name }
         if (names.isEmpty()) null else LicenseText(license.title, names, loadText(license.resource))
     }
-    return fromEntries + runtimeLegalTexts(javaHome)
+    return fromEntries + dependencyNotices() + runtimeLegalTexts(javaHome)
+}
+
+/** ビルドが集めた依存部品の NOTICE。同じ本文は部品の名前を並べて 1 件にまとめる。集まっていなければ空。[readResource] は資源の読み込み（試験で差し替える）。 */
+fun dependencyNotices(readResource: (String) -> String? = ::readResourceText): List<LicenseText> {
+    val componentNames = readResource(NOTICE_DIRECTORY + NOTICE_INDEX).orEmpty().lines().filter { it.isNotBlank() }
+    val notices = componentNames.mapNotNull { name ->
+        readResource("$NOTICE_DIRECTORY$name.txt")?.let { LicenseText(NOTICE_TITLE, listOf(name), it) }
+    }
+    return mergeSameText(notices)
 }
 
 /**
@@ -72,7 +86,7 @@ fun bundledLicenseTexts(entries: List<LicenseEntry>, javaHome: Path = Path.of(Sy
  * `legal/` が無い・読めないときは、その旨の 1 件を返す。
  */
 fun runtimeLegalTexts(javaHome: Path): List<LicenseText> {
-    val texts = runCatching { readRuntimeLegalFiles(javaHome.resolve(RUNTIME_LEGAL_DIRECTORY)) }.getOrDefault(emptyList())
+    val texts = runCatching { readRuntimeLegalFiles(javaHome.resolve(RUNTIME_LEGAL_DIRECTORY)) }.getOrNull().orEmpty()
     if (texts.isEmpty()) return listOf(LicenseText(RUNTIME_TITLE, listOf(RUNTIME_COMPONENT), RUNTIME_LEGAL_UNAVAILABLE))
 
     return mergeSameText(texts)
@@ -89,8 +103,10 @@ private fun readRuntimeLegalFiles(legalDirectory: Path): List<LicenseText> =
 private fun mergeSameText(texts: List<LicenseText>): List<LicenseText> =
     texts.groupBy { it.title to it.text }.map { (key, group) -> LicenseText(key.first, group.flatMap { it.componentNames }, key.second) }
 
-private fun loadText(resource: String): String =
-    LicenseEntry::class.java.getResourceAsStream(TEXT_DIRECTORY + resource)?.use { it.readBytes().decodeToString() } ?: TEXT_UNAVAILABLE
+private fun readResourceText(path: String): String? =
+    LicenseEntry::class.java.getResourceAsStream(path)?.use { it.readBytes().decodeToString() }
+
+private fun loadText(resource: String): String = readResourceText(TEXT_DIRECTORY + resource) ?: TEXT_UNAVAILABLE
 
 private fun bundledLicenseOf(identifier: String, url: String): BundledLicense? = when {
     identifier == "Apache-2.0" -> BundledLicense.Apache2
