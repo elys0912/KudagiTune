@@ -16,21 +16,19 @@ sealed interface ManifestReadResult {
     data class Broken(val reason: String) : ManifestReadResult
 }
 
-// 未知のキーは読み捨てる。空の項目は null にして、JSON には書かない。
-private val manifestJson = Json {
+// 境界（マニフェスト、P1・P3・P7・P8 の本文）の JSON の設定。未知のキーは読み捨てる。空の項目は null にして、JSON には書かない。
+internal val boundaryJson = Json {
     ignoreUnknownKeys = true
     explicitNulls = false
 }
 
-private val persistentIdPattern = Regex("[0-9A-F]{16}")
-
 private val supportedFormatVersions = MANIFEST_FORMAT_VERSION..MANIFEST_FORMAT_VERSION
 
-fun writeManifest(manifest: Manifest): String = manifestJson.encodeToString(Manifest.serializer(), manifest)
+fun writeManifest(manifest: Manifest): String = boundaryJson.encodeToString(Manifest.serializer(), manifest)
 
 fun readManifest(text: String): ManifestReadResult {
     val root = try {
-        manifestJson.parseToJsonElement(text)
+        boundaryJson.parseToJsonElement(text)
     } catch (e: SerializationException) {
         return ManifestReadResult.Broken(firstLine(e))
     }
@@ -41,7 +39,7 @@ fun readManifest(text: String): ManifestReadResult {
     if (version !in supportedFormatVersions) return ManifestReadResult.VersionMismatch(version)
 
     val manifest = try {
-        manifestJson.decodeFromJsonElement(Manifest.serializer(), root)
+        boundaryJson.decodeFromJsonElement(Manifest.serializer(), root)
     } catch (e: SerializationException) {
         return ManifestReadResult.Broken(firstLine(e))
     }
@@ -73,5 +71,5 @@ private fun validateIds(manifest: Manifest): String? {
         manifest.playlists.map { it.persistentId } +
         manifest.unresolvedPlaylists.map { it.persistentId }
 
-    return if (ids.all { persistentIdPattern.matches(it) }) null else "persistent_id が大文字 16 桁の 16 進ではない"
+    return if (ids.all(::isPersistentId)) null else "persistent_id が大文字 16 桁の 16 進ではない"
 }

@@ -15,6 +15,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
@@ -82,6 +83,30 @@ private val standardTracks = fileTrack(1, ID_A, "a") + fileTrack(2, ID_B, "b")
 
 private val standardPlaylists =
     playlist(PLAYLIST_ID, "一覧", items(2, 1, 2)) + playlist(MASTER_ID, "ライブラリ", bool("Master", true), items(1, 2))
+
+// NFD（「ほ」＋結合の濁点）の名前。パスを正規化しないことを確かめるために使う
+private const val NFD_NAME = "ほ\u3099"
+
+// iTunes 12.x の実物の形を写した文書。DOCTYPE、CRLF、組み込みのプレイリスト、NFD のパス、文字参照、文書の先頭の項目を持つ
+private fun realLibraryDocument(): String {
+    val tracks = fileTrack(1, ID_A, "a", bool("Protected", false)).replace(
+        "file://localhost/C:/Music/a.mp3", "file://localhost/C:/Music/$NFD_NAME.mp3",
+    ) +
+        track(2, int("Track ID", "2"), str("Persistent ID", ID_B), str("Track Type", "File"), str("Name", "R &#38; B")) +
+        fileTrack(3, ID_C, "c", bool("Protected", false))
+    val builtIns = playlist(MASTER_ID, "ライブラリ", bool("Master", true), "<key>Visible</key><false/>", items(1, 2, 3)) +
+        listOf(4, 2, 3, 10, 5, 65, 66, 67, 26).joinToString("") {
+            playlist("00000000000000$it".takeLast(16), "組み込み $it", int("Distinguished Kind", "$it"), items(1))
+        } +
+        playlist("3333333333333333", "スマート組み込み", int("Distinguished Kind", "4"), "<key>Smart Info</key><data>AQID</data>")
+    val header = """<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">""" + "\r\n"
+    return document(
+        tracks, builtIns + playlist(PLAYLIST_ID, "普通", items(1)) + playlist("4444444444444444", "空の普通の一覧"),
+        header = header,
+        top = "<key>Application Version</key><string>12.13.7.1</string>" +
+            "<key>Date</key><date>2026-11-06T01:02:03Z</date>" + str("Library Persistent ID", "9f8e7d6c5b4a3921"),
+    ).replace("\n", "\r\n")
+}
 
 class PlistLibraryReaderTest {
     @Test
@@ -153,7 +178,7 @@ class PlistLibraryReaderTest {
         assertEquals(listOf(UnidentifiedTrack(name = "名無しの ID", artist = null)), result.unidentifiedTracks)
         val withoutLocation = result.tracks.single { it.persistentId == ID_B }
         assertEquals(TrackLocation.Absent, withoutLocation.location)
-        assertEquals(null, withoutLocation.name)
+        assertNull(withoutLocation.name)
         assertEquals(LibraryPlaylist(PLAYLIST_ID, "", null, PlaylistKind.Normal, emptyList()), result.playlists.single())
     }
 
@@ -233,37 +258,64 @@ class PlistLibraryReaderTest {
     }
 
     @Test
-    fun `実物の形を写した文書を読むと、普通の一覧だけが除外の印なしで残り、NFD のパスは変わらない`() {
-        val nfdName = "ほ\u3099"
-        val tracks = fileTrack(1, ID_A, "a", bool("Protected", false)).replace(
-            "file://localhost/C:/Music/a.mp3", "file://localhost/C:/Music/$nfdName.mp3",
-        ) +
-            track(2, int("Track ID", "2"), str("Persistent ID", ID_B), str("Track Type", "File"), str("Name", "R &#38; B")) +
-            fileTrack(3, ID_C, "c", bool("Protected", false))
-        val builtIns = playlist(MASTER_ID, "ライブラリ", bool("Master", true), "<key>Visible</key><false/>", items(1, 2, 3)) +
-            listOf(4, 2, 3, 10, 5, 65, 66, 67, 26).joinToString("") {
-                playlist("00000000000000$it".takeLast(16), "組み込み $it", int("Distinguished Kind", "$it"), items(1))
-            } +
-            playlist("3333333333333333", "スマート組み込み", int("Distinguished Kind", "4"), "<key>Smart Info</key><data>AQID</data>")
-        val header = """<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">""" + "\r\n"
-        val xml = document(
-            tracks, builtIns + playlist(PLAYLIST_ID, "普通", items(1)) + playlist("4444444444444444", "空の普通の一覧"),
-            header = header,
-            top = "<key>Application Version</key><string>12.13.7.1</string>" +
-                "<key>Date</key><date>2026-11-06T01:02:03Z</date>" + str("Library Persistent ID", "9f8e7d6c5b4a3921"),
-        ).replace("\n", "\r\n")
+    fun `実物の形を写した文書を読むと、Library Persistent ID が大文字で取れる`() {
+        assertEquals("9F8E7D6C5B4A3921", read(realLibraryDocument()).libraryPersistentId)
+    }
 
-        val result = read(xml)
+    @Test
+    fun `実物の形を写した文書を読むと、普通の一覧だけが除外の印なしで残る`() {
+        val result = read(realLibraryDocument())
 
-        assertEquals("9F8E7D6C5B4A3921", result.libraryPersistentId)
         assertEquals(
             listOf("普通", "空の普通の一覧"),
             result.playlists.filter { it.kind == PlaylistKind.Normal }.map { it.name },
         )
-        assertEquals(TrackLocation.Found("C:\\Music\\$nfdName.mp3"), result.tracks.first().location)
+    }
+
+    @Test
+    fun `実物の形を写した文書を読むと、NFD のパスは変わらない`() {
+        val result = read(realLibraryDocument())
+
+        assertEquals(TrackLocation.Found("C:\\Music\\$NFD_NAME.mp3"), result.tracks.first().location)
+    }
+
+    @Test
+    fun `実物の形を写した文書を読むと、名前の文字参照が戻る`() {
+        val result = read(realLibraryDocument())
+
         assertEquals("R & B", result.tracks.single { it.persistentId == ID_B }.name)
-        assertEquals("12.13.7.1", result.diagnostics.applicationVersion)
-        assertEquals(Instant.parse("2026-11-06T01:02:03Z"), result.diagnostics.xmlDate)
+    }
+
+    @Test
+    fun `実物の形を写した文書を読むと、Application Version が診断に入る`() {
+        assertEquals("12.13.7.1", read(realLibraryDocument()).diagnostics.applicationVersion)
+    }
+
+    @Test
+    fun `実物の形を写した文書を読むと、Date が診断に入る`() {
+        assertEquals(Instant.parse("2026-11-06T01:02:03Z"), read(realLibraryDocument()).diagnostics.xmlDate)
+    }
+
+    @Test
+    fun `Folder が真のプレイリストを読むと、Folder の除外の印が付く`() {
+        val folder = playlist(PLAYLIST_ID, "フォルダ", bool("Folder", true))
+
+        val result = read(document(standardTracks, folder))
+
+        assertEquals(PlaylistKind.Excluded(PlaylistExclusion.Folder), result.playlists.single().kind)
+    }
+
+    @Test
+    fun `除外の条件が重なるプレイリストを読むと、Master、Distinguished Kind、Folder の順に優先して印が付く`() {
+        val allThree = playlist(PLAYLIST_ID, "三つ", bool("Master", true), int("Distinguished Kind", "4"), bool("Folder", true))
+        val kindAndFolder = playlist(MASTER_ID, "種別とフォルダ", int("Distinguished Kind", "4"), bool("Folder", true))
+
+        val result = read(document(standardTracks, allThree + kindAndFolder))
+
+        assertEquals(
+            listOf(PlaylistKind.Excluded(PlaylistExclusion.Master), PlaylistKind.Excluded(PlaylistExclusion.DistinguishedKind)),
+            result.playlists.map { it.kind },
+        )
     }
 
     @Test
@@ -359,7 +411,7 @@ class PlistLibraryReaderTest {
 
         val track = read(document(tracks, playlist(PLAYLIST_ID, "一覧"))).tracks.single()
 
-        assertEquals(null, track.totalTimeMs)
+        assertNull(track.totalTimeMs)
         assertEquals(7, track.trackNumber)
     }
 
@@ -367,7 +419,7 @@ class PlistLibraryReaderTest {
     fun `date が日付でないとき、その項目は空になる`() {
         val xml = document(standardTracks, playlist(PLAYLIST_ID, "一覧"), top = "<key>Date</key><date>日付ではない</date>")
 
-        assertEquals(null, read(xml).diagnostics.xmlDate)
+        assertNull(read(xml).diagnostics.xmlDate)
     }
 
     @Test

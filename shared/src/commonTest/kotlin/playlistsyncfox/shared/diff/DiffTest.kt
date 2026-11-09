@@ -158,14 +158,6 @@ class DiffTest {
     }
 
     @Test
-    fun `TS-23 同じ曲を 2 本のプレイリストが持っても足すは 1 件になる`() {
-        // 差分の入力は tracks（集合）なので、プレイリストの数は結果に現れない
-        val result = diff(listOf(track(a)))
-
-        assertEquals(1, result.toAdd.size)
-    }
-
-    @Test
     fun `TS-25 ファイルが無く入力の曲にも無い記録は消すに入る`() {
         val result = diff(emptyList(), listOf(record(a)), present = emptySet())
 

@@ -3,8 +3,14 @@ package playlistsyncfox.shared.path
 import playlistsyncfox.shared.diff.SyncRecord
 import playlistsyncfox.shared.manifest.ManifestTrack
 
-/** 曲名が空になったときの代わりの名前。 */
-private const val UNTITLED = "Untitled"
+/** 曲名（m3u8 ではプレイリスト名）が空になったときの代わりの名前。 */
+internal const val UNTITLED = "Untitled"
+
+/** アーティスト名が空になったときの代わりのフォルダ名。 */
+private const val UNKNOWN_ARTIST = "Unknown Artist"
+
+/** アルバム名が空になったときの代わりのフォルダ名。 */
+private const val UNKNOWN_ALBUM = "Unknown Album"
 
 // 全文の接尾辞 ` [` ＋ `persistent_id` の 16 桁 ＋ `]` のバイト数。接尾辞の最長
 private const val MAX_SUFFIX_BYTES = 2 + 16 + 1
@@ -13,7 +19,7 @@ private const val MAX_SUFFIX_BYTES = 2 + 16 + 1
  * 衝突の前のパスの候補。[title] は長さを切る前の曲名。接尾辞を付けるときに、切る長さを変えて作り直すために持つ。
  * [extension] は先頭の `.` を含み、拡張子が無いときは空。
  */
-data class PathParts(
+internal data class PathParts(
     val artistFolder: String,
     val albumFolder: String,
     val title: String,
@@ -21,14 +27,14 @@ data class PathParts(
     val maxBytes: Int,
 )
 
-fun buildTrackCandidate(track: ManifestTrack, maxBytes: Int): PathParts {
+internal fun buildTrackCandidate(track: ManifestTrack, maxBytes: Int): PathParts {
     val artist = track.albumArtist.takeUnless { it.isNullOrEmpty() }
         ?: track.artist.takeUnless { it.isNullOrEmpty() }
-        ?: "Unknown Artist"
+        ?: UNKNOWN_ARTIST
 
     return PathParts(
-        artistFolder = folderName(artist, "Unknown Artist", maxBytes),
-        albumFolder = folderName(track.album.orEmpty(), "Unknown Album", maxBytes),
+        artistFolder = folderName(artist, UNKNOWN_ARTIST, maxBytes),
+        albumFolder = folderName(track.album.orEmpty(), UNKNOWN_ALBUM, maxBytes),
         title = sanitizeElement(track.name.orEmpty(), UNTITLED),
         extension = extensionPart(track.extension, maxBytes),
         maxBytes = maxBytes,
@@ -36,7 +42,7 @@ fun buildTrackCandidate(track: ManifestTrack, maxBytes: Int): PathParts {
 }
 
 /** `<アーティスト>/<アルバム>/<ステム><接尾辞>.<拡張子>`。接尾辞は空を許す。 */
-fun assemblePath(parts: PathParts, suffix: String): String {
+internal fun assemblePath(parts: PathParts, suffix: String): String {
     val stemBytes = maxOf(0, parts.maxBytes - utf8Length(parts.extension) - utf8Length(suffix))
     val stem = truncateToBytes(parts.title, stemBytes, UNTITLED)
 

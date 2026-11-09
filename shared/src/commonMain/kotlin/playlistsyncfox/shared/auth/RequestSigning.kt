@@ -37,7 +37,7 @@ class SignatureHeaders(val device: String, val timestamp: String, val nonce: Str
 fun encodeBase64Url(bytes: ByteArray): String = base64Url.encode(bytes)
 
 /** 署名対象の 7 行。末尾に LF は付けない。 */
-fun buildStringToSign(crypto: CryptoProvider, request: SignedRequest): String = listOf(
+internal fun buildStringToSign(crypto: CryptoProvider, request: SignedRequest): String = listOf(
     "PSFOX1",
     request.method.uppercase(),
     request.pathAndQuery,

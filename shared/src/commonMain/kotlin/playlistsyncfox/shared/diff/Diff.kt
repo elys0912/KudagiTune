@@ -2,6 +2,7 @@ package playlistsyncfox.shared.diff
 
 import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.manifest.UnresolvedPlaylist
+import playlistsyncfox.shared.manifest.isProtectedTrack
 
 /** 端末が置いた曲の記録。値はマニフェストのまま持つ。 */
 data class SyncRecord(
@@ -51,10 +52,9 @@ fun computeDiff(
 
     for (track in tracks.sortedBy { it.persistentId }) {
         val record = recordsById[track.persistentId]
-        val isProtectedTrack = track.isProtected || track.extension == "m4p"
 
         when {
-            isProtectedTrack -> unplayable += track
+            isProtectedTrack(track.isProtected, track.extension) -> unplayable += track
             !isPlayable(track) -> unsupported += track
             record == null -> toAdd += track
             // ファイルが無いときは、置き換えより先に補充として足す

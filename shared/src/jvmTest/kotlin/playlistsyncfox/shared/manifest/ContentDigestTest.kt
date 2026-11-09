@@ -69,6 +69,14 @@ class ContentDigestTest {
     }
 
     @Test
+    fun `TS-10 xml_modified_at と content_digest だけを変えても指紋は同じになる`() {
+        val base = sampleManifest(tracks = listOf(track(idA)))
+        val changed = base.copy(xmlModifiedAt = "2030-01-01T00:00:00.000Z", contentDigest = "other")
+
+        assertEquals(digest(base), digest(changed))
+    }
+
+    @Test
     fun `TS-162 content_hash だけを変えると指紋は変わる`() {
         val withoutHash = sampleManifest(tracks = listOf(track(idA)))
         val withHash = sampleManifest(tracks = listOf(track(idA).copy(contentHash = "abc")))

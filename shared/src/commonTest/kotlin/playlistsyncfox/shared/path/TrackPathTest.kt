@@ -10,6 +10,7 @@ import playlistsyncfox.shared.track
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -184,7 +185,7 @@ class TrackPathTest {
     fun `TS-143 m3u8 は固定の MIME を返し aif と aiff は同じ値を返す`() {
         assertEquals("audio/x-mpegurl", mimeTypeOf("m3u8"))
         assertEquals(mimeTypeOf("aif"), mimeTypeOf("aiff"))
-        assertTrue(mimeTypeOf("aif") != null)
+        assertNotNull(mimeTypeOf("aif"))
     }
 
     @Test

@@ -139,7 +139,7 @@ class ResultTest {
 
         assertEquals(
             listOf(UnplayableTrack("曲", "Protected AAC", "m4p", UnplayableReason.Protected)),
-            toUnplayable(listOf(protectedTrack)),
+            toUnplayable(listOf(protectedTrack), emptyList()),
         )
     }
 

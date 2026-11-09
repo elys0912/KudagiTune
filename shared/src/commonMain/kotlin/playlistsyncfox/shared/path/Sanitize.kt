@@ -3,10 +3,10 @@ package playlistsyncfox.shared.path
 private const val UNUSABLE_CHARS = "/\\:*?\"<>|"
 
 // U+0085、U+2028、U+2029 は m3u8 の行の区切りになりうるため、制御文字と同じく削除する
-private val lineSeparators = charArrayOf('\u0085', ' ', ' ')
+private val lineSeparators = charArrayOf('\u0085', '\u2028', '\u2029')
 
 /** ファイル名とフォルダ名の 1 要素を、保存先に使える形にする。正規化はしない。 */
-fun sanitizeElement(text: String, fallback: String): String {
+internal fun sanitizeElement(text: String, fallback: String): String {
     val withoutControls = text
         .map { if (it in UNUSABLE_CHARS) '_' else it }
         .filterNot { it.code <= 0x1F || it.code == 0x7F || it in lineSeparators }
@@ -25,7 +25,7 @@ fun sanitizeElement(text: String, fallback: String): String {
  * UTF-8 で [maxBytes] 以内に収まる最長の前方の部分を返す。切るのはコードポイントの境界。
  * 切った後に末尾の空白と `.` を削り、空になれば [fallback] を返す。
  */
-fun truncateToBytes(text: String, maxBytes: Int, fallback: String): String {
+internal fun truncateToBytes(text: String, maxBytes: Int, fallback: String): String {
     if (utf8Length(text) <= maxBytes) return text
 
     var usedBytes = 0

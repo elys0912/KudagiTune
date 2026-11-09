@@ -78,7 +78,7 @@ data class SyncReport(
 )
 
 /** E の番号ごとの件数と、最初の曲名。 */
-data class BreakdownEntry(val errorNumber: Int, val count: Int, val firstTrackName: String?)
+internal data class BreakdownEntry(val errorNumber: Int, val count: Int, val firstTrackName: String?)
 
 /**
  * 同期の区分を決める。
@@ -111,9 +111,9 @@ fun hasMore(outcome: SyncOutcome, completedCount: Int, plannedCount: Int): Boole
     outcome == SyncOutcome.Interrupted && completedCount < plannedCount
 
 /** E の番号の昇順。 */
-fun breakdown(errors: List<SyncError>): List<BreakdownEntry> =
+internal fun breakdown(errors: List<SyncError>): List<BreakdownEntry> =
     errors.groupBy { it.number }.toSortedMap().map { (number, sameNumber) ->
-        BreakdownEntry(number, sameNumber.size, sameNumber.firstNotNullOfOrNull { trackNameOf(it) })
+        BreakdownEntry(number, sameNumber.size, sameNumber.firstNotNullOfOrNull { (it as? TrackError)?.name })
     }
 
 fun toReport(result: SyncResult): SyncReport = SyncReport(
@@ -128,16 +128,9 @@ fun toReport(result: SyncResult): SyncReport = SyncReport(
 )
 
 /** 保護付きの曲と再生できない形式の曲を、再生できない曲の一覧の形に写す。保護付きが先に並ぶ。 */
-fun toUnplayable(protected: List<ManifestTrack>, unsupported: List<ManifestTrack> = emptyList()): List<UnplayableTrack> =
+fun toUnplayable(protected: List<ManifestTrack>, unsupported: List<ManifestTrack>): List<UnplayableTrack> =
     protected.map { toUnplayableTrack(it, UnplayableReason.Protected) } +
         unsupported.map { toUnplayableTrack(it, UnplayableReason.UnsupportedFormat) }
 
 private fun toUnplayableTrack(track: ManifestTrack, reason: UnplayableReason) =
     UnplayableTrack(track.name, track.kind, track.extension, reason)
-
-private fun trackNameOf(error: SyncError): String? = when (error) {
-    is SyncError.FileMissing -> error.name
-    is SyncError.ManifestStale -> error.name
-    is SyncError.WriteFailed -> error.name
-    else -> null
-}
