@@ -234,6 +234,8 @@ class PsfoxClient(
             "replay" -> ErrorDetail.Replay
             else -> null
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (_: Exception) {
         null
     }
@@ -249,6 +251,8 @@ class PsfoxClient(
 
     private suspend fun <T> parse(response: HttpResponse, read: (kotlinx.serialization.json.JsonElement) -> T): ApiResult<T> = try {
         ApiResult.Ok(read(json.parseToJsonElement(response.bodyAsText())))
+    } catch (e: CancellationException) {
+        throw e
     } catch (_: Exception) {
         ApiResult.Fail(ApiFailure.ServerFault)
     }
