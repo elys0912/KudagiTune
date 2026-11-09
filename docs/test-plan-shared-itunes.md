@@ -16,7 +16,7 @@
 
 ## 2 テストケースの一覧
 
-- 件数：束 1 が 88 件（TS-01〜TS-14、TS-16〜TS-22、TS-25〜TS-33、TS-35〜TS-36、TS-38、TS-40〜TS-51、TS-53〜TS-54、TS-56〜TS-65、TS-67〜TS-78、TS-131〜TS-134、TS-143、TS-147、TS-149〜TS-150、TS-153、TS-157〜TS-166）、束 2 が 26 件（TS-80〜TS-87、TS-91〜TS-93、TS-95〜TS-99、TS-101〜TS-102、TS-135〜TS-136、TS-167〜TS-172）、束 3 が 40 件（TS-103〜TS-116、TS-118〜TS-128、TS-137〜TS-142、TS-152、TS-154〜TS-156、TS-173〜TS-177）。計 154 件。追加分（review-11、review-12、review-13、review-14、review-15）は既存の番号を保つため末尾に付けた
+- 件数：束 1 が 92 件（TS-01〜TS-14、TS-16〜TS-22、TS-25〜TS-33、TS-35〜TS-36、TS-38、TS-40〜TS-51、TS-53〜TS-54、TS-56〜TS-65、TS-67〜TS-78、TS-131〜TS-134、TS-143、TS-147、TS-149〜TS-150、TS-153、TS-157〜TS-166、TS-180〜TS-183）、束 2 が 28 件（TS-80〜TS-87、TS-91〜TS-93、TS-95〜TS-99、TS-101〜TS-102、TS-135〜TS-136、TS-167〜TS-172、TS-178〜TS-179）、束 3 が 40 件（TS-103〜TS-116、TS-118〜TS-128、TS-137〜TS-142、TS-152、TS-154〜TS-156、TS-173〜TS-177）。計 160 件。追加分（review-11、review-12、review-13、review-14、review-15）は既存の番号を保つため末尾に付けた
 - 層の「薄い統合」は、複数の関数をつないで純粋なまま確かめるもの。「実機」は束 1〜3 に無い
 - 表中の「V」は basic-design.md の B1-7 の値（V1 コードの桁数、V2 試行の上限、V3 コードの有効時間、V4 超過後の待ち、V7 規模の目標、V12 時刻の許容、V20 消す確認の閾値、V23 要素の上限バイト、V24 接尾辞の文字数、V42 偏り除外の上限回数）
 
@@ -25,13 +25,13 @@
 | TS-01 | 1 | マニフェストの読み書き | 往復 | 全項目を持つ合成のマニフェスト | 書いて読んだ値が元と同じ | 単体 | ○ |
 | TS-02 | 1 | マニフェストの読み | 未知のキーの読み捨て | 最上位とトラックに未知のキーと `content_hash` を足した本文 | 読めて、既知の項目の値が変わらない | 単体 | ○ |
 | TS-03 | 1 | マニフェストの読み書き | 任意の項目の無しと値あり | `album_artist` などを無し／値ありにした 2 曲 | 無しは null で、書いた本文にキーが出ない。値ありは往復で同じ | 単体 | ○ |
-| TS-04 | 1 | マニフェストの読み | `persistent_id` の形 | 15 桁、小文字、非 16 進（`G` を含む）の ID | いずれも「壊れた」（理由の文字列つき） | 単体 | ○ |
+| TS-04 | 1 | マニフェストの読み | `persistent_id` の形 | 15 桁、小文字、非 16 進（`G` を含む）の ID。トラックのほか、`playlists` の ID（小文字）と `unresolved_playlists` の ID（15 桁） | いずれも「壊れた」（理由の文字列つき） | 単体 | ○ |
 | TS-05 | 1 | マニフェストの読み | 重複の落とし | `tracks` に同じ ID が 3 件 | 最初の 1 件が残り、`duplicatesDropped` は 2 | 単体 | ○ |
 | TS-06 | 1 | マニフェストの読み | `format_version` の範囲外と欠落 | 知る版の範囲の外の値（上と下）、キーなし | 範囲外は「版が合わない」（受け取った版つき）。欠落は「壊れた」 | 単体 | ○ |
 | TS-07 | 1 | マニフェストの読み | `track_ids` の参照切れ | `tracks` に無い ID を持つプレイリスト | 「壊れた」 | 単体 | ○ |
 | TS-08 | 1 | `content_digest` | 固定の期待値 | 手で作った小さな試料と実の SHA-256 | 手で計算した 64 桁の小文字 16 進と一致（値は 1 つ固定） | 単体 | ○ |
 | TS-09 | 1 | `content_digest` | 一覧の並びの入れ替え | `tracks`、`playlists`、`unresolved_playlists` の元の並びを入れ替え | 同じ値 | 単体 | ○ |
-| TS-10 | 1 | `content_digest` | 対象外の項目 | `generated_at`、`library_id`、`excluded` だけ変える | 同じ値 | 単体 | ○ |
+| TS-10 | 1 | `content_digest` | 対象外の項目 | `generated_at`、`library_id`、`xml_modified_at`、`excluded`、`content_digest` だけ変える | 同じ値 | 単体 | ○ |
 | TS-11 | 1 | `content_digest` | `track_ids` の順 | 1 本のプレイリストの `track_ids` の順を入れ替え | 違う値 | 単体 | ○ |
 | TS-12 | 1 | `content_digest` | 文字列の境界 | （「ab」「c」）と（「a」「bc」）の 2 つの項目の組 | 違う値 | 単体 | ○ |
 | TS-13 | 1 | `computeDiff` | 足す | `SyncRecord` に無い曲。`SyncRecord` が空で曲が 3 件の場合も | `toAdd` に入る。空の場合は 3 件とも `toAdd` に入り、`toRemove` は空 | 単体 | ○ |
@@ -97,7 +97,7 @@
 | TS-83 | 2 | plist の読み手 | スマート | `Smart Info`、`Smart Criteria`、展開済みの `Playlist Items` | 条件を読まず、並びだけ使う | 単体 | ○ |
 | TS-84 | 2 | plist の読み手 | 参照の欠け | `Tracks` に無い `Track ID`、重複した `Persistent ID`、同じ曲を 2 回含む並び | 落とした件数が `droppedTrackRefs`、`duplicatePersistentIds` と一致。同じ曲の 2 回は残る | 単体 | ○ |
 | TS-85 | 2 | plist の読み手 | 文書の順序 | `Playlists` が `Tracks` より前の XML | 標準と同じ結果 | 単体 | ○ |
-| TS-86 | 2 | plist の読み手 | 実物の形 | iTunes 12.13 の形を写した合成（BOM なし、`DOCTYPE`、CRLF、`&#38;`、組み込みの一覧、NFD のパス、`Protected` なし、`Location` なし、空の普通の一覧） | 普通の一覧だけが除外の印なしで残る。`libraryPersistentId` が入る。NFD のパスを変えずに返す | 薄い統合 | ○ |
+| TS-86 | 2 | plist の読み手 | 実物の形 | iTunes 12.13 の形を写した合成（BOM なし、`DOCTYPE`、CRLF、`&#38;`、組み込みの一覧、NFD のパス、`Protected` なし、`Location` なし、空の普通の一覧） | 普通の一覧だけが除外の印なしで残る。`libraryPersistentId` が入る。NFD のパスを変えずに返す。名前の文字参照が戻る。診断に `Application Version` と `Date` が入る（観点ごとに 6 つのテストに分けた。review-15） | 薄い統合 | ○ |
 | TS-87 | 2 | `Persistent ID` | 正規化と形の検査 | 小文字 16 桁、15 桁、17 桁、16 桁で `G` を含む | 小文字は大文字になる。ほかの 3 つは ID 無し | 単体 | ○ |
 | TS-91 | 2 | `integer` | 64 ビット超 | 64 ビットを超える値 | その項目は空 | 単体 | ○ |
 | TS-92 | 2 | `date` | 不正な書式 | 日付でない文字列 | その項目は空 | 単体 | ○ |
@@ -176,6 +176,12 @@
 | TS-175 | 3 | P6 | 書式の誤り（X4-6） | P5 を受けていない状態の P6。`device_id` が P5 と違う P6 | 400（書式の誤り）。状態を変えず、試行に数えない | 単体 | ○ |
 | TS-176 | 3 | SPAKE2 | 端末側の Y の検査（X4-7） | PC が返す Y が曲線上にない点、または無限遠点 | 端末は MAC_d を作らず失敗にする | 単体 | ○ |
 | TS-177 | 3 | 確認コードの表示 | SHA-256 の値からの表示（X4-5） | 既知の SHA-256 の値（32 バイト）と、同じ値になる SPKI の DER | `formatFingerprintOfHash` は先頭 12 バイトの 24 桁を 4 桁ずつ空白で区切る。`formatFingerprint` は同じ結果 | 単体 | ○ |
+| TS-178 | 2 | plist の読み手 | `Folder` の除外の印（X2-1） | `Folder` が真のプレイリスト | `PlaylistExclusion.Folder` の除外の印が付く（review-15） | 単体 | ○ |
+| TS-179 | 2 | plist の読み手 | 除外の条件が重なるとき（X2-1） | `Master`・`Distinguished Kind`・`Folder` をすべて持つプレイリスト。`Distinguished Kind` と `Folder` を持つプレイリスト | 印は `Master`、`Distinguished Kind`、`Folder` の順に優先して 1 つだけ付く（前者は `Master`、後者は `Distinguished Kind`。review-15） | 単体 | ○ |
+| TS-180 | 1 | マニフェストの読み | 本文の形 | 空文字、JSON でない文字列、最上位が配列の本文 | いずれも「壊れた」（review-15） | 単体 | ○ |
+| TS-181 | 1 | マニフェストの読み | 数が型の範囲を超える | `size` が `Long` の範囲を超える曲。`track_number` が `Int` の範囲を超える曲 | 例外を投げず「壊れた」（review-15） | 単体 | ○ |
+| TS-182 | 1 | P8 の本文の読み（`ProgressReport`） | 正しい本文 | `stage` と 4 つの数（`done_tracks`、`total_tracks`、`done_bytes`、`total_bytes`）が正しい本文 | 値が読める（TD-82 は desktop の検査と保持。review-15） | 単体 | ○ |
+| TS-183 | 1 | P8 の本文の読み（`ProgressReport`） | 数が型の範囲を超える | `done_tracks`・`total_tracks` が `Int` の範囲外、`done_bytes`・`total_bytes` が `Long` の範囲外 | 例外を投げず null（review-15） | 単体 | ○ |
 
 削った ID：TS-15、TS-24、TS-34、TS-37、TS-39、TS-52、TS-55、TS-66、TS-79、TS-88、TS-89、TS-90、TS-94、TS-100、TS-117、TS-129、TS-144、TS-146、TS-148、TS-151（review-13）、TS-145（review-14。区分から T3 の `result` への写しは M4 の手順で、TA-077 で確かめる）、TS-23（TS-13 の 1 件目と入力も結果も同じ。`computeDiff` の入力は `tracks` だけで、プレイリストの数は結果に現れない）、TS-130（公開の例は TD-54・TA-120 が本番の実体で確かめ、`abc` の指紋は TS-177 と同じ）（review-15）
 
@@ -208,3 +214,4 @@
 - review-12 で追加：TS-143〜TS-152（review-13 で一部を削除。X3-6 の MIME、区分と `result`、結果の関数、V4 の間の `pairing_locked`）。TS-133・TS-134 は関数ごとに分けた。X4-5 の実体の既知の値は TD-54、TA-120
 - 2 周目（2026-11-09）：X6-10 を、転送する扱いから転送しない扱いに改めた。TS-164・TS-165 の期待を直した（件数は変わらない）
 - review-15 で追加：TS-161〜TS-177（X2-6・X2-8・X2-9・X2-12・X2-13、X3-1・X3-2・X3-6・X3-11、X4-1・X4-5・X4-6・X4-7、X6-10 の shared の分）。直したのは TS-49（X3-9）、TS-96（X2-10）、TS-103（X4-2）、TS-128、TS-140（X4-6）、TS-142（X4-8）、TS-147（X3-7）。desktop の分（X2-1・X2-2・X2-3）は test-plan-desktop.md
+- review-15 のコードの整理（2026-11-09）：テストを消したため TS-23・TS-130 を削った。TS-102 は `performanceTest` で別に回す（CI の列は ×）。TS-166 の「第 2 引数を省いた呼び出し」を、既定値を外したため削った。TS-174 は件数を読まず公開の振る舞いで確かめる形にした。番号の無かったテストに TS-178〜TS-183 を足した（束 1 が 4 件、束 2 が 2 件。計 160 件）。実物の形のテストは観点ごとに分け、すべて TS-86 に当てる
