@@ -33,6 +33,7 @@ import playlistsyncfox.shared.result.SyncOutcome
 import playlistsyncfox.shared.result.SyncTrigger
 import playlistsyncfox.shared.result.Transport
 import playlistsyncfox.shared.result.UnplayableReason
+import playlistsyncfox.shared.result.WriteStep
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -591,6 +592,25 @@ class SyncRunnerTest {
     }
 
     @Test
+    fun `m3u8 の書き込みに失敗したプレイリストは E9 にして続け、T3 は partial で T6 の failed に残る`() = runTest {
+        val h = Harness()
+        h.seedPlaced(tracks)
+        h.sync(tracks, listOf(ManifestPlaylist(id(50), "Mix", tracks.map { it.persistentId })))
+        h.media.failInsert = true
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(SyncRun.RESULT_PARTIAL, row.result)
+        assertEquals("E9", row.errorKind)
+        assertEquals(SyncError.WriteFailed(id(50), "Mix", WriteStep.MediaStoreRegistration), row.result().errors.single())
+        assertTrue(h.store.playlistRows.isEmpty())
+        val issue = h.store.issueRows.single { it.kind == RunIssue.KIND_FAILED }
+        assertEquals(id(50), issue.persistentId)
+        assertEquals("Mix", issue.title)
+        assertEquals("E9", issue.errorKind)
+    }
+
+    @Test
     fun `TA-016 TA-058 応答が合わない E8 は終わりに 1 回だけ取り直し再び E8 なら retried つきで結果に載る`() = runTest {
         val h = Harness()
         h.sync(tracks)
@@ -921,6 +941,22 @@ class SyncRunnerTest {
         assertEquals(SyncRun.RESULT_SUCCESS, row.result)
         assertEquals(4, h.store.placed.size)
         assertTrue(row.result().removalSkipped)
+    }
+
+    @Test
+    fun `TA-059 消す操作が権限で拒まれた曲は E9 にして残りを続け、T1 の行は残る`() = runTest {
+        val h = Harness()
+        h.seedPlaced((11..13).map { track(it) })
+        h.sync(listOf(track(1)))
+        h.media.deniedDeletes += h.store.placed.getValue(id(12)).mediaUri
+
+        val row = assertNotNull(h.run(deleteApproved = true, approved = 3))
+
+        assertEquals(SyncRun.RESULT_PARTIAL, row.result)
+        assertEquals("E9", row.errorKind)
+        assertEquals(2, row.removed)
+        assertEquals(SyncError.WriteFailed(id(12), "Song 12.mp3", WriteStep.MediaStoreRegistration), row.result().errors.single())
+        assertEquals(setOf(id(1), id(12)), h.store.placed.keys)
     }
 
     @Test
