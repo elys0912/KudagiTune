@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 画面は Compose が描くので、OS の ActionBar は出さない。地の色は OS のライト・ダークに従う -->
+    <style name="Theme.KudagiTune" parent="android:Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

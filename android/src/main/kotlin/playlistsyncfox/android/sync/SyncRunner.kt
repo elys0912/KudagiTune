@@ -308,7 +308,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             // 保存先が変わっていれば、T1・T2 を T9 へ移して全曲を取り直す（D16）
             relocating = env.writer.relocateTo(env.volume)
             val placed = env.store.placedTracks(deviceId)
-            val first = env.diffFor(loaded.manifest, placed, recordedLibraryId(runs), env.isPlayable)
+            val first = env.diffFor(loaded.manifest, placed, recordedLibraryId(runs))
             diff = first
             plannedAdd = first.toAdd.size
             plannedReplace = first.toReplace.size
@@ -363,7 +363,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             manifest = loaded.manifest
             duplicatesDropped = loaded.duplicatesDropped
             val placed = env.store.placedTracks(deviceId)
-            val again = env.diffFor(loaded.manifest, placed, recordedLibraryId(runs), env.isPlayable)
+            val again = env.diffFor(loaded.manifest, placed, recordedLibraryId(runs))
             diff = again
 
             // 取り直した対象の前回の記録（E8、同じ回の E5・E9）は、やり直しの結果で置き換える

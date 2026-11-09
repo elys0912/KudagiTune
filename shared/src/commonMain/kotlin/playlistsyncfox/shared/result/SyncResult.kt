@@ -10,6 +10,7 @@ enum class Transport { Lan, Tailscale, UsbTethering }
 /** 区分。T3 の `result` と P4 の `outcome` への写しは M4 が行う。 */
 enum class SyncOutcome { Completed, Partial, Interrupted, Failed }
 
+/** [UnsupportedFormat] は新しくは付けない。端末に保存された過去の同期結果を読み戻すために残す。 */
 enum class UnplayableReason { Protected, UnsupportedFormat }
 
 /** E2 の詳細。[NoDetail] は `detail` なしの 401。 */
@@ -127,10 +128,6 @@ fun toReport(result: SyncResult): SyncReport = SyncReport(
     excludedCount = result.excluded.size,
 )
 
-/** 保護付きの曲と再生できない形式の曲を、再生できない曲の一覧の形に写す。保護付きが先に並ぶ。 */
-fun toUnplayable(protected: List<ManifestTrack>, unsupported: List<ManifestTrack>): List<UnplayableTrack> =
-    protected.map { toUnplayableTrack(it, UnplayableReason.Protected) } +
-        unsupported.map { toUnplayableTrack(it, UnplayableReason.UnsupportedFormat) }
-
-private fun toUnplayableTrack(track: ManifestTrack, reason: UnplayableReason) =
-    UnplayableTrack(track.name, track.kind, track.extension, reason)
+/** 保護付きの曲を、再生できない曲の一覧の形に写す。 */
+fun toUnplayable(protected: List<ManifestTrack>): List<UnplayableTrack> =
+    protected.map { UnplayableTrack(it.name, it.kind, it.extension, UnplayableReason.Protected) }

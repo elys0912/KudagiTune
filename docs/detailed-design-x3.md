@@ -62,7 +62,7 @@
 | `name`、`artist`、`album`、`album_artist` | 文字列 | 任意 | メタデータ |
 | `track_number`、`disc_number` | 整数（32） | 任意 | 保存先の規則では使わない（B3-1）。表示用 |
 | `duration_ms` | 整数（32） | 任意 | 長さ。保存先の規則では使わない |
-| `kind` | 文字列 | 任意 | `Kind` の値。実物の値の例は MPEG、Apple Lossless、AAC、購入した AAC、WAV（B2 の実物の確認）。`unsupported_format` の判定（X3-2 の `isPlayable`）の材料になる（ALAC は拡張子が AAC と同じ `m4a` なので、`kind` で見分ける） |
+| `kind` | 文字列 | 任意 | `Kind` の値。実物の値の例は MPEG、Apple Lossless、AAC、購入した AAC、WAV（B2 の実物の確認）。結果の一覧の表示に使う（B2-8） |
 | `protected` | 真偽 | 必須 | 無ければ偽として PC が書く |
 | `content_hash` | 文字列 | 任意 | 将来用。最初の版では書かない（B2-4）。読んだ値は型に保持し、digest に含める |
 
@@ -113,7 +113,6 @@
 | 入力 4 | `manifestLibraryId` と `recordedLibraryId`（後者は無い＝初回で null） |
 | 入力 5 | 消す件数の確認の閾値（V20） |
 | 入力 6 | `unresolvedPlaylists`：マニフェストの `unresolved_playlists`（選択した ID が XML に無いプレイリスト。J24） |
-| 入力 7 | `isPlayable`：`ManifestTrack` を受け、端末で再生できるかを返す関数。引数の既定は常に真。保護付きでない曲にだけ呼ぶ。偽の曲は転送しない（`unsupported` に入れる）。中身は M4 が作って渡す（端末のデコーダの一覧で ALAC・AIFF の対応を調べる。X6、B3）。M1 は端末に触れない（review-15 の X6-10） |
 | 出力 | `Diff`（下の表） |
 
 `Diff`：
@@ -125,18 +124,17 @@
 | `toRemove` | `SyncRecord` の並び | 消す。`removalGate` が `Allowed` 以外でも計算して返す（J25） |
 | `unchangedCount` | 整数 | 変更なしの件数 |
 | `unplayable` | `ManifestTrack` の並び | 保護付き。転送しない（B2-8 の規則 1） |
-| `unsupported` | `ManifestTrack` の並び | 保護付きでなく、`isPlayable` が偽の曲（端末で再生できない形式）。転送せず、結果の一覧に出すために別に持つ。`toAdd`・`toReplace`・変更なしの数のどれにも入らない。端末に既にある曲は消さない（保護付きの `unplayable` と同じ扱い。B2-8 の規則 2） |
 | `removalGate` | 3 種 | 消すの扱い（下） |
 
 判定の順（トラックごと。入力 1 を `persistent_id` の昇順に並べて 1 件ずつ）：
 
 1. 保護付き（`protected` が真、または `extension` が `m4p`）なら `unplayable` に入れ、以降の判定をしない
-2. 保護付きでなく、`isPlayable` が偽なら `unsupported` に入れ、以降の判定をしない（足す・置き換える・変更なしに入れない）
+2. （欠番。再生できない形式の判定はやめた。X6-10）
 3. `SyncRecord` に `persistent_id` が無ければ「足す」
 4. `SyncRecord` にあり、`presentIds` に無ければ「足す」（ファイルが無い場合の補充。置き換えより先に判定する）
 5. `size` か `modified_at` のどちらかが `SyncRecord` と違えば「置き換える」
 6. それ以外は「変更なし」
-7. 全トラックの後で、`SyncRecord` のうち `persistent_id` が入力 1 のどのトラックにも無いものを「消す」にする（保護付きで `unplayable` に入れたものも、入力 1 にあるので消さない。`unsupported` に入れた曲も入力 1 にあるので消さない）
+7. 全トラックの後で、`SyncRecord` のうち `persistent_id` が入力 1 のどのトラックにも無いものを「消す」にする（保護付きで `unplayable` に入れたものも、入力 1 にあるので消さない）
 - 出力の並びは `persistent_id` の昇順（決定的にするため。J21（a））
 - 端末にあって `SyncRecord` に無いファイルは入力に現れず、判定に入らない（D9、F3-5）
 - 入れ直しの後は `SyncRecord` が空なので、「消す」は空になり、「足す」が衝突を X3-3 で解く（D14）
@@ -321,7 +319,7 @@
 - `reach_failed` は `SyncResult` の項目ではない。手動の同期で、画面側の到達確認で全部の接続先が応えず、証明書の不一致が 1 つも無かったこと（不一致が 1 つでもあれば `reach_failed` を付けず、E2 になる。J36）を `SyncWorker` に渡す入力データ（X6-3 の入口の表、手順 6 の 1）で、T3 にも P4 にも載せない
 - 失敗の内訳（E の番号ごとの件数と最初の曲名）は `errors` から作る関数 `breakdown` で出す。結果に別の項目として持たない（二重の持ち方を避ける）
 - 画面に出す件数の上限（V21）の適用は M4（B3-6）
-- `UnplayableTrack` の理由は 2 つ。`protected`（規則 1）は X3-2 の `unplayable` から、`unsupported_format`（規則 2）は `unsupported` から、関数 `toUnplayable(protected, unsupported)` で写す（保護付きが先に並ぶ）。`unsupported` は M4 が端末の再生能力の判定（B3）を `isPlayable` に入れて `computeDiff` へ渡した結果で、M1 は調べない。その曲は転送せず（保護付きと同じ）、端末にある曲は消さない（review-15 の X6-10。2 周目で、転送する扱いから改めた）
+- `UnplayableTrack` の理由は、`protected`（規則 1）を X3-2 の `unplayable` から関数 `toUnplayable(protected)` で写す。`unsupported_format` は新しく付けず、過去の `result_json` を読み戻すために値だけ残す（X6-10）
 
 区分の判定（関数 `classifyOutcome`。M1。純粋）：
 
@@ -373,7 +371,7 @@ PC への報告（P4 の本文の元。`SyncReport`）。項目は次の 8 つ�
 |---|---|
 | マニフェストの読み書き | 往復で同じ値になる。未知のキーを読み捨てる。`content_hash` は読んだ値を保持し、digest に含める。任意の項目の無しと値あり。`persistent_id` の形の違い（15 桁、小文字、非 16 進）。重複の落とし（`tracks`、`playlists`、`unresolved_playlists` のそれぞれ。落とした件数 `duplicatesDropped` は曲だけ）。`format_version` の範囲外と欠落。`track_ids` が `tracks` に無い ID を持つ。必須項目の欠け（`size` が無い）と型違い（`modified_at` が文字列）は「壊れた」 |
 | `content_digest` | 固定の入力の期待値（手で作った試料の値を 1 つ固定する）。入力の並びを入れ替えても同じ。`generated_at`、`library_id`、`excluded` を変えても同じ。`content_hash` だけ変えると違う（digest に含める）。`track_ids` の順を変えると違う。文字列の境界（「ab」「c」と「a」「bc」）で違う。`CryptoProvider` は固定の SHA-256 の実体を使う |
-| 差分 | 判定（足す、置き換える、変更なし、消す。ファイルが無い場合の補充は「足す」の一種。ほかに保護付き）の表。`size` だけ違う、`modified_at` だけ違う。保護付きと `m4p`。`isPlayable` が偽の保護付きでない曲は、`unsupported` だけに入り、足す・置き換える・変更なしのどれにも入らない（転送しない。`SyncRecord` に記録があっても「置き換える」にも「消す」にもならない）。保護付きは `isPlayable` に関わらず `unplayable` だけで、転送しない。`isPlayable` を渡さなければ `unsupported` は空。1 曲が複数のプレイリストに入る（集合は `tracks` なので 1 件）。`SyncRecord` が空（入れ直し）。ファイルが無く、かつマニフェストに無い記録（消す）。`recordedLibraryId` の null と違い。消す件数が V20 と同じ、V20 を超える、全部。`toRemove` が 0 件で全部の条件に当たらない（全部の条件は 1 件以上）。`toRemove` が 1 件以上で `unresolvedPlaylists` が 1 件なら `NeedsConfirmation`、`unresolvedPlaylists` が 0 件なら `Allowed`。`toRemove` が 0 件で `unresolvedPlaylists` が 1 件のときは `Allowed`。`LibraryChanged` でも `toRemove` を計算して返す。`LibraryChanged` と `NeedsConfirmation` の両方に当たるとき `LibraryChanged`。`isEmpty`（3 つの並びがすべて空のときだけ真） |
+| 差分 | 判定（足す、置き換える、変更なし、消す。ファイルが無い場合の補充は「足す」の一種。ほかに保護付き）の表。`size` だけ違う、`modified_at` だけ違う。保護付きと `m4p`。保護付きは `unplayable` だけで、転送しない。1 曲が複数のプレイリストに入る（集合は `tracks` なので 1 件）。`SyncRecord` が空（入れ直し）。ファイルが無く、かつマニフェストに無い記録（消す）。`recordedLibraryId` の null と違い。消す件数が V20 と同じ、V20 を超える、全部。`toRemove` が 0 件で全部の条件に当たらない（全部の条件は 1 件以上）。`toRemove` が 1 件以上で `unresolvedPlaylists` が 1 件なら `NeedsConfirmation`、`unresolvedPlaylists` が 0 件なら `Allowed`。`toRemove` が 0 件で `unresolvedPlaylists` が 1 件のときは `Allowed`。`LibraryChanged` でも `toRemove` を計算して返す。`LibraryChanged` と `NeedsConfirmation` の両方に当たるとき `LibraryChanged`。`isEmpty`（3 つの並びがすべて空のときだけ真） |
 | 容量 | 足す、置き換えるだけを数え、消すを引かない。空の差分は 0 |
 | `sanitizeElement` | 使えない文字 9 種、制御文字（U+0000〜U+001F、U+007F）、先頭末尾の空白（全角を含む）、末尾の `.`、`.` と `..`、空白と `.` が混ざる末尾、空になる入力、日本語、絵文字、結合文字（正規化されないこと） |
 | 長さ | V23 ちょうど、V23 + 1、3 バイトの文字の境界、4 バイトの文字（サロゲートペア）の境界、切った後に末尾が空白か `.`、拡張子と接尾辞を含めた全体が V23 以内、異常に長い拡張子（V23 − 8 − 19 − 1 バイトちょうどと、それより 1 バイト長いもの。接尾辞なしと全文の接尾辞つきの要素がどちらも V23 以内） |
@@ -382,7 +380,7 @@ PC への報告（P4 の本文の元。`SyncReport`）。項目は次の 8 つ�
 | m3u8 | `#EXTM3U` の行と LF。空のプレイリスト。置けていない曲を飛ばす。同じ曲の重複。BOM と CR を含まない。日本語と記号を含むパス。先頭が `#` のパスが出ない（`sanitizeElement` の手順 6。フォルダ名・ファイル名が `#` で始まる入力を含む）。U+0085、U+2028、U+2029 が削除される（`sanitizeElement` の手順 2。行の区切りがパスに残らないことを m3u8 の出力で確かめる） |
 | プレイリストのファイル名 | 同名の 2 件に接尾辞、大文字小文字だけ違う 2 件に接尾辞、空の名前、接尾辞後の再衝突、長い名前の切り詰め（`.m3u8` を含めて V23 以内） |
 | 区分 | `classifyOutcome` の 4 種と境界（E7 だけ、曲単位だけ、同期全体の E（E1〜E4、E6 の 5 通り。E6 は `persistentId` なしを含む）＋ `transferStarted` の真偽、`userInterrupted` が真で `errors` が空。`stoppedWithoutE` が真で `errors` が空・曲単位だけ・`transferStarted` の真偽）。`mayRemove` |
-| 結果の関数 | `hasMore`（中断で未完了が残るときだけ真）。`breakdown`（E の番号ごとの件数と最初の曲名。E なしの停止は載らない）。`toReport`（8 項目、曲名を含めない、`excludedCount`、`outcome` は `SyncResult` の 4 値をそのまま写す）。`toUnplayable`（保護付きは `protected`、再生できない形式は `unsupported_format` の理由で、曲名・`kind`・拡張子を写す。第 2 引数を省けば後者は空） |
+| 結果の関数 | `hasMore`（中断で未完了が残るときだけ真）。`breakdown`（E の番号ごとの件数と最初の曲名。E なしの停止は載らない）。`toReport`（8 項目、曲名を含めない、`excludedCount`、`outcome` は `SyncResult` の 4 値をそのまま写す）。`toUnplayable`（保護付きを `protected` の理由で、曲名・`kind`・拡張子を写す） |
 | MIME | `m3u8` は `audio/x-mpegurl`（固定。J18）。`aif` と `aiff` は同じ値（2 対 1）。表に無い拡張子は無し。表の全件の値は検算しない（定数表の写しになるため。実在の値は実機で確かめる） |
 
 - 試料はすべて合成データ。実在の曲名、パスを使わない
@@ -398,7 +396,7 @@ PC への報告（P4 の本文の元。`SyncReport`）。項目は次の 8 つ�
 6. 拡張子は V23 から 1、代わりの名前（8 バイト）、接尾辞の最長（19 バイト）を引いた値まで切り、接尾辞の有無に関わらず要素を常に V23 以内にする。根拠：ステムが代わりの名前に落ちると V23 を超えた。先生の決定の式（V23 − 代わりの名前 − 1）では接尾辞を足したときに超えるため、接尾辞の最長を引く（2026-11-09 先生（式の接尾辞の分は実装で補い、先生が承認）。X3-2）
 7. P7 の木は「`children` が無ければ葉」とし、`track_count` と `children` の有無の組み合わせは検査しない。根拠：形の検査を増やさず、設計の文言を実装に合わせる（2026-11-09 先生。X3-5）
 8. `parsePlaylistIds` の個数の上限は、重複を除く前の個数で判定する。根拠：実装の判定をそのまま設計に書く（2026-11-09 先生。X3-10）
-9. 保護付きでなく `isPlayable` が偽の曲は、転送せず、`Diff.unsupported` にだけ入れる（足す・置き換える・変更なしに入れない）。保護付きと同じ扱いで、端末に既にある曲は消さない。根拠：端末で再生できない形式は送っても使えず、N3-5 の「再生できない形式は送らず、結果に一覧で示す」を満たすため。再生の可否は端末とプレイヤーに依存する（未確認）ので、判定は端末のデコーダの一覧で行い、M1 は `isPlayable` を呼ぶだけにする（B2-8 の規則 2。2026-11-09 先生。X6-10。同日の 1 周目は「転送して一覧に出す」としたが、2 周目で改めた）
+9. 再生できるかの判定はしない。保護付き以外は形式を問わず差分に乗せる。根拠：判定できるのは OS のデコーダだけで、プレイヤーが持つデコーダは分からないため（2026-11-09 先生。実機の確認で改めた。X6-10）
 
 ### X3 の置いた値
 
@@ -420,7 +418,7 @@ X1、X4 への依頼は反映済み。未了は次の表のみ。
 |---|---|
 | X2 | `ExcludedTrack` の理由（`no_location`、`undecodable`、`not_found`、`unreadable`、`no_id`）は、M2 の材料（場所の結果、ID 無しの一覧、`kind`）から M3 が導く。保護付きは除外せず `protected` の印で出す |
 | X5 | P1 の要求の本文は `parsePlaylistIds` で検査する（X3-1b）。P7 の応答は `PlaylistNode` の木の直列化の結果。P1 の応答の本文は `Manifest` の直列化の結果。`content_digest` は X3-1 の関数で PC が計算する。除外の理由の値は M2 の材料から写す |
-| X6 | `SyncRecord`、`Diff`、`SyncResult`、`SyncError` を M4 が写す（T1 の列との対応は X3-2）。`presentIds` の作成、MediaStore の既存のパスの問い合わせ（使用中のパスの集合）、読み戻したパスの T1 への保存、`removalGate` の扱い（`LibraryChanged` の承認後は T3 の `library_id` を更新。`NeedsConfirmation` は手動が確認、自動は飛ばして通知）、区分から T3 の `result` への対応（X3-5）、`hasMore` の入力（完了件数）、プレイリストのファイル名の変更時の古い m3u8 の削除、UTF-8（BOM なし）への変換、MIME は X3-3 の表を使う。`isPlayable` の中身（端末のデコーダの一覧で ALAC・AIFF を調べる）を作って `computeDiff` に渡し、`Diff.unsupported` を `toUnplayable` の第 2 引数に渡す |
+| X6 | `SyncRecord`、`Diff`、`SyncResult`、`SyncError` を M4 が写す（T1 の列との対応は X3-2）。`presentIds` の作成、MediaStore の既存のパスの問い合わせ（使用中のパスの集合）、読み戻したパスの T1 への保存、`removalGate` の扱い（`LibraryChanged` の承認後は T3 の `library_id` を更新。`NeedsConfirmation` は手動が確認、自動は飛ばして通知）、区分から T3 の `result` への対応（X3-5）、`hasMore` の入力（完了件数）、プレイリストのファイル名の変更時の古い m3u8 の削除、UTF-8（BOM なし）への変換、MIME は X3-3 の表を使う。`Diff.unplayable` を `toUnplayable` に渡す |
 | X7 | 結果の表示は `SyncResult` の項目を使う。除外の理由と再生できない形式の理由の表示の文は X7（S の表示）で決める。版が合わない・壊れたマニフェストの画面の文も同じ。端末は `xml_modified_at` を表示に使わない（古さの警告は PC 側の画面。B2-3） |
 
 ### X3 の確かめた事実

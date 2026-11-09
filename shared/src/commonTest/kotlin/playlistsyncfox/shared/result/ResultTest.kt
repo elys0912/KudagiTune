@@ -139,21 +139,7 @@ class ResultTest {
 
         assertEquals(
             listOf(UnplayableTrack("曲", "Protected AAC", "m4p", UnplayableReason.Protected)),
-            toUnplayable(listOf(protectedTrack), emptyList()),
-        )
-    }
-
-    @Test
-    fun `TS-166 再生できない形式の曲は理由を UnsupportedFormat にして保護付きの後ろに写す`() {
-        val protectedTrack = track(pid('A'), name = "保護", extension = "m4p")
-        val unsupportedTrack = track(pid('B'), name = "形式", extension = "aiff").copy(kind = "AIFF")
-
-        assertEquals(
-            listOf(
-                UnplayableTrack("保護", null, "m4p", UnplayableReason.Protected),
-                UnplayableTrack("形式", "AIFF", "aiff", UnplayableReason.UnsupportedFormat),
-            ),
-            toUnplayable(listOf(protectedTrack), listOf(unsupportedTrack)),
+            toUnplayable(listOf(protectedTrack)),
         )
     }
 

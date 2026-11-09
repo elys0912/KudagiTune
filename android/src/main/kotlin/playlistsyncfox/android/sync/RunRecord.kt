@@ -81,7 +81,7 @@ internal fun buildSyncResult(
     capacity = Capacity(totals.plannedBytes, totals.bytesTransferred, totals.freeBefore, totals.freeAfter),
     errors = errors.toList(),
     excluded = loaded?.excluded.orEmpty(),
-    unplayable = finalDiff?.let { toUnplayable(it.unplayable, it.unsupported) }.orEmpty(),
+    unplayable = finalDiff?.let { toUnplayable(it.unplayable) }.orEmpty(),
     libraryId = libraryId,
     contentDigest = loaded?.contentDigest,
     unresolvedPlaylists = loaded?.unresolvedPlaylists?.map { it.lastKnownName }.orEmpty(),
@@ -123,8 +123,7 @@ internal fun issuesOf(runId: Long, loaded: Manifest?, finalDiff: Diff?, trackErr
             kind = RunIssue.KIND_EXCLUDED,
         )
     }
-    finalDiff?.unplayable?.forEach { issues += unplayableIssue(runId, it, UNPLAYABLE_PROTECTED) }
-    finalDiff?.unsupported?.forEach { issues += unplayableIssue(runId, it, UNPLAYABLE_UNSUPPORTED_FORMAT) }
+    finalDiff?.unplayable?.forEach { issues += unplayableIssue(runId, it) }
     for (error in trackErrors) {
         if (error !is TrackError) continue
 
@@ -134,15 +133,14 @@ internal fun issuesOf(runId: Long, loaded: Manifest?, finalDiff: Diff?, trackErr
 }
 
 private const val UNPLAYABLE_PROTECTED = "protected"
-private const val UNPLAYABLE_UNSUPPORTED_FORMAT = "unsupported_format"
 
-/** T6 の `unplayable` の行。[reason] は `protected` か `unsupported_format`。どちらも転送しない。 */
-private fun unplayableIssue(runId: Long, track: ManifestTrack, reason: String) = RunIssue(
+/** T6 の `unplayable` の行。保護付きの曲で、転送しない。 */
+private fun unplayableIssue(runId: Long, track: ManifestTrack) = RunIssue(
     runId = runId,
     persistentId = track.persistentId,
     title = track.title,
     artist = track.artist,
-    reason = reason,
+    reason = UNPLAYABLE_PROTECTED,
     format = track.kind ?: track.extension,
     kind = RunIssue.KIND_UNPLAYABLE,
 )

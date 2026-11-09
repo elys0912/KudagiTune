@@ -1,6 +1,7 @@
 package playlistsyncfox.desktop.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -74,7 +75,11 @@ val MaterialTheme.appColors: AppColors
 
 @Composable
 fun PsfoxTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+    val scheme = if (dark) darkScheme else lightScheme
     CompositionLocalProvider(LocalAppColors provides if (dark) darkApp else lightApp) {
-        MaterialTheme(colorScheme = if (dark) darkScheme else lightScheme, typography = typography, content = content)
+        MaterialTheme(colorScheme = scheme, typography = typography) {
+            // Surface を置かない画面なので、Text の既定色（黒）をここで配色に合わせる
+            CompositionLocalProvider(LocalContentColor provides scheme.onBackground, content = content)
+        }
     }
 }

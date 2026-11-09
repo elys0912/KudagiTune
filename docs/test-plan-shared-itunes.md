@@ -1,7 +1,7 @@
 # KudagiTune テスト計画 shared と itunes
 
 - 索引：test-plan.md
-- 稿：第 3 稿（2026-11-06。review-13、review-14 を反映）。2026-11-07 に D15 に合わせ TS-158〜TS-160 を足した。2026-11-09 に review-15（実装との突き合わせ）を反映し、TS-161〜TS-177 を足して、TS-49・TS-96・TS-103・TS-128・TS-140・TS-142・TS-147 の観点を直した。同日の 2 周目で、再生できない形式は転送しない扱いに改め（X6-10）、TS-164・TS-165 の期待を直した。同日、コードの整理に合わせ、TS-23・TS-130 を削り、TS-102・TS-166・TS-174 を直し、TS-178〜TS-183 を足した（件数は 160 件）
+- 稿：第 3 稿（2026-11-06。review-13、review-14 を反映）。2026-11-07 に D15 に合わせ TS-158〜TS-160 を足した。2026-11-09 に review-15（実装との突き合わせ）を反映し、TS-161〜TS-177 を足して、TS-49・TS-96・TS-103・TS-128・TS-140・TS-142・TS-147 の観点を直した。同日の 2 周目で、再生できない形式は転送しない扱いに改め（X6-10）、TS-164・TS-165 の期待を直した。同日、コードの整理に合わせ、TS-23・TS-130 を削り、TS-102・TS-166・TS-174 を直し、TS-178〜TS-183 を足した。同日の実機の確認で、再生できない形式の判定をやめ、TS-165 を削り、TS-164・TS-166 を直した（件数は 159 件）
 - 参照：detailed-design-x3.md の X3-6（束 1）、detailed-design-x2.md の X2-5（束 2。X2-1〜X2-3 の範囲）、detailed-design-x4.md の X4-5（束 3）、basic-design-b4b.md の B4-8
 
 ## 1 方針
@@ -162,9 +162,8 @@
 | TS-161 | 1 | マニフェストの読み | `playlists` と `unresolved_playlists` の重複の落とし（X3-1。review-15） | 同じ `persistent_id` の `playlists` が 2 件（`track_ids` が違う）。同じ `persistent_id` の `unresolved_playlists` が 2 件 | それぞれ最初の 1 件だけが残る。`duplicatesDropped` は変わらない（曲だけ数える） | 単体 | ○ |
 | TS-162 | 1 | `content_digest` | `content_hash` を含める（X3-6） | `content_hash` だけが違う 2 つのマニフェスト（ほかは同じ） | 違う値 | 単体 | ○ |
 | TS-163 | 1 | `buildTrackCandidate` と `assemblePath` | 異常に長い拡張子（X3-2。X3-3 の手順 6） | 拡張子が V23 − 8 − 19 − 1 バイト（8 は `Untitled`、19 は全文の接尾辞。V23 が 240 なら 212）ちょうどと、1 バイト長いもの。曲名は空 | 前者はそのまま、後者は切れる。接尾辞なしと全文の接尾辞つきの要素が、どちらも V23 以内 | 単体 | ○ |
-| TS-164 | 1 | `computeDiff` | 再生できない形式（X3-2。X6-10） | `isPlayable` が偽の保護付きでない曲（記録なし）。`protected` が真で `isPlayable` が偽の曲。`isPlayable` を渡さない呼び出し | 前者は `unsupported` だけに入り、`toAdd` に入らない（転送しない）。後者は `unplayable` だけに入り、`unsupported` にも `toAdd` にも入らない（転送しない）。渡さなければ `unsupported` は空 | 単体 | ○ |
-| TS-165 | 1 | `computeDiff` | 再生できない形式の曲の記録（X3-2。X6-10） | `SyncRecord` を持ち、`size` が違い、`isPlayable` が偽の曲。同じ値で `presentIds` にあり、`isPlayable` が偽の曲 | どちらも `unsupported` だけに入り、`toReplace` に入らず、`unchangedCount` にも数えない（転送しない）。どちらも `toRemove` に入らない（端末にある曲は消さない） | 単体 | ○ |
-| TS-166 | 1 | `toUnplayable` | 理由の写し（X3-11） | 保護付きの曲だけ（第 2 引数は空の一覧）。保護付きの曲と、再生できない形式の曲（第 2 引数） | 保護付きは `protected`、再生できない形式は `unsupported_format`（保護付きが先）。曲名・`kind`・拡張子を写す。第 2 引数に既定値は無い（review-15） | 単体 | ○ |
+| TS-164 | 1 | `computeDiff` | 保護付きの曲（X3-2） | `protected` が真の曲 | `unplayable` だけに入り、`toAdd` に入らない（転送しない） | 単体 | ○ |
+| TS-166 | 1 | `toUnplayable` | 理由の写し（X3-11） | 保護付きの曲 | `protected` の理由で、曲名・`kind`・拡張子を写す | 単体 | ○ |
 | TS-167 | 2 | plist の読み手 | `Track Type` が `File` でない（X2-12） | `Track Type` が `URL` で `Location` を持つトラック | 場所なし（`Location` を復号しない） | 単体 | ○ |
 | TS-168 | 2 | `decodeFileUrl` | 共有名が空（X2-12） | `file://nas.example.invalid/`、`file://nas.example.invalid//a.mp3` | どちらも復号不能：ホストを直せない | 単体 | ○ |
 | TS-169 | 2 | plist の読み手 | プレイリストの ID の検査（X2-9。X2-12） | `Playlist Persistent ID` が無い、15 桁、17 桁、16 進以外、小文字 16 桁のプレイリスト | 小文字は大文字になる。ほかは落とし、`malformedEntries` に 1 件ずつ数える | 単体 | ○ |
