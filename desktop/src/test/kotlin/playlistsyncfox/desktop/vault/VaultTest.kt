@@ -156,4 +156,16 @@ class VaultTest {
         assertFalse(again.keyIsNew)
         assertContentEquals(created.spkiDer, again.spkiDer)
     }
+
+    @Test
+    fun `TD-17 FileSecretStore に保存した鍵は、開き直した保管から読まれ、鍵を作り直さず同じ SPKI になる`() {
+        val certFile = dir.resolve("tls-cert.pem")
+        val created = loadOrCreateTls(FileSecretStore(file, MarkingCipher()), certFile, T0)
+
+        val reopened = loadOrCreateTls(FileSecretStore(file, MarkingCipher()), certFile, T0)
+
+        assertTrue(created.keyIsNew)
+        assertFalse(reopened.keyIsNew)
+        assertContentEquals(created.spkiDer, reopened.spkiDer)
+    }
 }
