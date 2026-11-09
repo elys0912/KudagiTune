@@ -296,8 +296,7 @@ class MediaWriterTest {
     fun `m3u8 の行を作れないと書き込みは始まらず失敗を返し T2 にも行を残さない`() = runTest {
         h.media.failInsert = true
 
-        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U
-", 0)
+        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
 
         assertEquals(PlaylistWriteResult.Failed, result)
         assertTrue(h.store.playlistRows.isEmpty())
@@ -308,8 +307,7 @@ class MediaWriterTest {
     fun `m3u8 を書き込み用に開けないと作った pending の行を消して失敗を返す`() = runTest {
         h.media.failTruncate = true
 
-        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U
-", 0)
+        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
 
         assertEquals(PlaylistWriteResult.Failed, result)
         assertTrue(h.store.playlistRows.isEmpty())
@@ -320,8 +318,7 @@ class MediaWriterTest {
     fun `m3u8 の書き込み中に容量が尽きると作った pending の行を消して失敗を返す`() = runTest {
         h.media.diskFullAtTotalBytes = 0
 
-        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U
-", 0)
+        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
 
         assertEquals(PlaylistWriteResult.Failed, result)
         assertTrue(h.store.playlistRows.isEmpty())
@@ -329,15 +326,32 @@ class MediaWriterTest {
     }
 
     @Test
-    fun `m3u8 を書いた後に公開できないと失敗を返し T2 に行を残さない`() = runTest {
+    fun `m3u8 を書いた後に公開できないと作った pending の行を消して失敗を返し T2 に行を残さない`() = runTest {
         // 書き込みと公開の間に行が消えた状態（publish が null を返す）
-        h.media.onWrite = { h.media.entries.remove(it.uri) }
+        var createdUri: String? = null
+        h.media.onWrite = {
+            createdUri = it.uri
+            h.media.entries.remove(it.uri)
+        }
 
-        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U
-", 0)
+        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
 
         assertEquals(PlaylistWriteResult.Failed, result)
+        assertEquals(listOf(createdUri), h.media.deleted)
         assertTrue(h.store.playlistRows.isEmpty())
+    }
+
+    @Test
+    fun `既存の m3u8 を書き直して公開できなくても既存の行は消さず T2 の行も残す`() = runTest {
+        val uri = h.media.addExisting(ROOT, "Mix.m3u8", playlist = true)
+        h.store.playlistRows[id(9)] = playlistRow(id(9), "Mix.m3u8", uri)
+        h.media.onWrite = { h.media.entries.remove(it.uri) }
+
+        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
+
+        assertEquals(PlaylistWriteResult.Failed, result)
+        assertTrue(h.media.deleted.isEmpty())
+        assertEquals(uri, h.store.playlistRows.getValue(id(9)).mediaUri)
     }
 
     @Test

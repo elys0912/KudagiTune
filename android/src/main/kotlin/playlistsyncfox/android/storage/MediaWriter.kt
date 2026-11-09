@@ -108,7 +108,7 @@ class MediaWriter(
         placedVolume() != volume || isRelocating()
     }
 
-    private suspend fun isRelocating() = store.setting(SyncValues.RELOCATING_KEY) == "true"
+    private suspend fun isRelocating() = store.setting(SyncValues.RELOCATING_KEY) == SyncValues.SETTING_ON
 
     /** 取り直しが完了で終わった。 */
     suspend fun finishRelocation() = withContext(io) { store.putSetting(SyncValues.RELOCATING_KEY, "false") }
@@ -247,7 +247,12 @@ class MediaWriter(
         }
 
         // 索引の更新を促す（IS_PENDING の切り替え。これで足りるかは実機で確かめる。C-2）
-        val stored = files.publish(target) ?: return@withContext PlaylistWriteResult.Failed
+        val stored = files.publish(target)
+        if (stored == null) {
+            if (uri == null) runCatching { files.delete(target) }
+            return@withContext PlaylistWriteResult.Failed
+        }
+
         val row = WrittenPlaylist(
             deviceId = deviceId,
             playlistId = playlist.persistentId,

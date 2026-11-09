@@ -148,7 +148,7 @@ abstract class SyncDao {
         deleteAllPlaylists(deviceId)
         deleteAllPending()
         putSetting(AppSetting(SyncValues.PLACED_VOLUME_KEY, volume))
-        putSetting(AppSetting(SyncValues.RELOCATING_KEY, "true"))
+        putSetting(AppSetting(SyncValues.RELOCATING_KEY, SyncValues.SETTING_ON))
     }
 
     @Query("SELECT value FROM app_settings WHERE `key` = :key")
