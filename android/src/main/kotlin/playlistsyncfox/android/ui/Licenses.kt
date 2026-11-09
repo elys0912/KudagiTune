@@ -48,14 +48,14 @@ fun parseLicenses(json: String): List<LicenseEntry>? = runCatching {
     Json.parseToJsonElement(json).jsonArray.map { it.jsonObject.toEntry() }.sortedBy { it.name }
 }.getOrNull()
 
+private fun JsonObject.text(key: String) = this[key]?.jsonPrimitive?.content.orEmpty()
+
 private fun JsonObject.toEntry(): LicenseEntry {
-    fun text(key: String) = this[key]?.jsonPrimitive?.content.orEmpty()
     val licenses = (this["spdxLicenses"] as? JsonArray).orEmpty().map { it.jsonObject } +
         (this["unknownLicenses"] as? JsonArray).orEmpty().map { it.jsonObject }
-    fun JsonObject.field(key: String) = this[key]?.jsonPrimitive?.content.orEmpty()
-    val names = licenses.map { it.field("name").ifEmpty { it.field("identifier") } }
-    val body = licenses.joinToString("\n") { listOf(it.field("name"), it.field("url")).filter(String::isNotEmpty).joinToString("\n") }
-    val textFiles = licenses.mapNotNull { BUNDLED_LICENSE_FILES[it.field("identifier").ifEmpty { it.field("url") }] }.distinct()
+    val names = licenses.map { it.text("name").ifEmpty { it.text("identifier") } }
+    val body = licenses.joinToString("\n") { listOf(it.text("name"), it.text("url")).filter(String::isNotEmpty).joinToString("\n") }
+    val textFiles = licenses.mapNotNull { BUNDLED_LICENSE_FILES[it.text("identifier").ifEmpty { it.text("url") }] }.distinct()
     return LicenseEntry(
         name = text("name").ifEmpty { text("groupId") + ":" + text("artifactId") },
         version = text("version"),
