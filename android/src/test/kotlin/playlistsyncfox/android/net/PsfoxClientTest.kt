@@ -16,13 +16,14 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.network.tls.certificates.generateCertificate
 import io.ktor.utils.io.ByteChannel
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import playlistsyncfox.android.DEVICE
 import playlistsyncfox.shared.auth.SignatureHeaderNames
 import playlistsyncfox.shared.crypto.CryptoProvider
@@ -49,6 +50,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -118,19 +120,27 @@ private fun MockRequestHandleScope.failure(status: Int, detail: String? = null) 
     headers = headersOf(HttpHeaders.ContentType, "application/json"),
 )
 
-/** 本文を読み始めるまで待つ実時間。短すぎると本文の読み取りの前に取り消すだけで、検証が効かない。 */
-private const val BODY_READ_START_WAIT_MS = 200L
+/** 応答の合図を待つ実時間の上限。合図が来なかったときに失敗させるためだけの値で、通常は待たない。 */
+private const val RESPONSE_SIGNAL_TIMEOUT_MS = 10_000L
 
-/** 本文が終わらない応答を読んでいる最中に呼び出しを取り消し、呼び出しが結果を返したか（取り消しが飲まれたか）を返す。 */
+/**
+ * 本文が終わらない応答を読んでいる最中に呼び出しを取り消し、呼び出しが結果を返したか（取り消しが飲まれたか）を返す。
+ * 取り消す前に、ハンドラが応答を返した合図を待つ。合図はハンドラの実行で、本文の読み取りに入るまでの短い間は残る。
+ */
 private suspend fun CoroutineScope.resultOfCancelledBodyRead(
     status: HttpStatusCode,
     call: suspend PsfoxClient.() -> ApiResult<*>,
 ): ApiResult<*>? {
-    val api = client { respond(ByteChannel(), status, headersOf(HttpHeaders.ContentType, "application/json")) }
+    val responded = CompletableDeferred<Unit>()
+    val api = client {
+        responded.complete(Unit)
+        respond(ByteChannel(), status, headersOf(HttpHeaders.ContentType, "application/json"))
+    }
     var result: ApiResult<*>? = null
     val job = launch { result = api.call() }
     // 仮想時間は進まないので、実時間で待つ
-    withContext(Dispatchers.Default) { delay(BODY_READ_START_WAIT_MS) }
+    val signaled = withContext(Dispatchers.Default) { withTimeoutOrNull(RESPONSE_SIGNAL_TIMEOUT_MS) { responded.await() } }
+    assertNotNull(signaled, "取り消す前にハンドラが応答を返していない")
     job.cancelAndJoin()
     return result
 }
