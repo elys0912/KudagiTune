@@ -48,6 +48,7 @@ import playlistsyncfox.shared.auth.encodeBase64Url
 import playlistsyncfox.shared.auth.verifyRequest
 import playlistsyncfox.shared.crypto.CryptoProvider
 import playlistsyncfox.shared.manifest.PlaylistIdsResult
+import playlistsyncfox.shared.manifest.isPersistentId
 import playlistsyncfox.shared.manifest.parsePlaylistIds
 import playlistsyncfox.shared.manifest.writeManifest
 import playlistsyncfox.shared.manifest.writePlaylistTree
@@ -81,7 +82,6 @@ private val BodyKey = AttributeKey<ByteArray>("psfox.body")
 private val DeviceKey = AttributeKey<String>("psfox.device")
 
 private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
-private val persistentIdPattern = Regex("[0-9A-F]{16}")
 private val uuidPattern = Regex("[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 private val timestampPattern = Regex("[0-9]{1,18}")
 private val failureKeyPattern = Regex("E[1-9]")
@@ -271,7 +271,7 @@ private suspend fun selectedIds(call: ApplicationCall): List<String>? =
 /** P2（X5-1 の「P2 の検査」）。 */
 private suspend fun sendTrack(env: ServerEnv, call: ApplicationCall) {
     val id = call.request.path().removePrefix(PATH_TRACKS)
-    if (!persistentIdPattern.matches(id)) return call.respond(HttpStatusCode.BadRequest)
+    if (!isPersistentId(id)) return call.respond(HttpStatusCode.BadRequest)
 
     env.activity.trackRequestStarted()
     try {
