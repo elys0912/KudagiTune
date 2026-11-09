@@ -38,6 +38,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import playlistsyncfox.android.R
 import playlistsyncfox.android.log.LogLevel
 import playlistsyncfox.android.storage.StoredFile
 import playlistsyncfox.android.sync.SyncServices
@@ -105,7 +107,7 @@ private fun TitleBand() {
     val c = LocalPsfoxColors.current
     Column(Modifier.fillMaxWidth().background(c.band)) {
         Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
-            BasicText("playlist-sync-fox", style = TextStyle(color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Medium))
+            BasicText(stringResource(R.string.app_name), style = TextStyle(color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Medium))
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
     }
