@@ -15,7 +15,6 @@ import playlistsyncfox.android.net.ApiResult
 import playlistsyncfox.android.net.Endpoint
 import playlistsyncfox.android.net.SyncApi
 import playlistsyncfox.android.net.TrackResponse
-import playlistsyncfox.android.storage.DeleteOutcome
 import playlistsyncfox.android.storage.MediaSink
 import playlistsyncfox.android.storage.MediaStoreFiles
 import playlistsyncfox.android.storage.MediaWriter
@@ -241,6 +240,7 @@ class FakeMediaStore : MediaStoreFiles {
 
     var failInsert = false
     var failAppend = false
+    var failTruncate = false
     var readBackSizeDelta = 0L
     var readBackRelativePath: String? = null
     var diskFullAtTotalBytes: Long? = null
@@ -280,6 +280,7 @@ class FakeMediaStore : MediaStoreFiles {
     override fun open(uri: String, mode: OpenMode): MediaSink? {
         val entry = entries[uri] ?: return null
         if (mode == OpenMode.Append && failAppend) return null
+        if (mode == OpenMode.Truncate && failTruncate) return null
         if (mode == OpenMode.Truncate) entry.data = ByteArrayOutputStream()
         return object : MediaSink {
             override fun write(buffer: ByteArray, length: Int) {
@@ -303,10 +304,10 @@ class FakeMediaStore : MediaStoreFiles {
         return StoredFile(uri, entry.displayName, readBackRelativePath ?: entry.relativePath, entry.data.size() + readBackSizeDelta, 0)
     }
 
-    override fun delete(uri: String): DeleteOutcome {
+    override fun delete(uri: String) {
         if (uri in deniedDeletes) throw SecurityException("権限がない")
         deleted += uri
-        return if (entries.remove(uri) != null) DeleteOutcome.Deleted else DeleteOutcome.Missing
+        entries.remove(uri)
     }
 
     override fun ownedTrackPaths() = entries.values.filter { !it.playlist }.mapTo(HashSet()) { stored(it).pathUnderRoot(ROOT) }

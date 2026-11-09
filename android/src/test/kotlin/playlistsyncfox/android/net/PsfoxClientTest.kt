@@ -15,7 +15,14 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.network.tls.certificates.generateCertificate
+import io.ktor.utils.io.ByteChannel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import playlistsyncfox.android.DEVICE
 import playlistsyncfox.shared.auth.SignatureHeaderNames
 import playlistsyncfox.shared.crypto.CryptoProvider
@@ -110,6 +117,23 @@ private fun MockRequestHandleScope.failure(status: Int, detail: String? = null) 
     status = HttpStatusCode.fromValue(status),
     headers = headersOf(HttpHeaders.ContentType, "application/json"),
 )
+
+/** 本文を読み始めるまで待つ実時間。短すぎると本文の読み取りの前に取り消すだけで、検証が効かない。 */
+private const val BODY_READ_START_WAIT_MS = 200L
+
+/** 本文が終わらない応答を読んでいる最中に呼び出しを取り消し、呼び出しが結果を返したか（取り消しが飲まれたか）を返す。 */
+private suspend fun CoroutineScope.resultOfCancelledBodyRead(
+    status: HttpStatusCode,
+    call: suspend PsfoxClient.() -> ApiResult<*>,
+): ApiResult<*>? {
+    val api = client { respond(ByteChannel(), status, headersOf(HttpHeaders.ContentType, "application/json")) }
+    var result: ApiResult<*>? = null
+    val job = launch { result = api.call() }
+    // 仮想時間は進まないので、実時間で待つ
+    withContext(Dispatchers.Default) { delay(BODY_READ_START_WAIT_MS) }
+    job.cancelAndJoin()
+    return result
+}
 
 class PsfoxClientTest {
     @Test
@@ -318,6 +342,20 @@ class PsfoxClientTest {
         )
 
         assertEquals(ApiResult.Fail(ApiFailure.Rejected(ErrorDetail.NoDetail, keyMismatch = true)), broken.digest(IDS))
+    }
+
+    @Test
+    fun `P3 の応答の本文を読む途中で取り消すと、サーバーの異常の結果にせず取り消しが伝わる`() = runTest {
+        val result = resultOfCancelledBodyRead(HttpStatusCode.OK) { digest(IDS) }
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `エラー応答の本文を読む途中で取り消すと、鍵の不一致の結果にせず取り消しが伝わる`() = runTest {
+        val result = resultOfCancelledBodyRead(HttpStatusCode.Unauthorized) { track("A", 1, 1, rangeFrom = 0) { } }
+
+        assertNull(result)
     }
 
     @Test

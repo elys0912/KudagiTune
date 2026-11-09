@@ -1,11 +1,13 @@
 package playlistsyncfox.android.discovery
 
+import playlistsyncfox.android.sync.PairingKeeper
+
 /** 手入力の宛先（X7-2-3）。[host] は IPv4 か名前。 */
 data class ManualEndpoint(val host: String, val port: Int) {
     private val hostIsIpv4 get() = host.all { it.isDigit() || it == '.' }
 
     /** 保存する列の方式（X7-2-4）。名前は `tailscale`、IPv4 は `usb`。ネットワークの種別では決めない。 */
-    val kind: String get() = if (hostIsIpv4) "usb" else "tailscale"
+    val kind: String get() = if (hostIsIpv4) PairingKeeper.USB else PairingKeeper.TAILSCALE
 
     /** T4 の列に書く値。 */
     val savedValue: String get() = "$host:$port"

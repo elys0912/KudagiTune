@@ -54,8 +54,9 @@ class ResolverMediaStoreFiles(context: Context, volume: String) : MediaStoreFile
         }
     }
 
-    override fun delete(uri: String): DeleteOutcome =
-        if (resolver.delete(Uri.parse(uri), pendingArgs(MediaStore.MATCH_INCLUDE)) > 0) DeleteOutcome.Deleted else DeleteOutcome.Missing
+    override fun delete(uri: String) {
+        resolver.delete(Uri.parse(uri), pendingArgs(MediaStore.MATCH_INCLUDE))
+    }
 
     override fun ownedTrackPaths(): Set<String> =
         queryUnderRoot(MediaStore.MATCH_INCLUDE, ownedOnly = true).filterNot { it.displayName.endsWith(".m3u8") }
