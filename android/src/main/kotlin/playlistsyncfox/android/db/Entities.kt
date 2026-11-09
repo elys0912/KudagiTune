@@ -150,7 +150,7 @@ data class RelocatedFile(
     @PrimaryKey @ColumnInfo(name = "media_uri") val mediaUri: String,
 )
 
-/** T7 設定。既知の `key` は auto_sync_enabled、log_enabled、device_id、storage_volume、placed_volume。 */
+/** T7 設定。既知の `key` は auto_sync_enabled、device_id、storage_volume、placed_volume。 */
 @Entity(tableName = "app_settings")
 data class AppSetting(
     @PrimaryKey val key: String,
