@@ -169,6 +169,19 @@ class ManifestReaderTest {
     }
 
     @Test
+    fun `size が Long の範囲を超える曲と track_number が Int の範囲を超える曲は例外を投げず壊れたになる`() {
+        val base = writeManifest(sampleManifest(listOf(track(idA, size = 4242).copy(trackNumber = 7))))
+        val outOfRange = listOf(
+            base.replace("\"size\":4242", "\"size\":9223372036854775808"),
+            base.replace("\"track_number\":7", "\"track_number\":2147483648"),
+        )
+
+        for (text in outOfRange) {
+            assertTrue(assertIs<Broken>(read(text)).reason.isNotEmpty(), "本文: $text")
+        }
+    }
+
+    @Test
     fun `TS-153 modified_at が文字列の曲は壊れたとして理由を返す`() {
         val text = writeManifest(sampleManifest(listOf(track(idA, modifiedAt = 4242)))).replace("\"modified_at\":4242", "\"modified_at\":\"x\"")
 
