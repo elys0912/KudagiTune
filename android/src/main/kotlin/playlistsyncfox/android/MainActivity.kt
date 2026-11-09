@@ -110,9 +110,13 @@ class MainActivity : ComponentActivity() {
         model.openFromNotification(intent.getStringExtra(SyncNotifications.EXTRA_OPEN))
     }
 
-    /** 手動の同期の前に、通知の許可を確かめる。拒否でも同期は続ける。未ペアリングは同期でなくペアリングへ進むので、求めない（X7-3）。 */
+    /**
+     * 手動の同期の前に、通知の許可を確かめる。拒否でも同期は続ける。
+     * 未ペアリングは S2、選択が空は S6 へ進んで同期が始まらないので、求めない（X7-3）。
+     */
     private fun onSyncButton() {
-        val startsSync = !model.home.value.syncButtonGoesToPairing
+        val home = model.home.value
+        val startsSync = !home.syncButtonGoesToPairing && home.selectedCount > 0
         if (startsSync && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val permission = Manifest.permission.POST_NOTIFICATIONS
             val step = permissionStep(
