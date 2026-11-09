@@ -1,7 +1,7 @@
-# playlist-sync-fox 詳細設計 X6 android の保存と同期（M4）
+# KudagiTune 詳細設計 X6 android の保存と同期（M4）
 
 - 索引：[detailed-design.md](detailed-design.md)（X1）
-- 稿：第 5 稿（2026-11-06。review-13 を反映）。2026-11-07 に D15（T8、選択を P1・P3 の本文へ、P7 のクライアント）と D16（T9、保存先のボリューム、切り替えの取り直し）を反映した
+- 稿：第 5 稿（2026-11-06。review-13 を反映）。2026-11-07 に D15（T8、選択を P1・P3 の本文へ、P7 のクライアント）と D16（T9、保存先のボリューム、切り替えの取り直し）を反映した。2026-11-09 に review-15（実装との突き合わせ。端末の振る舞いの決定と、設計が古かった箇所）を反映した。稿の番号は上げない
 - 参照：他の X は [x2](detailed-design-x2.md)、[x3](detailed-design-x3.md)、[x4](detailed-design-x4.md)、[x5](detailed-design-x5.md)、[x7](detailed-design-x7.md)。基本設計は [basic-design.md](basic-design.md)（B1-1、B1-3、B1-7）、[basic-design-b2.md](basic-design-b2.md)（B2-6、B2-7）、[basic-design-b3.md](basic-design-b3.md)（B3-2〜B3-5）、[basic-design-b4a.md](basic-design-b4a.md)（B4-3 の K3・K4、B4-4 の端末側）
 
 ## X6 android の保存と同期
@@ -131,7 +131,7 @@ T9 `relocated_files`：列は B3-4 のとおり。主キー `media_uri`。保存
 ### X6-2 MediaStore の書き込み
 
 - 保存先のボリューム（D16。2026-11-07）：`MediaStoreFiles` の実体はボリューム名を受け取って作る。挿入と問い合わせは `MediaStore.Audio.Media.getContentUri(<ボリューム名>)`、`MediaStore.Files.getContentUri(<ボリューム名>)` を使う。ボリューム名は T7 の `storage_volume`（無ければ `external_primary`）。選んだボリュームが `MediaStore.getExternalVolumeNames` に無いとき、`MediaStoreFiles` を作る側が「保存先が無い」を同期の入口（X6-3 の手順 0）に伝える。削除は URI を直接指すので、別のボリュームの URI も削除できる
-- 切り替え前のファイルの削除（`deleteRelocated`）：T9 の URI を順に削除し、成功か「既に無い」なら T9 の行を消す。`SecurityException`（持ち主が違うなど）の行は残す。消した件数を返す。呼ぶのは S5 の「以前の場所の曲を消す」（確認の後。同期が動いている間は呼ばない）だけで、同期の手順からは呼ばない（2026-11-07）。T9 に行が残っている間は、S5 は保存先の切り替えを行わず、先にこの削除をするよう案内する（X7-1-6）。残したまま本体と SD の間を戻すと、前の場所の曲との衝突で全曲が接尾辞つきで重複して置かれるため（review-15）
+- 切り替え前のファイルの削除（`deleteRelocated`）：T9 の URI を順に削除し、成功か「既に無い」なら T9 の行を消す。`SecurityException`（持ち主が違うなど）の行は残す。消した件数を返す。呼ぶのは S5 の「以前の場所の曲を消す」（確認の後。同期が動いている間は呼ばない）だけで、同期の手順からは呼ばない（2026-11-07）。保存先を切り替えたとき T9 に行が残っていれば、S5 は切り替えの案内に「次の同期の前に、先に前の場所の曲を消してください」を足す（切り替え自体は止めない。X7-1-6）。残したまま本体と SD の間を戻すと、前の場所の曲との衝突で全曲が接尾辞つきで重複して置かれるため（review-15）
 
 呼び出しは `ContentResolver` 経由。操作は 1 つのクラス（名前は `MediaWriter`）に集める。`MediaWriter` は手順と T1・T2・T5 の更新を持つ具象クラスで、OS に触る部分（挿入、開く、読み戻し、削除、問い合わせ）だけを interface `MediaStoreFiles` に分ける。実体は `ContentResolver` を呼び、試験では `MediaStoreFiles` を差し替える（X6-7）。入口は次の表。
 
@@ -428,7 +428,7 @@ T9 `relocated_files`：列は B3-4 のとおり。主キー `media_uri`。保存
 | 15 | マニフェストの版違いだけ、T3 の `result_json` に印（`manifest_version_mismatch`）を残す（review-15。X6-9） | S4 が 500 などと区別して案内を出せる |
 | 16 | 想定外の例外は、T3 の行を `failed` で閉じ、ログに残して `Result.success` を返す（review-15。X6-12） | 結果を T3 に持つ規則（入口の表）に合わせる |
 | 17 | ログは常に書く。T7 に `log_enabled` を持たない（review-15。X6-8） | 切り替えの画面が無く、結線もされていなかった |
-| 18 | 保存先を切り替えるとき T9 に行が残っていれば、先に S5 で前の場所の曲を消すよう案内する（review-15。X6-19） | 戻したとき、前の場所の曲との衝突で全曲が重複する |
+| 18 | 保存先を切り替えたとき T9 に行が残っていれば、次の同期の前に S5 で前の場所の曲を消すよう案内する。切り替えは止めない（review-15。X6-19） | 戻したとき、前の場所の曲との衝突で全曲が重複する |
 
 ### X6 の置いた値
 
