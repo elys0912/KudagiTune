@@ -1,6 +1,5 @@
 package playlistsyncfox.shared.manifest
 
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -17,6 +16,7 @@ sealed interface ManifestReadResult {
 }
 
 // 境界（マニフェスト、P1・P3・P7・P8 の本文）の JSON の設定。未知のキーは読み捨てる。空の項目は null にして、JSON には書かない。
+// 境界の読み取りは IllegalArgumentException で捕まえる。デコードは、JSON の不正を SerializationException で、型として不正な値を IllegalArgumentException で投げる（前者は後者の子）。
 internal val boundaryJson = Json {
     ignoreUnknownKeys = true
     explicitNulls = false
@@ -29,7 +29,7 @@ fun writeManifest(manifest: Manifest): String = boundaryJson.encodeToString(Mani
 fun readManifest(text: String): ManifestReadResult {
     val root = try {
         boundaryJson.parseToJsonElement(text)
-    } catch (e: SerializationException) {
+    } catch (e: IllegalArgumentException) {
         return ManifestReadResult.Broken(firstLine(e))
     }
 
@@ -40,7 +40,7 @@ fun readManifest(text: String): ManifestReadResult {
 
     val manifest = try {
         boundaryJson.decodeFromJsonElement(Manifest.serializer(), root)
-    } catch (e: SerializationException) {
+    } catch (e: IllegalArgumentException) {
         return ManifestReadResult.Broken(firstLine(e))
     }
 
