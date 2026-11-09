@@ -25,8 +25,10 @@ internal val N = EcPoint(
 private const val PASSWORD_INFO = "psfox v1 pake-password"
 private const val SIGNING_KEY_INFO = "psfox v1 request-signing"
 private const val CONFIRMATION_INFO = "ConfirmationKeys"
-private const val SCALAR_BYTES = 32
 private const val HALF_HASH_BYTES = 16
+
+/** スカラー（w・x・y）のバイト数。P-256 の位数の長さ。 */
+internal const val SCALAR_BYTES = 32
 
 internal val NO_SALT = ByteArray(0)
 

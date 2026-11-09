@@ -5,8 +5,6 @@ import playlistsyncfox.shared.crypto.EcPoint
 
 // 端末側（A）のペアリングの手順。状態は M4 が持ち、ここは各段の純粋な計算だけ（X4-2-1、X4-2-4）。
 
-private const val SCALAR_BYTES = 32
-
 /** P5 の要求を作った段（D1）。[x] を P5 の `x` に載せる。 */
 class PairingInitiation internal constructor(
     val deviceId: String,

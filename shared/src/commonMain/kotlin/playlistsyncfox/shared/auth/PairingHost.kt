@@ -6,8 +6,6 @@ import playlistsyncfox.shared.crypto.EcPoint
 // PC 側（B）のペアリング。状態の値は M3 が持ち、ここは「状態と入力から、次の状態と結果」を返す純粋な関数（X4-2-1）。
 // 時刻はエポック秒で引数から受ける。
 
-private const val SCALAR_BYTES = 32
-
 /** H0〜H2。H3（検証中）は 1 回の呼び出しの中で終わるため値を持たない。 */
 sealed interface PairingState {
     /** H0 閉。[lockedUntil] より前は V4 の待ちで、コードを作れない。 */
