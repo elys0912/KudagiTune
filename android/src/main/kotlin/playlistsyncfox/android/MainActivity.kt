@@ -12,6 +12,7 @@ import android.os.storage.StorageManager
 import android.provider.MediaStore
 import android.provider.Settings
 import android.view.WindowInsetsController
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -101,9 +102,10 @@ class MainActivity : ComponentActivity() {
         model.openFromNotification(intent.getStringExtra(SyncNotifications.EXTRA_OPEN))
     }
 
-    /** 手動の同期の前に、通知の許可を 1 回だけ確かめる。拒否でも同期は続ける。 */
+    /** 手動の同期の前に、通知の許可を確かめる。拒否でも同期は続ける。未ペアリングは同期でなくペアリングへ進むので、求めない（X7-3）。 */
     private fun onSyncButton() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val startsSync = !model.home.value.syncButtonGoesToPairing
+        if (startsSync && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val permission = Manifest.permission.POST_NOTIFICATIONS
             val step = permissionStep(
                 granted = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED,
@@ -116,7 +118,9 @@ class MainActivity : ComponentActivity() {
                     notificationLauncher.launch(permission)
                     return
                 }
-                PermissionStep.GuideToSettings -> model.message.value = "通知が出ない。出すには設定アプリで通知を許可してほしい"
+                // 直後に S3 へ移っても消えないよう、画面の知らせでなくトーストで出す（X7-1）
+                PermissionStep.GuideToSettings ->
+                    Toast.makeText(this, "通知が出ない。出すには設定アプリで通知を許可してほしい", Toast.LENGTH_LONG).show()
                 PermissionStep.Granted, PermissionStep.SkipDenied -> Unit
             }
         }

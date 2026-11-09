@@ -150,7 +150,8 @@ private fun issueList(lines: List<IssueLine>, limit: Int) = IssueList(lines.take
 
 fun resultUi(run: SyncRun, issues: List<RunIssue>, limit: Int = ISSUE_LIMIT): ResultUiState {
     val stored = run.resultJson?.takeIf { it.isNotEmpty() }?.let { runCatching { decodeResult(it) }.getOrNull() }
-    val e2Detail = stored?.errorDetail.takeIf { run.errorKind == "E2" }
+    // E2 は原因欄も詳細も `error_detail` の語で出す（S3 と同じ関数）。`error_detail` が無い行は E の番号の語
+    val e2Notice = stored?.errorDetail.takeIf { run.errorKind == "E2" }?.let(::noticeOf)
     return ResultUiState(
         runId = run.runId,
         word = resultWord(if (run.endedAt == null) SyncRun.RESULT_INTERRUPTED else run.result),
@@ -158,8 +159,8 @@ fun resultUi(run: SyncRun, issues: List<RunIssue>, limit: Int = ISSUE_LIMIT): Re
         atMillis = run.endedAt ?: run.startedAt,
         counts = ResultUiState.Counts(run.added, run.replaced, run.removed, run.failed).takeIf { stored != null },
         bytes = run.bytesTransferred.takeIf { stored != null },
-        errorWord = errorWord(run.errorKind),
-        noticeLabel = e2Detail?.let { noticeOf(it).label },
+        errorWord = e2Notice?.title ?: errorWord(run.errorKind),
+        noticeLabel = e2Notice?.label,
         removalNote = removalNote(run.trigger).takeIf { stored?.removalSkipped == true },
         notRemoved = if (stored == null) 0 else (stored.counts.toRemove - run.removed).coerceAtLeast(0),
         excluded = issueList(
