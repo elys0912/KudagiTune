@@ -68,6 +68,8 @@ class ScreenActions(
     val licenses: () -> List<LicenseEntry>?,
     /** 同梱の全文（[LicenseEntry.textFiles] の 1 件）。読めなければ null。 */
     val licenseText: (String) -> String?,
+    /** 依存の NOTICE（[LicenseEntry.noticeFile]）。NOTICE を持たない部品は null。 */
+    val licenseNotice: (String) -> String?,
 )
 
 @Composable
@@ -255,7 +257,7 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions, notification
     when (state.kind) {
         HomeKind.Syncing -> PrimaryAction("進行状況を見る", model::showProgress)
         HomeKind.Unpaired -> PrimaryAction("ペアリングする", actions.onSyncButton)
-        else -> PrimaryAction("同期する", actions.onSyncButton)
+        else -> PrimaryAction("同期", actions.onSyncButton)
     }
     ActionGrid(
         buildList {
@@ -671,11 +673,11 @@ private fun LicensesScreen(model: AppViewModel, actions: ScreenActions) {
     when {
         entries == null -> Label("ライセンスの一覧を読み込めません")
         chosen != null -> {
-            // 全文は選ばれたときに読む。再描画のたびには読まない
-            val texts = remember(chosen) { chosen.textFiles.map(actions.licenseText) }
+            // 全文と NOTICE は選ばれたときに読む。再描画のたびには読まない
+            val texts = remember(chosen) { licenseTexts(chosen, actions.licenseText, actions.licenseNotice) }
             Label("${chosen.name} ${chosen.version}", bold = true)
             Label(chosen.body)
-            texts.forEach { Label(it ?: "ライセンスの全文を読み込めません", mono = true) }
+            texts.forEach { Label(it, mono = true) }
             Action("一覧へ") { open = null }
         }
         else -> entries.forEach { Action("${it.name} ${it.version}　${it.license}") { open = it } }

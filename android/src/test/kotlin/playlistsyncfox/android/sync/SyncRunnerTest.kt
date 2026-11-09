@@ -1402,7 +1402,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `TA-244 端末が再生できない形式の曲は転送し、T6 と結果の unplayable に unsupported_format で載せる`() = runTest {
+    fun `TA-244 端末が再生できない形式の曲は転送せず、T6 と結果の unplayable に unsupported_format で載せる`() = runTest {
         val h = Harness()
         val alac = track(2, extension = "m4a").copy(kind = "Apple Lossless audio file")
         val aac = track(3, extension = "m4a").copy(kind = "AAC audio file")
@@ -1413,7 +1413,8 @@ class SyncRunnerTest {
 
         val row = assertNotNull(h.run())
 
-        assertEquals(setOf(id(1), id(2), id(3)), h.lanApi.trackRequests.map { it.persistentId }.toSet())
+        assertEquals(setOf(id(1), id(3)), h.lanApi.trackRequests.map { it.persistentId }.toSet())
+        assertNull(h.store.placed[id(2)])
         val reasons = h.store.issueRows.filter { it.kind == RunIssue.KIND_UNPLAYABLE }.associate { it.persistentId to it.reason }
         assertEquals(mapOf<String?, String?>(id(9) to "protected", id(2) to "unsupported_format"), reasons)
         assertEquals(listOf(UnplayableReason.Protected, UnplayableReason.UnsupportedFormat), row.result().unplayable.map { it.reason })

@@ -867,7 +867,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             return issues
         }
 
-        /** T6 の `unplayable` の行。[reason] は `protected`（転送しない）か `unsupported_format`（転送する）。 */
+        /** T6 の `unplayable` の行。[reason] は `protected` か `unsupported_format`。どちらも転送しない。 */
         private fun unplayableIssue(runId: Long, track: ManifestTrack, reason: String) = RunIssue(
             runId = runId,
             persistentId = track.persistentId,

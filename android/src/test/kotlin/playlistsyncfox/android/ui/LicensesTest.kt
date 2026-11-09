@@ -38,6 +38,39 @@ class LicensesTest {
     }
 
     @Test
+    fun `TA-254 NOTICE のファイル名は artifactId と版から決まり、jar の名前と同じになる`() {
+        assertEquals("core-1.0.txt", entries.getValue("androidx.core:core").noticeFile)
+        assertEquals("slf4j-api-2.0.17.txt", entries.getValue("org.slf4j:slf4j-api").noticeFile)
+    }
+
+    @Test
+    fun `TA-254 部品を選ぶと、許諾の全文の後ろに見出し付きの NOTICE が続く`() {
+        val core = entries.getValue("androidx.core:core")
+
+        val texts = licenseTexts(core, readLicense = { "全文 $it" }, readNotice = { "通知 $it" })
+
+        assertEquals(listOf("全文 apache-2.0.txt", "NOTICE\n通知 core-1.0.txt"), texts)
+    }
+
+    @Test
+    fun `TA-254 NOTICE が無い部品は、全文だけを出して NOTICE の見出しを付けない`() {
+        val core = entries.getValue("androidx.core:core")
+
+        val texts = licenseTexts(core, readLicense = { "全文" }, readNotice = { null })
+
+        assertEquals(listOf("全文"), texts)
+    }
+
+    @Test
+    fun `TA-254 全文が読めなくても代わりの文を出し、NOTICE は続けて出す`() {
+        val core = entries.getValue("androidx.core:core")
+
+        val texts = licenseTexts(core, readLicense = { null }, readNotice = { "通知" })
+
+        assertEquals(listOf(LICENSE_TEXT_UNREADABLE, "NOTICE\n通知"), texts)
+    }
+
+    @Test
     fun `TA-254 読めない JSON は null を返す`() {
         assertNull(parseLicenses("{"))
     }
