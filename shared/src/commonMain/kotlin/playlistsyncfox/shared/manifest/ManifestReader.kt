@@ -7,7 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
 
 sealed interface ManifestReadResult {
-    /** [duplicatesDropped] は、同じ `persistent_id` の曲を落とした件数。 */
+    /** [duplicatesDropped] は、同じ `persistent_id` の曲を落とした件数。プレイリストの重複は数えない。 */
     data class Loaded(val manifest: Manifest, val duplicatesDropped: Int) : ManifestReadResult
 
     /** 版が合わない。E8 ではなく、端末は更新の案内を出す。 */
@@ -48,6 +48,7 @@ fun readManifest(text: String): ManifestReadResult {
 
     validateIds(manifest)?.let { return ManifestReadResult.Broken(it) }
 
+    // 3 つの一覧とも、同じ ID は最初の 1 件を残す。重複が残ると、digest が並びに依存し、m3u8 の名前も 1 件消える
     val uniqueTracks = manifest.tracks.distinctBy { it.persistentId }
     val knownIds = uniqueTracks.mapTo(HashSet()) { it.persistentId }
     if (manifest.playlists.any { playlist -> playlist.trackIds.any { it !in knownIds } }) {
@@ -55,7 +56,11 @@ fun readManifest(text: String): ManifestReadResult {
     }
 
     return ManifestReadResult.Loaded(
-        manifest.copy(tracks = uniqueTracks),
+        manifest.copy(
+            tracks = uniqueTracks,
+            playlists = manifest.playlists.distinctBy { it.persistentId },
+            unresolvedPlaylists = manifest.unresolvedPlaylists.distinctBy { it.persistentId },
+        ),
         duplicatesDropped = manifest.tracks.size - uniqueTracks.size,
     )
 }

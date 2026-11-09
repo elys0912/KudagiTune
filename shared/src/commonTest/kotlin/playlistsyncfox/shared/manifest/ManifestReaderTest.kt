@@ -90,6 +90,25 @@ class ManifestReaderTest {
     }
 
     @Test
+    fun `同じ ID のプレイリストが 2 件あると最初の 1 件だけ残り曲の落とした件数は変わらない`() {
+        val first = playlist("D000000000000001", "first", listOf(idA))
+        val dup = sampleManifest(listOf(track(idA)), listOf(first, playlist("D000000000000001", "second")))
+
+        val result = loaded(writeManifest(dup))
+
+        assertEquals(listOf(first), result.manifest.playlists)
+        assertEquals(0, result.duplicatesDropped)
+    }
+
+    @Test
+    fun `同じ ID の未解決のプレイリストが 2 件あると最初の 1 件だけ残る`() {
+        val first = UnresolvedPlaylist("C000000000000001", "first")
+        val dup = sampleManifest().copy(unresolvedPlaylists = listOf(first, UnresolvedPlaylist("C000000000000001", "second")))
+
+        assertEquals(listOf(first), loaded(writeManifest(dup)).manifest.unresolvedPlaylists)
+    }
+
+    @Test
     fun `TS-06 知る版の範囲の外の format_version は版が合わないとして受け取った版を返す`() {
         val base = writeManifest(sampleManifest())
 
