@@ -122,17 +122,17 @@ fun Application.psfoxModule(env: ServerEnv) {
     routing {
         post(PATH_MANIFEST) {
             val ids = selectedIds(call) ?: return@post
-            val manifest = env.manifests.forManifest(ids) ?: return@post call.fail(HttpStatusCode.ServiceUnavailable, 4)
+            val manifest = env.manifests.forManifest(ids) ?: return@post call.fail(HttpStatusCode.ServiceUnavailable, ERROR_XML_UNREADABLE)
             call.respondText(writeManifest(manifest), ContentType.Application.Json)
             env.log.info("server", "P1 を返した tracks=${manifest.tracks.size}")
         }
         post(PATH_DIGEST) {
             val ids = selectedIds(call) ?: return@post
-            val digest = env.manifests.forDigest(ids) ?: return@post call.fail(HttpStatusCode.ServiceUnavailable, 4)
+            val digest = env.manifests.forDigest(ids) ?: return@post call.fail(HttpStatusCode.ServiceUnavailable, ERROR_XML_UNREADABLE)
             call.respondText(json.encodeToString(DigestResponse.serializer(), DigestResponse(digest)), ContentType.Application.Json)
         }
         get(PATH_PLAYLISTS) {
-            val tree = env.manifests.forPlaylists() ?: return@get call.fail(HttpStatusCode.ServiceUnavailable, 4)
+            val tree = env.manifests.forPlaylists() ?: return@get call.fail(HttpStatusCode.ServiceUnavailable, ERROR_XML_UNREADABLE)
             call.respondText(writePlaylistTree(tree), ContentType.Application.Json)
         }
         get("$PATH_TRACKS{id}") { sendTrack(env, call) }
@@ -190,7 +190,7 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
     // 3. 署名失敗の待ち
     val address = env.clientAddress(call)
     if (env.failures.isBlocked(address)) {
-        call.fail(HttpStatusCode.TooManyRequests, 2)
+        call.fail(HttpStatusCode.TooManyRequests, ERROR_AUTH_REJECTED)
         return false
     }
 
@@ -225,8 +225,8 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
     )
     if (result is AuthResult.Failure) {
         env.failures.recordFailure(address)
-        env.log.warn("server", "署名の検証に失敗 device=${headers.deviceId} detail=${result.reason.detail ?: "none"}", 2)
-        call.fail(HttpStatusCode.Unauthorized, 2, result.reason.detail)
+        env.log.warn("server", "署名の検証に失敗 device=${headers.deviceId} detail=${result.reason.detail ?: "none"}", ERROR_AUTH_REJECTED)
+        call.fail(HttpStatusCode.Unauthorized, ERROR_AUTH_REJECTED, result.reason.detail)
         return false
     }
     env.failures.recordSuccess(address)
@@ -237,6 +237,20 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
 
 private const val NONCE_BYTES = 16
 private const val SIGNATURE_BYTES = 32
+
+// 応答の本文 `{"error":"E<n>"}` の番号。HTTP の状態との対応は B4-4 の 8
+
+/** E2：署名・ペアリングの不一致（401）、ペアリングの拒否（403）、署名失敗の待ち（429）。 */
+private const val ERROR_AUTH_REJECTED = 2
+
+/** E4：XML を読めずマニフェストを作れない、または曲の表が空（503）。 */
+private const val ERROR_XML_UNREADABLE = 4
+
+/** E5：マニフェストに無い ID、またはファイルが無い（404）。 */
+private const val ERROR_TRACK_NOT_FOUND = 5
+
+/** E8：`size`・`modified_at` が P1 の値と合わない（409）。 */
+private const val ERROR_TRACK_CHANGED = 8
 
 private fun decodeBase64Url(text: String): ByteArray? = try {
     Base64.getUrlDecoder().decode(text)
@@ -275,15 +289,15 @@ private suspend fun sendTrack(env: ServerEnv, call: ApplicationCall) {
 
     env.activity.trackRequestStarted()
     try {
-        val table = env.tracks.snapshot() ?: return call.fail(HttpStatusCode.ServiceUnavailable, 4)
-        val entry = table[id] ?: return call.fail(HttpStatusCode.NotFound, 5)
+        val table = env.tracks.snapshot() ?: return call.fail(HttpStatusCode.ServiceUnavailable, ERROR_XML_UNREADABLE)
+        val entry = table[id] ?: return call.fail(HttpStatusCode.NotFound, ERROR_TRACK_NOT_FOUND)
 
         val query = call.request.queryParameters
         if (query["size"]?.toLongOrNull() != entry.size || query["modified_at"]?.toLongOrNull() != entry.modifiedAt) {
-            return call.fail(HttpStatusCode.Conflict, 8)
+            return call.fail(HttpStatusCode.Conflict, ERROR_TRACK_CHANGED)
         }
-        if (!Files.isRegularFile(entry.path)) return call.fail(HttpStatusCode.NotFound, 5)
-        if (Files.size(entry.path) != entry.size) return call.fail(HttpStatusCode.Conflict, 8)
+        if (!Files.isRegularFile(entry.path)) return call.fail(HttpStatusCode.NotFound, ERROR_TRACK_NOT_FOUND)
+        if (Files.size(entry.path) != entry.size) return call.fail(HttpStatusCode.Conflict, ERROR_TRACK_CHANGED)
 
         val start = call.request.header(HttpHeaders.Range)?.let { rangeFromPattern.matchEntire(it)?.groupValues?.get(1)?.toLongOrNull() }
         if (start != null && start >= entry.size) return call.respond(HttpStatusCode.RequestedRangeNotSatisfiable)
@@ -383,7 +397,12 @@ private suspend fun pairingConfirm(env: ServerEnv, call: ApplicationCall) {
 }
 
 private suspend fun respondPairingFailure(env: ServerEnv, call: ApplicationCall, failure: PairingFailure) {
-    env.log.warn("pairing", "ペアリングの要求を断った reason=${failure.name}", 2.takeIf { failure.detail != null || failure == PairingFailure.MacMismatch })
+    // E2 の応答になる失敗（403 の 3 種と P6 の MAC の不一致）だけ、ログにも E の番号を付ける
+    val isLoggedWithErrorNumber = failure.detail != null || failure == PairingFailure.MacMismatch
+    env.log.warn("pairing", "ペアリングの要求を断った reason=${failure.name}", ERROR_AUTH_REJECTED.takeIf { isLoggedWithErrorNumber })
+
+    // 400 と 500 は E の本文を持たない
     val status = HttpStatusCode.fromValue(failure.status)
-    if (failure.status == 400 || failure.status == 500) call.respond(status) else call.fail(status, 2, failure.detail)
+    val hasNoErrorBody = failure.status == HttpStatusCode.BadRequest.value || failure.status == HttpStatusCode.InternalServerError.value
+    if (hasNoErrorBody) call.respond(status) else call.fail(status, ERROR_AUTH_REJECTED, failure.detail)
 }
