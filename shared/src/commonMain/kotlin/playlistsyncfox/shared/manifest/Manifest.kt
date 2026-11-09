@@ -11,6 +11,9 @@ private val persistentIdPattern = Regex("[0-9A-F]{16}")
 /** `persistent_id` の書式。大文字 16 桁の 16 進。 */
 fun isPersistentId(value: String): Boolean = persistentIdPattern.matches(value)
 
+/** 再生できない保護付きの曲か。`protected` が真か、拡張子が `m4p`（保護付きの AAC）の曲。[extension] は先頭の `.` を含まない小文字。 */
+fun isProtectedTrack(isProtected: Boolean, extension: String): Boolean = isProtected || extension == "m4p"
+
 @Serializable
 data class Manifest(
     @SerialName("format_version") val formatVersion: Int,
