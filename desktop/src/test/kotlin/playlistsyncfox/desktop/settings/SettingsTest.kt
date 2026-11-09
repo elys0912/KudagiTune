@@ -9,6 +9,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -44,6 +45,18 @@ class SettingsTest {
         assertEquals("{ これは壊れている", dir.resolve("settings.json.bad").readText())
         assertEquals(DEFAULT_PORT, load.settings.port)
         assertFalse(load.firstRun)
+    }
+
+    @Test
+    fun `TD-24 UTF-8 として不正なバイト列の設定も bad へ退避して既定で起動する`() {
+        val broken = byteArrayOf(0xFF.toByte(), 0xFE.toByte(), 0x7B)
+        Files.write(file, broken)
+
+        val load = store().load()
+
+        assertNotNull(load.rescuedAs)
+        assertContentEquals(broken, Files.readAllBytes(dir.resolve("settings.json.bad")))
+        assertEquals(DEFAULT_PORT, load.settings.port)
     }
 
     @Test
