@@ -5,8 +5,6 @@ import com.sun.jna.platform.win32.WinReg
 
 /** 登録先（現在のユーザーの Run キー）の窓口。試験では偽の実体に差し替える。 */
 interface RunKey {
-    fun get(name: String): String?
-
     fun set(name: String, data: String)
 
     /** 無くても失敗にしない。 */
@@ -15,13 +13,6 @@ interface RunKey {
 
 /** `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`。管理者権限が要らない。実環境の確認は C-13。 */
 class WindowsRunKey : RunKey {
-    override fun get(name: String): String? =
-        if (Advapi32Util.registryValueExists(WinReg.HKEY_CURRENT_USER, RUN_KEY_PATH, name)) {
-            Advapi32Util.registryGetStringValue(WinReg.HKEY_CURRENT_USER, RUN_KEY_PATH, name)
-        } else {
-            null
-        }
-
     override fun set(name: String, data: String) =
         Advapi32Util.registrySetStringValue(WinReg.HKEY_CURRENT_USER, RUN_KEY_PATH, name, data)
 
@@ -38,8 +29,6 @@ class WindowsRunKey : RunKey {
 
 /** 配布物でない実行（開発）用。何も登録しない。 */
 object NoRunKey : RunKey {
-    override fun get(name: String): String? = null
-
     override fun set(name: String, data: String) = Unit
 
     override fun delete(name: String) = Unit

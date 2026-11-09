@@ -4,6 +4,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import java.nio.charset.CharacterCodingException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -114,6 +115,9 @@ class SettingsStore(private val file: Path, private val newPcId: () -> String = 
         val parsed = try {
             settingsJson.decodeFromString(Settings.serializer(), Files.readString(file))
         } catch (_: SerializationException) {
+            null
+        } catch (_: CharacterCodingException) {
+            // UTF-8 として不正なバイト列も、壊れた JSON と同じく読めない設定として退避する
             null
         }
         // 新しい版は読まない。書き戻して失う事故を防ぐ（X5-4 の読み込み 3）

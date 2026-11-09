@@ -3,20 +3,19 @@ package playlistsyncfox.desktop.settings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import playlistsyncfox.desktop.DesktopValues
+import playlistsyncfox.desktop.formatIsoMillis
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.time.Clock
 import java.time.Instant
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 
 enum class LogLevel(val label: String) { Info("INFO"), Warn("WARN"), Error("ERROR") }
 
 /** 画面のログの欄の 1 行（X5-4）。ファイルへ書く行と同じ内容。 */
 data class LogLine(val at: Instant, val level: LogLevel, val module: String, val message: String, val errorNumber: Int?)
 
-private val stamp = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
+private val logFileName = Regex("psfox-([0-9]+)[.]log")
 
 /**
  * PC のログ（X5-4）。1 行 1 件で、時刻、レベル、モジュール、メッセージ、E の番号をタブで区切る。
@@ -49,7 +48,7 @@ class AppLog(
         val at = clock.instant()
         val text = message.replace('\n', ' ').replace('\t', ' ')
         recent.value = (recent.value + LogLine(at, level, module, text, errorNumber)).takeLast(DesktopValues.LOG_LINES)
-        val line = listOfNotNull(stamp.format(at), level.label, module, text, errorNumber?.let { "E$it" }).joinToString("\t") + "\n"
+        val line = listOfNotNull(formatIsoMillis(at), level.label, module, text, errorNumber?.let { "E$it" }).joinToString("\t") + "\n"
         val bytes = line.encodeToByteArray()
         try {
             Files.createDirectories(dir)
@@ -74,9 +73,10 @@ class AppLog(
         return next
     }
 
-    private fun indexOf(file: Path): Int = file.fileName.toString().removePrefix("psfox-").removeSuffix(".log").toInt()
+    // 連番として読めない名前（利用者が置いたファイルなど）は null。世代の対象にも、削除の対象にもしない
+    private fun indexOf(file: Path): Int? = logFileName.matchEntire(file.fileName.toString())?.groupValues?.get(1)?.toIntOrNull()
 
     private fun logFiles(): List<Path> =
-        Files.list(dir).use { s -> s.filter { it.fileName.toString().startsWith("psfox-") && it.toString().endsWith(".log") }.toList() }
+        Files.list(dir).use { s -> s.filter { indexOf(it) != null }.toList() }
             .sortedBy { it.fileName.toString() }
 }

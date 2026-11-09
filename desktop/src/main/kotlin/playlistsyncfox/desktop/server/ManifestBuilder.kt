@@ -1,7 +1,9 @@
 package playlistsyncfox.desktop.server
 
+import playlistsyncfox.desktop.formatIsoMillis
 import playlistsyncfox.desktop.watch.HeldLibrary
 import playlistsyncfox.itunes.library.LibraryPlaylist
+import playlistsyncfox.itunes.library.LibraryReadResult
 import playlistsyncfox.itunes.library.LibraryTrack
 import playlistsyncfox.itunes.library.PlaylistKind
 import playlistsyncfox.itunes.library.TrackRef
@@ -15,20 +17,14 @@ import playlistsyncfox.shared.manifest.ManifestPlaylist
 import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.manifest.UnresolvedPlaylist
 import playlistsyncfox.shared.manifest.computeContentDigest
+import playlistsyncfox.shared.manifest.isProtectedTrack
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import java.time.Instant
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 
 class BuiltManifest(val manifest: Manifest, val tracks: Map<String, TrackEntry>)
-
-private val isoMillis = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'").withZone(ZoneOffset.UTC)
-
-/** UTC、ミリ秒まで、末尾 `Z`（X3-1）。 */
-fun formatIsoMillis(instant: Instant): String = isoMillis.format(instant)
 
 /**
  * 選んだプレイリストからマニフェストを組む（X2-4 末尾の順、B2-2、B2-4）。実在の確認は選んだプレイリストの曲だけ。
@@ -51,9 +47,36 @@ class ManifestBuilder(
         now: Instant,
     ): BuiltManifest {
         val result = library.result
-        val byId = result.playlists.associateBy { it.persistentId }
-        val trackById = result.tracks.associateBy { it.persistentId }
+        val selection = resolveSelection(result.playlists, selectedIds, lastKnownNames)
 
+        val collector = TrackCollector(result)
+        val playlists = selection.resolved.map { playlist ->
+            ManifestPlaylist(playlist.persistentId, playlist.name, playlist.items.mapNotNull(collector::collect))
+        }
+
+        val withoutDigest = Manifest(
+            formatVersion = MANIFEST_FORMAT_VERSION,
+            generatedAt = formatIsoMillis(now),
+            libraryId = libraryId,
+            xmlModifiedAt = formatIsoMillis(library.xmlModified),
+            contentDigest = "",
+            tracks = collector.tracks.values.toList(),
+            playlists = playlists,
+            unresolvedPlaylists = selection.unresolved,
+            excluded = collector.excluded.values.toList(),
+        )
+        return BuiltManifest(withoutDigest.copy(contentDigest = computeContentDigest(crypto, withoutDigest)), collector.entries)
+    }
+
+    private class Selection(val resolved: List<LibraryPlaylist>, val unresolved: List<UnresolvedPlaylist>)
+
+    /** 選んだ ID を、通常のプレイリスト（resolved）と、XML に無いか種別が通常でないもの（unresolved）に分ける。重複は除く。 */
+    private fun resolveSelection(
+        playlists: List<LibraryPlaylist>,
+        selectedIds: List<String>,
+        lastKnownNames: Map<String, String>,
+    ): Selection {
+        val byId = playlists.associateBy { it.persistentId }
         val resolved = mutableListOf<LibraryPlaylist>()
         val unresolved = mutableListOf<UnresolvedPlaylist>()
         for (id in selectedIds.distinct()) {
@@ -64,51 +87,55 @@ class ManifestBuilder(
                 unresolved += UnresolvedPlaylist(id, playlist?.name ?: lastKnownNames[id].orEmpty())
             }
         }
+        return Selection(resolved, unresolved)
+    }
 
+    /** 除外の表の鍵。ID を持つ曲は Persistent ID、持たない曲は [LibraryReadResult.unidentifiedTracks] の位置。 */
+    private sealed interface ExcludedKey {
+        data class Id(val persistentId: String) : ExcludedKey
+
+        data class Index(val index: Int) : ExcludedKey
+    }
+
+    /**
+     * 曲を `tracks`（配る）と `excluded`（配らない）に振り分ける。同じ曲は 1 度だけ確かめる。
+     * 除外の表は、ID を持つ曲と持たない曲の登場順を保つため、1 つの表にする。
+     */
+    private inner class TrackCollector(private val result: LibraryReadResult) {
+        private val trackById = result.tracks.associateBy { it.persistentId }
         val tracks = LinkedHashMap<String, ManifestTrack>()
         val entries = LinkedHashMap<String, TrackEntry>()
-        val excluded = LinkedHashMap<Any, ExcludedTrack>()
-        val playlists = resolved.map { playlist ->
-            val ids = mutableListOf<String>()
-            for (ref in playlist.items) {
-                when (ref) {
-                    is TrackRef.Unidentified -> excluded.getOrPut(ref.index) {
-                        val track = result.unidentifiedTracks[ref.index]
-                        ExcludedTrack(track.name, track.artist, ExcludedReason.NO_ID)
-                    }
-                    is TrackRef.Identified -> {
-                        val id = ref.persistentId
-                        if (id in tracks) {
-                            ids += id
-                        } else if (id !in excluded) {
-                            val track = trackById.getValue(id)
-                            when (val checked = check(track)) {
-                                is Checked.Ok -> {
-                                    tracks[id] = checked.manifestTrack
-                                    entries[id] = checked.entry
-                                    ids += id
-                                }
-                                is Checked.Excluded -> excluded[id] = ExcludedTrack(track.name, track.artist, checked.reason)
-                            }
-                        }
-                    }
+        val excluded = LinkedHashMap<ExcludedKey, ExcludedTrack>()
+
+        /** プレイリストの並びに載せる曲の ID を返す。除外の曲は null。 */
+        fun collect(ref: TrackRef): String? = when (ref) {
+            is TrackRef.Unidentified -> {
+                excluded.getOrPut(ExcludedKey.Index(ref.index)) {
+                    val track = result.unidentifiedTracks[ref.index]
+                    ExcludedTrack(track.name, track.artist, ExcludedReason.NO_ID)
                 }
+                null
             }
-            ManifestPlaylist(playlist.persistentId, playlist.name, ids)
+            is TrackRef.Identified -> collectIdentified(ref.persistentId)
         }
 
-        val withoutDigest = Manifest(
-            formatVersion = MANIFEST_FORMAT_VERSION,
-            generatedAt = formatIsoMillis(now),
-            libraryId = libraryId,
-            xmlModifiedAt = formatIsoMillis(library.xmlModified),
-            contentDigest = "",
-            tracks = tracks.values.toList(),
-            playlists = playlists,
-            unresolvedPlaylists = unresolved,
-            excluded = excluded.values.toList(),
-        )
-        return BuiltManifest(withoutDigest.copy(contentDigest = computeContentDigest(crypto, withoutDigest)), entries)
+        private fun collectIdentified(id: String): String? {
+            if (id in tracks) return id
+            if (ExcludedKey.Id(id) in excluded) return null
+
+            val track = trackById.getValue(id)
+            return when (val checked = check(track)) {
+                is Checked.Ok -> {
+                    tracks[id] = checked.manifestTrack
+                    entries[id] = checked.entry
+                    id
+                }
+                is Checked.Excluded -> {
+                    excluded[ExcludedKey.Id(id)] = ExcludedTrack(track.name, track.artist, checked.reason)
+                    null
+                }
+            }
+        }
     }
 
     private sealed interface Checked {
@@ -154,7 +181,7 @@ class ManifestBuilder(
             discNumber = track.discNumber?.toIntOrNull(),
             durationMs = track.totalTimeMs?.toIntOrNull(),
             kind = track.kind,
-            isProtected = track.isProtected || extension == "m4p",
+            isProtected = isProtectedTrack(track.isProtected, extension),
         )
         return Checked.Ok(manifestTrack, TrackEntry(size, modifiedAt, path))
     }

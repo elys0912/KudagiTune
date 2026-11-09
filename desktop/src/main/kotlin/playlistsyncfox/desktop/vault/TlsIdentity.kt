@@ -35,8 +35,6 @@ private const val CERTIFICATE_SUBJECT = "CN=playlist-sync-fox"
 /** V30：証明書の有効期間（年）。 */
 private const val CERTIFICATE_VALID_YEARS = 10L
 
-private const val TLS_KEY_NAME = "tls-key"
-
 /**
  * K2：サーバーの鍵と証明書（X5-2）。
  * [spkiDer] は証明書の SubjectPublicKeyInfo の DER。[keyIsNew] が真なら SPKI が変わったので、ペアリング済みの端末は再ペアリングが要る。
@@ -55,10 +53,10 @@ private val bouncyCastle = BouncyCastleProvider()
  * 鍵があって、証明書が無い・期限が残り V44 以下・公開鍵が違うときは、同じ鍵で証明書を作り直す。鍵が無ければ両方を作る。
  */
 fun loadOrCreateTls(store: SecretStore, certFile: Path, now: Instant): TlsIdentity {
-    val keyBytes = store.read(TLS_KEY_NAME)
+    val keyBytes = store.read(TLS_KEY)
     if (keyBytes == null) {
         val pair = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1"), SecureRandom()) }.generateKeyPair()
-        store.write(TLS_KEY_NAME, pair.private.encoded)
+        store.write(TLS_KEY, pair.private.encoded)
         return writeNewCertificate(pair.private, certFile, now, keyIsNew = true)
     }
 

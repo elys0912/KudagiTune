@@ -48,27 +48,21 @@ class PairingService(
 
     private fun now() = clock.instant().epochSecond
 
-    @Synchronized
-    fun open(): PairingOutcome<String> {
+    fun open(): PairingOutcome<String> = changeState {
         val step = openPairing(crypto, state, now())
         state = step.state
-        publish()
-        return step.outcome
+        step.outcome
     }
 
     /** 画面の「閉じる」、窓を閉じる、アプリの終了。V4 の待ちは残す。 */
-    @Synchronized
-    fun close() {
+    fun close() = changeState {
         if (state !is PairingState.Closed) state = PairingState.Closed()
-        publish()
     }
 
     /** 期限（V3）の経過を反映する。画面の時計から呼ぶ。 */
-    @Synchronized
-    fun refresh() = publish()
+    fun refresh() = changeState {}
 
-    @Synchronized
-    fun start(deviceId: String, name: String, x: ByteArray): PairingOutcome<EcPoint> {
+    fun start(deviceId: String, name: String, x: ByteArray): PairingOutcome<EcPoint> = changeState {
         val step = handlePairingStart(
             crypto, state, deviceId, x,
             registeredDeviceCount = settings.current.devices.size,
@@ -78,24 +72,33 @@ class PairingService(
         )
         state = step.state
         if (step.outcome is PairingOutcome.Ok) deviceName = name
-        publish()
-        return step.outcome
+        step.outcome
     }
 
-    @Synchronized
-    fun confirm(deviceId: String, macD: ByteArray): PairingOutcome<ByteArray> {
+    fun confirm(deviceId: String, macD: ByteArray): PairingOutcome<ByteArray> = changeState(
+        // 登録に成功した時点で通知する。画面の状態の変化の通知より先に済ませる
+        beforeViewNotice = { outcome -> if (outcome is PairingOutcome.Ok) onPaired() },
+    ) {
         val step = handlePairingConfirm(crypto, state, deviceId, macD, now()) { id, key ->
             registry.register(id, deviceName.orEmpty(), key)
         }
         state = step.state
-        // 登録に成功した時点で通知する。画面の状態を作り直す publish より先に済ませる
-        if (step.outcome is PairingOutcome.Ok) onPaired()
-        publish()
-        return step.outcome
+        step.outcome
     }
 
-    // 共有の状態から画面の状態を作る。H2 のコードと失敗回数は共有側の内部なので、直前の開の値を残す
-    private fun publish() {
+    /**
+     * [change] での状態の変更と、画面の状態の更新を lock の中で行い、通知は lock の外で行う。
+     * 通知先は Advertiser の monitor を取って mDNS を送るため、lock の中から呼ばない。
+     */
+    private fun <T> changeState(beforeViewNotice: (T) -> Unit = {}, change: () -> T): T {
+        val (outcome, viewChanged) = synchronized(this) { change() to updateView() }
+        beforeViewNotice(outcome)
+        if (viewChanged) onViewChanged()
+        return outcome
+    }
+
+    // 共有の状態から画面の状態を作る。H2 のコードと失敗回数は共有側の内部なので、直前の開の値を残す。画面の状態が変わったら真を返す
+    private fun updateView(): Boolean {
         val current = state
         val previous = viewFlow.value
         val next = when (current) {
@@ -111,9 +114,8 @@ class PairingService(
         val expired = next is PairingView.Open && !clock.instant().isBefore(next.expiresAt)
         if (expired) state = PairingState.Closed()
         val shown = if (expired) PairingView.Closed else next
-        if (shown != previous) {
-            viewFlow.value = shown
-            onViewChanged()
-        }
+        if (shown == previous) return false
+        viewFlow.value = shown
+        return true
     }
 }

@@ -309,6 +309,20 @@ class LibraryReloadTest {
     }
 
     @Test
+    fun `TD-71 XML の場所が相対パスでも、現在のフォルダを基にした絶対パスのフォルダを監視する`() = runTest {
+        val opened = mutableListOf<Path>()
+        val opener = DirectoryEventsOpener { dir ->
+            opened += dir
+            events(null, hang = true)
+        }
+
+        LibraryWatcher(backgroundScope, Path.of("lib.xml"), opener, {}, {}).start()
+        runCurrent()
+
+        assertEquals(listOf(Path.of("").toAbsolutePath()), opened)
+    }
+
+    @Test
     fun `TD-52 XML の更新日時と現在の差が V5 ちょうどなら正常、1 日超なら古い`() {
         val holder = holder(staleDays = 7)
         val modified = Instant.parse("2025-12-01T00:00:00Z")

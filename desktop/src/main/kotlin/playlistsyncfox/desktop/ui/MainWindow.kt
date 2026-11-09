@@ -59,7 +59,6 @@ import playlistsyncfox.desktop.watch.XmlStatus
 import playlistsyncfox.shared.result.ProgressReport
 import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
-import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -107,7 +106,11 @@ private fun warningText(warning: Warning): String = when (warning) {
 
 private fun lastSyncText(sync: LastSync): String {
     val failures = sync.failureCounts.entries.joinToString("、") { "${errorNames[it.key] ?: it.key} ${it.value} 件" }
-    return "前回の同期：${syncTimeFormat.format(Instant.parse(sync.startedAt))}　${outcomeWords.getValue(sync.outcome)}　追加 ${sync.counts.added} 更新 ${sync.counts.replaced} 削除 ${sync.counts.removed}　$failures"
+    val startedAt = syncTimeFormat.format(Instant.parse(sync.startedAt))
+    val outcome = outcomeWords.getValue(sync.outcome)
+    val counts = sync.counts
+
+    return "前回の同期：$startedAt　$outcome　追加 ${counts.added} 更新 ${counts.replaced} 削除 ${counts.removed}　$failures"
 }
 
 private fun mib(bytes: Long): String = String.format(Locale.ROOT, "%.1f MiB", bytes / 1_048_576.0)
@@ -222,8 +225,8 @@ private fun DeviceSection(app: PcApp, state: PcState) = Section("端末") {
 private fun PairingSection(app: PcApp, state: PcState) = Section("ペアリング") {
     when (val pairing = state.pairing) {
         is PairingView.Open -> {
-            val remaining = Duration.between(Instant.now(), pairing.expiresAt).seconds.coerceAtLeast(0)
-            Text("ペアリングコード：${pairing.code}（残り $remaining 秒、失敗 ${pairing.failedAttempts} 回）", style = MaterialTheme.typography.headlineSmall, fontFamily = FontFamily.Monospace)
+            val codeLine = "ペアリングコード：${pairing.code}（残り ${state.pairingSecondsLeft} 秒、失敗 ${pairing.failedAttempts} 回）"
+            Text(codeLine, style = MaterialTheme.typography.headlineSmall, fontFamily = FontFamily.Monospace)
             state.fingerprint?.let { fingerprint ->
                 Text("確認コード：$fingerprint", fontFamily = FontFamily.Monospace)
                 SecondaryButton("確認コードをコピー") { copyToClipboard(fingerprint) }

@@ -61,13 +61,13 @@ class LibraryLoader(
             val modified = try {
                 Instant.ofEpochMilli(path.getLastModifiedTime().toMillis())
             } catch (e: IOException) {
-                log.warn(LOG_MODULE, "XML を読めない ${attemptText(attempt)} reason=${e.javaClass.simpleName}")
+                logReadFailure(attempt, e.javaClass.simpleName)
                 return@repeat
             }
             val outcome = try {
                 readLibrary(readBytes(path))
             } catch (e: IOException) {
-                log.warn(LOG_MODULE, "XML を読めない ${attemptText(attempt)} reason=${e.javaClass.simpleName}")
+                logReadFailure(attempt, e.javaClass.simpleName)
                 return@repeat
             }
             when (outcome) {
@@ -75,12 +75,15 @@ class LibraryLoader(
                     log.info(LOG_MODULE, diagnosticsText(outcome.result.diagnostics))
                     return LoadOutcome.Loaded(outcome.result, modified)
                 }
-                is LibraryReadOutcome.Failed ->
-                    log.warn(LOG_MODULE, "XML を読めない ${attemptText(attempt)} reason=${outcome.error.name}")
+                is LibraryReadOutcome.Failed -> logReadFailure(attempt, outcome.error.name)
             }
         }
         log.error(LOG_MODULE, "XML を読めず諦めた attempts=${DesktopValues.LOAD_ATTEMPTS} path=$path")
         return LoadOutcome.GaveUp
+    }
+
+    private fun logReadFailure(attempt: Int, reason: String) {
+        log.warn(LOG_MODULE, "XML を読めない ${attemptText(attempt)} reason=$reason")
     }
 
     private fun attemptText(attempt: Int) = "attempt=${attempt + 1}/${DesktopValues.LOAD_ATTEMPTS}"

@@ -50,6 +50,12 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Clock
 
+/** 画面の状態を作り直す間隔。W4 のコードの残り秒と、コードの期限（V3）の反映を 1 秒単位で進める。 */
+private const val STATE_REFRESH_MILLIS = 1_000L
+
+/** 終了時に、送信中の接続が終わったかを確かめる間隔。猶予（V46）の間だけ繰り返す。 */
+private const val SENDING_POLL_MILLIS = 100L
+
 /** 設定、鍵、証明書、ログの置き場（B4-6）。 */
 class AppPaths(val settingsFile: Path, val secretsFile: Path, val certFile: Path, val logDir: Path) {
     companion object {
@@ -97,14 +103,20 @@ class PcApp(
     private val tracks = TrackTable()
     private var pairing: PairingService? = null
     private var tls: TlsIdentity? = null
-    private var env: ServerEnv? = null
-    private var xmlWatch: XmlWatch? = null
     private var running: RunningServer? = null
     private var ticker: Job? = null
     private var serverStatus: ServerStatus = ServerStatus.NotStarted
-    private var certificateRegenerated = false
     private var settingsReset = false
     private var pcAdvertiser: Advertiser? = null
+
+    // 書くスレッドと読むスレッドが違うので @Volatile にする
+    // xmlWatch：EDT（W5 の保存）と main（起動）が書き、Netty（要求の処理）が読む
+    @Volatile
+    private var xmlWatch: XmlWatch? = null
+
+    // certificateRegenerated：main（起動）と Netty（P6 の成功）が書き、EDT（画面）と Default（ticker）が読む
+    @Volatile
+    private var certificateRegenerated = false
 
     private val stateFlow = MutableStateFlow(snapshot())
 
@@ -137,7 +149,7 @@ class PcApp(
             while (isActive) {
                 pairing?.refresh()
                 refreshState()
-                delay(1_000)
+                delay(STATE_REFRESH_MILLIS)
             }
         }
     }
@@ -167,23 +179,24 @@ class PcApp(
             onPaired = { certificateRegenerated = false; refreshState() },
         )
         pairing = service
-        env = ServerEnv(
+        val env = ServerEnv(
             crypto, clock, clock.instant(), NonceStore(), keyRing, SignatureFailureCounter(clock), service,
             settings.current.pcId, settings, ManifestService(crypto, clock, settings, tracks, ::libraryForRequest),
             tracks, activity, progress, log,
         )
-        launchServer()
+        launchServer(identity, env)
     }
 
     // ポートの使用中は警告を出して続行する。サーバーは止まった状態になる
-    private fun launchServer() {
-        val identity = tls ?: return
+    private fun launchServer(identity: TlsIdentity, env: ServerEnv) {
         val port = settings.current.port
         try {
-            running = serverLauncher.start(port, identity, checkNotNull(env))
+            running = serverLauncher.start(port, identity, env)
             serverStatus = ServerStatus.Running
             log.info("server", "サーバーを起動した port=$port")
-            pcAdvertiser = Advertiser(scope, settings.current.pcId, enumerateAddresses, registrar).also { it.start(port, pair = false) }
+            val advertiser = Advertiser(scope, settings.current.pcId, enumerateAddresses, registrar)
+            advertiser.start(port, pair = false)
+            pcAdvertiser = advertiser
         } catch (e: Exception) {
             val inUse = generateSequence<Throwable>(e) { it.cause }.any { it is BindException }
             serverStatus = ServerStatus.Failed(if (inUse) ServerFailureKind.PortInUse else ServerFailureKind.Other)
@@ -261,7 +274,7 @@ class PcApp(
         pcAdvertiser?.stop()
         // 送信中の接続は、猶予（V46）の後に切る
         withTimeoutOrNull(DesktopValues.SHUTDOWN_GRACE.toMillis()) {
-            while (activity.sendingCount > 0) delay(100)
+            while (activity.sendingCount > 0) delay(SENDING_POLL_MILLIS)
         }
         running?.stop()
         running = null
