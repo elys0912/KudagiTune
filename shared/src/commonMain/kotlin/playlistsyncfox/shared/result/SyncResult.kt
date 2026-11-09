@@ -61,6 +61,8 @@ data class SyncResult(
     val removalSkipped: Boolean,
     val keyMismatch: Boolean?,
     val errorDetail: ErrorDetail?,
+    /** マニフェストの版違い（`ManifestReadResult.VersionMismatch`）で止まったとき真。壊れたマニフェストでは偽。 */
+    val manifestVersionMismatch: Boolean = false,
 )
 
 /** P4 の本文の元。曲名を含めない。 */
