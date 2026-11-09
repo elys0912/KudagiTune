@@ -69,6 +69,16 @@ class ContentDigestTest {
     }
 
     @Test
+    fun `content_hash だけを変えると指紋は変わる`() {
+        val withoutHash = sampleManifest(tracks = listOf(track(idA)))
+        val withHash = sampleManifest(tracks = listOf(track(idA).copy(contentHash = "abc")))
+        val withOtherHash = sampleManifest(tracks = listOf(track(idA).copy(contentHash = "abd")))
+
+        assertNotEquals(digest(withoutHash), digest(withHash))
+        assertNotEquals(digest(withHash), digest(withOtherHash))
+    }
+
+    @Test
     fun `TS-11 プレイリストの track_ids の順を入れ替えると指紋は変わる`() {
         val tracks = listOf(track(idA), track(idB))
         val forward = sampleManifest(tracks, listOf(playlist("C000000000000001", trackIds = listOf(idA, idB))))

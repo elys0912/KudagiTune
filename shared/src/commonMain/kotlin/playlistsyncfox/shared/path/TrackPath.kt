@@ -3,6 +3,12 @@ package playlistsyncfox.shared.path
 import playlistsyncfox.shared.diff.SyncRecord
 import playlistsyncfox.shared.manifest.ManifestTrack
 
+/** 曲名が空になったときの代わりの名前。 */
+private const val UNTITLED = "Untitled"
+
+// 全文の接尾辞 ` [` ＋ `persistent_id` の 16 桁 ＋ `]` のバイト数。接尾辞の最長
+private const val MAX_SUFFIX_BYTES = 2 + 16 + 1
+
 /**
  * 衝突の前のパスの候補。[title] は長さを切る前の曲名。接尾辞を付けるときに、切る長さを変えて作り直すために持つ。
  * [extension] は先頭の `.` を含み、拡張子が無いときは空。
@@ -23,7 +29,7 @@ fun buildTrackCandidate(track: ManifestTrack, maxBytes: Int): PathParts {
     return PathParts(
         artistFolder = folderName(artist, "Unknown Artist", maxBytes),
         albumFolder = folderName(track.album.orEmpty(), "Unknown Album", maxBytes),
-        title = sanitizeElement(track.name.orEmpty(), "Untitled"),
+        title = sanitizeElement(track.name.orEmpty(), UNTITLED),
         extension = extensionPart(track.extension, maxBytes),
         maxBytes = maxBytes,
     )
@@ -32,7 +38,7 @@ fun buildTrackCandidate(track: ManifestTrack, maxBytes: Int): PathParts {
 /** `<アーティスト>/<アルバム>/<ステム><接尾辞>.<拡張子>`。接尾辞は空を許す。 */
 fun assemblePath(parts: PathParts, suffix: String): String {
     val stemBytes = maxOf(0, parts.maxBytes - utf8Length(parts.extension) - utf8Length(suffix))
-    val stem = truncateToBytes(parts.title, stemBytes, "Untitled")
+    val stem = truncateToBytes(parts.title, stemBytes, UNTITLED)
 
     return "${parts.artistFolder}/${parts.albumFolder}/$stem$suffix${parts.extension}"
 }
@@ -102,6 +108,7 @@ private fun extensionPart(extension: String, maxBytes: Int): String {
     val sanitized = sanitizeElement(extension, "")
     if (sanitized.isEmpty()) return ""
 
-    // 異常に長い拡張子でも、曲名のステムの上限が負にならないようにする
-    return "." + truncateToBytes(sanitized, maxBytes - 1, "")
+    // 異常に長い拡張子でも、ステムが代わりの名前に落ちて全文の接尾辞が付いたときに、要素が maxBytes を超えないようにする
+    val maxExtensionBytes = maxBytes - utf8Length(UNTITLED) - MAX_SUFFIX_BYTES - 1
+    return "." + truncateToBytes(sanitized, maxExtensionBytes, "")
 }

@@ -36,6 +36,13 @@ class TrackPathTest {
     }
 
     @Test
+    fun `TS-49 切った結果が点で終わる名前は末尾の点が削られる`() {
+        val parts = candidate(track(a, artist = "a".repeat(V23 - 1) + ".b"))
+
+        assertEquals("a".repeat(V23 - 1), parts.artistFolder)
+    }
+
+    @Test
     fun `TS-49 切った結果が空になる名前は代わりの文字列になる`() {
         val parts = buildTrackCandidate(track(a, artist = "😀😀"), 3)
 
@@ -48,6 +55,26 @@ class TrackPathTest {
 
         assertTrue(lastSegmentBytes(assemblePath(parts, "")) <= V23)
         assertTrue(lastSegmentBytes(assemblePath(parts, " [AAAAAAAA]")) <= V23)
+    }
+
+    @Test
+    fun `TS-50 拡張子が上限ちょうどならそのまま残り 1 バイト超えると上限に切れる`() {
+        // 上限は V23 から、代わりの名前 Untitled の 8 バイト、全文の接尾辞の 19 バイト、先頭の点の 1 バイトを引いた値
+        val maxExtensionBytes = V23 - 8 - 19 - 1
+
+        val exact = candidate(track(a, extension = "e".repeat(maxExtensionBytes)))
+        val over = candidate(track(a, extension = "e".repeat(maxExtensionBytes + 1)))
+
+        assertEquals("." + "e".repeat(maxExtensionBytes), exact.extension)
+        assertEquals("." + "e".repeat(maxExtensionBytes), over.extension)
+    }
+
+    @Test
+    fun `TS-50 拡張子が異常に長く曲名が空でも全文の接尾辞を付けた要素は上限以内に収まる`() {
+        val parts = candidate(track(a, name = null, extension = "e".repeat(V23 * 2)))
+
+        assertTrue(lastSegmentBytes(assemblePath(parts, "")) <= V23)
+        assertTrue(lastSegmentBytes(assemblePath(parts, suffixOf(a))) <= V23)
     }
 
     @Test

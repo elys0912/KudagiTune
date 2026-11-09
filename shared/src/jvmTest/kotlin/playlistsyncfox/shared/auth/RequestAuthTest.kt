@@ -2,6 +2,8 @@ package playlistsyncfox.shared.auth
 
 import playlistsyncfox.shared.crypto.SigningKeyRef
 import playlistsyncfox.shared.crypto.TestCrypto
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -176,5 +178,29 @@ class RequestAuthTest {
         assertEquals(false, store.recordIfNew(DEVICE_ID, "c", 0))
         assertEquals(false, store.recordIfNew(DEVICE_ID, "b", 0))
         assertTrue(store.recordIfNew(DEVICE_ID, "a", 0))
+    }
+
+    @Test
+    fun `同じ記録を複数のスレッドが同時に追加しても記録ごとに真を返すのは 1 回だけになる`() {
+        val store = NonceStore()
+        val threadCount = 8
+        val nonceCount = 1_000
+        val startSignal = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(threadCount)
+
+        try {
+            // 全スレッドが同じ nonce を同じ順で追加する。どのスレッドが先でも、各 nonce の最初の 1 回だけが真になる
+            val trueCounts = (1..threadCount).map {
+                executor.submit<Int> {
+                    startSignal.await()
+                    (1..nonceCount).count { store.recordIfNew(DEVICE_ID, "nonce-$it", 0) }
+                }
+            }
+            startSignal.countDown()
+
+            assertEquals(nonceCount, trueCounts.sumOf { it.get() })
+        } finally {
+            executor.shutdownNow()
+        }
     }
 }

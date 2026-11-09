@@ -184,7 +184,8 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
 
             var trackId: Long? = null
             eachEntry { key ->
-                if (key == "Track ID") trackId = integer(readValue()) else skipElement()
+                // 値が不正でも、ここでは数えない。Track ID を取れない項目として、下で 1 回だけ数える
+                if (key == "Track ID") trackId = (readValue() as? Value.Integer)?.value else skipElement()
             }
             val found = trackId
             if (found != null) trackIds += found else malformedEntries++
@@ -208,6 +209,8 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
                 unidentifiedTracks += UnidentifiedTrack(name = text(values["Name"]), artist = text(values["Artist"]))
                 continue
             }
+            // 落とした重複の Track ID も、残した曲への参照として扱う
+            refsByTrackId[trackId] = TrackRef.Identified(persistentId)
             if (!seenPersistentIds.add(persistentId)) {
                 duplicatePersistentIds++
                 continue
@@ -215,14 +218,13 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
 
             val track = buildTrack(persistentId, values)
             (track.location as? TrackLocation.Undecodable)?.let { locationFailures.merge(it.failure, 1, Int::plus) }
-            refsByTrackId[trackId] = TrackRef.Identified(persistentId)
             tracks += track
         }
 
         var droppedTrackRefs = 0
         val playlists = mutableListOf<LibraryPlaylist>()
         for (raw in rawPlaylists) {
-            if (raw.persistentId == null) {
+            if (raw.persistentId == null || !persistentIdPattern.matches(raw.persistentId)) {
                 malformedEntries++
                 continue
             }
