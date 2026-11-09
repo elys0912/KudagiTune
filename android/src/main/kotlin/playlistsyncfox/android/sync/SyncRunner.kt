@@ -2,13 +2,10 @@ package playlistsyncfox.android.sync
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import playlistsyncfox.android.db.Pairing
@@ -43,8 +40,6 @@ import playlistsyncfox.shared.result.ErrorDetail
 import playlistsyncfox.shared.result.ErrorScope
 import playlistsyncfox.shared.result.FileMissingReason
 import playlistsyncfox.shared.result.KeyMismatchCause
-import playlistsyncfox.shared.result.ProgressReport
-import playlistsyncfox.shared.result.ProgressStage
 import playlistsyncfox.shared.result.StoragePhase
 import playlistsyncfox.shared.result.SyncError
 import playlistsyncfox.shared.result.SyncOutcome
@@ -56,7 +51,6 @@ import playlistsyncfox.shared.result.hasMore
 import playlistsyncfox.shared.result.mayRemove
 import playlistsyncfox.shared.result.toUnplayable
 import playlistsyncfox.shared.result.WriteStep
-import playlistsyncfox.shared.result.writeProgressReport
 
 /**
  * 同期の実行（X6-3 の手順）。判断は shared の関数、OS の呼び出しは [MediaWriter]・[SyncApi] に任せ、
@@ -70,11 +64,11 @@ class SyncRunner(private val env: SyncEnvironment) {
         }
         val opened = mutableListOf<SyncApi>()
         // P8 は同期の手順とは別の流れで送る（X6-3）。実行の終わりで必ず片付ける
-        val sender = CoroutineScope(currentCoroutineContext() + SupervisorJob())
+        val reporter = ProgressReporter(CoroutineScope(currentCoroutineContext() + SupervisorJob()), env.now)
         try {
-            return Execution(input, opened, sender).start()
+            return Execution(input, opened, reporter).start()
         } finally {
-            sender.cancel()
+            reporter.close()
             opened.forEach { runCatching { it.close() } }
             // 完了（Finished）を出さずに終えたときは、どの経路でも進行状態を消す（X6-1）。出した完了は S4 が読むので残す
             if (env.progress.value?.stage != SyncStage.Finished) env.progress.value = null
@@ -112,7 +106,7 @@ class SyncRunner(private val env: SyncEnvironment) {
     private inner class Execution(
         private val input: RunInput,
         private val opened: MutableList<SyncApi>,
-        private val sender: CoroutineScope,
+        private val reporter: ProgressReporter,
     ) {
         private val trigger = input.trigger
         private val triggerText = if (trigger == SyncTrigger.Manual) SyncRun.TRIGGER_MANUAL else SyncRun.TRIGGER_AUTO
@@ -154,12 +148,6 @@ class SyncRunner(private val env: SyncEnvironment) {
         // 曲ごとの行と、転送中の曲のこの実行での転送量（done_bytes に足す。X6-3 の SyncProgress）
         private var rows: List<TrackRow> = emptyList()
         private var inFlightBytes = 0L
-
-        // P8 の送信の状態（X6-3。同じ stage は V28 以上あけ、送っている途中は送らない）
-        private var progressSentAt: Long? = null
-        private var progressSentStage: ProgressStage? = null
-        @Volatile private var progressSending = false
-        private var progressClosed = false
 
         // 端末が選んだプレイリストの ID。P3・P1 の本文で渡す（D15）。実行の始めに 1 回読み、実行の間は変えない
         private var selectedIds: List<String> = emptyList()
@@ -818,8 +806,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             // 11. P4 で報告する。失敗しても結果に影響しない。報告できなかった行は次回の同期で再送する
             var saved = finished
             // P8 は P4 の前まで。送っている途中のものも片付ける
-            progressClosed = true
-            sender.cancel()
+            reporter.close()
             val client = api
             if (client != null) {
                 val body = reportBody(finished)
@@ -893,38 +880,7 @@ class SyncRunner(private val env: SyncEnvironment) {
         private fun publish(stage: SyncStage, title: String? = null, shortage: Long? = null) {
             val progress = progressNow(stage, title, shortage)
             env.progress.value = progress
-            offerProgress(progress)
-        }
-
-        /** P8 を送る候補（X6-3）。P3 が通った後から P4 の前まで。失敗は無視し、再送せず、T3 に残さない。 */
-        private fun offerProgress(progress: SyncProgress) {
-            val client = api ?: return
-            if (progressClosed || progressSending) return
-            val stage = when (progress.stage) {
-                SyncStage.Connecting -> ProgressStage.Connecting
-                SyncStage.Manifest -> ProgressStage.Manifest
-                SyncStage.Diff -> ProgressStage.Diff
-                SyncStage.Capacity -> ProgressStage.Capacity
-                SyncStage.Transfer -> ProgressStage.Transfer
-                SyncStage.Playlist -> ProgressStage.Playlist
-                SyncStage.Finished -> return
-            }
-            val now = env.now()
-            val last = progressSentAt
-            if (stage == progressSentStage && last != null && now - last < SyncValues.NOTIFICATION_INTERVAL_MS) return
-            progressSentAt = now
-            progressSentStage = stage
-            progressSending = true
-            val body = writeProgressReport(ProgressReport(stage, progress.doneCount, progress.totalCount, progress.doneBytes, progress.totalBytes))
-            sender.launch(start = CoroutineStart.UNDISPATCHED) {
-                try {
-                    client.progress(body)
-                } catch (_: Exception) {
-                    // 失敗しても同期は止めない
-                } finally {
-                    progressSending = false
-                }
-            }
+            reporter.offer(api, progress)
         }
 
         private fun transportOf(kind: String?): Transport? = when (kind) {
