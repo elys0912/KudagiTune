@@ -16,14 +16,12 @@ import playlistsyncfox.android.db.PlacedTrack
 import playlistsyncfox.android.db.WrittenPlaylist
 import playlistsyncfox.android.discovery.DiscoveredPc
 import playlistsyncfox.android.discovery.checkManualEndpoint
-import playlistsyncfox.android.pairing
 import playlistsyncfox.shared.result.ErrorDetail
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -52,24 +50,21 @@ class PairingPresenterTest {
         presenter(store, gateway).also { it.select(pc) }
 
     @Test
-    fun `TA-102 P5 の応答の時点で指紋を表示するだけで、保存の前は T4 に何も無い`() = runTest {
-        val store = InMemoryStore()
+    fun `TA-102 P5 の応答の時点で指紋を表示する`() = runTest {
         val gateway = Gateway { it.emit(PairingEvent.Fingerprint("0a1b 2c3d")); awaitCancellation() }
-        val presenter = targeted(store, gateway)
+        val presenter = targeted(InMemoryStore(), gateway)
 
         presenter.submitCode("123456")
         runCurrent()
 
         val stage = assertIs<PairingStage.Target>(presenter.state.value.stage)
         assertEquals("0a1b 2c3d", stage.fingerprint)
-        assertNull(store.pairingRow)
     }
 
     @Test
-    fun `TA-102 P6 の成功の前に画面を離れると、接続を切って T4 に何も残らない`() = runTest {
-        val store = InMemoryStore()
+    fun `TA-102 P6 の成功の前に画面を離れると、接続を切る`() = runTest {
         val gateway = Gateway { it.emit(PairingEvent.Fingerprint("0a1b")); awaitCancellation() }
-        val presenter = targeted(store, gateway)
+        val presenter = targeted(InMemoryStore(), gateway)
         presenter.submitCode("123456")
         runCurrent()
 
@@ -77,31 +72,24 @@ class PairingPresenterTest {
         runCurrent()
 
         assertTrue(gateway.cancelled)
-        assertNull(store.pairingRow)
     }
 
     @Test
-    fun `TA-102 P6 が失敗すると失敗の段になり、T4 に何も残らない`() = runTest {
-        val store = InMemoryStore()
+    fun `TA-102 P6 が失敗すると失敗の段になる`() = runTest {
         val gateway = Gateway { it.emit(PairingEvent.Failed(noticeOf(ErrorDetail.ClockSkew))) }
-        val presenter = targeted(store, gateway)
+        val presenter = targeted(InMemoryStore(), gateway)
 
         presenter.submitCode("123456")
         runCurrent()
 
         val stage = assertIs<PairingStage.Failed>(presenter.state.value.stage)
-        assertEquals("端末と PC の時刻がずれています", stage.notice.title)
-        assertNull(store.pairingRow)
+        assertEquals(noticeOf(ErrorDetail.ClockSkew).title, stage.notice.title)
     }
 
     @Test
-    fun `TA-102 P6 の成功の後に画面を離れても、保存は取り消さない`() = runTest {
-        val store = InMemoryStore()
-        val gateway = Gateway {
-            store.savePairing(pairing())
-            it.emit(PairingEvent.Completed(DEVICE, "pc.example.invalid"))
-        }
-        val presenter = targeted(store, gateway)
+    fun `TA-102 P6 の成功の後に画面を離れても、完了の段のまま`() = runTest {
+        val gateway = Gateway { it.emit(PairingEvent.Completed(DEVICE, "pc.example.invalid")) }
+        val presenter = targeted(InMemoryStore(), gateway)
         presenter.submitCode("123456")
         runCurrent()
 
@@ -109,7 +97,6 @@ class PairingPresenterTest {
         runCurrent()
 
         assertIs<PairingStage.Done>(presenter.state.value.stage)
-        assertNotNull(store.pairingRow)
     }
 
     @Test

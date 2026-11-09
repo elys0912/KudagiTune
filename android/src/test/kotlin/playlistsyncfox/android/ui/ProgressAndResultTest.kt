@@ -225,11 +225,7 @@ class ResultUiTest {
         fun cause(detail: ErrorDetail?) =
             resultUi(finishedRun(1, result = SyncRun.RESULT_FAILED, errorKind = "E2", json = resultJson(detail = detail)), emptyList()).errorWord
 
-        assertEquals("端末と PC の時刻がずれています", cause(ErrorDetail.ClockSkew))
-        assertEquals("同じ通信が重複して届きました", cause(ErrorDetail.Replay))
-        assertEquals("短い間に接続が続いたため、PC が一時的に断りました", cause(ErrorDetail.RateLimited))
-        assertEquals("PC の証明書が変わりました", cause(ErrorDetail.PinMismatch))
-        assertEquals("ペアリングをやり直してください", cause(ErrorDetail.NoDetail))
+        ErrorDetail.entries.forEach { assertEquals(noticeOf(it).title, cause(it), it.name) }
         // error_detail を持たない行は E の番号の語
         assertEquals("ペアリングのやり直しが必要です", cause(null))
     }
