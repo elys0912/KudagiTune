@@ -6,7 +6,9 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RequestAuthTest {
@@ -161,7 +163,7 @@ class RequestAuthTest {
         val wrongSignature = verify(request, signature = "AAAA").failure()
 
         assertEquals(wrongSignature, unregistered)
-        assertEquals(null, unregistered.detail)
+        assertNull(unregistered.detail)
     }
 
     @Test
@@ -187,7 +189,7 @@ class RequestAuthTest {
         store.recordIfNew(DEVICE_ID, "kept", 0)
         store.recordIfNew(DEVICE_ID, "other", 2 * tolerance)
 
-        assertEquals(false, store.recordIfNew(DEVICE_ID, "kept", 2 * tolerance))
+        assertFalse(store.recordIfNew(DEVICE_ID, "kept", 2 * tolerance))
     }
 
     @Test
@@ -195,8 +197,8 @@ class RequestAuthTest {
         val store = NonceStore(limit = 2)
         listOf("a", "b", "c").forEach { store.recordIfNew(DEVICE_ID, it, 0) }
 
-        assertEquals(false, store.recordIfNew(DEVICE_ID, "c", 0))
-        assertEquals(false, store.recordIfNew(DEVICE_ID, "b", 0))
+        assertFalse(store.recordIfNew(DEVICE_ID, "c", 0))
+        assertFalse(store.recordIfNew(DEVICE_ID, "b", 0))
         assertTrue(store.recordIfNew(DEVICE_ID, "a", 0))
     }
 
@@ -205,23 +207,13 @@ class RequestAuthTest {
         val store = NonceStore()
         val threadCount = 8
         val nonceCount = 1_000
-        val startSignal = CountDownLatch(1)
-        val executor = Executors.newFixedThreadPool(threadCount)
 
-        try {
-            // 全スレッドが同じ nonce を同じ順で追加する。どのスレッドが先でも、各 nonce の最初の 1 回だけが真になる
-            val trueCounts = (1..threadCount).map {
-                executor.submit<Int> {
-                    startSignal.await()
-                    (1..nonceCount).count { store.recordIfNew(DEVICE_ID, "nonce-$it", 0) }
-                }
-            }
-            startSignal.countDown()
-
-            assertEquals(nonceCount, trueCounts.sumOf { it.get() })
-        } finally {
-            executor.shutdownNow()
+        // 全スレッドが同じ nonce を同じ順で追加する。どのスレッドが先でも、各 nonce の最初の 1 回だけが真になる
+        val trueCounts = runConcurrently(threadCount) { _ ->
+            (1..nonceCount).count { store.recordIfNew(DEVICE_ID, "nonce-$it", 0) }
         }
+
+        assertEquals(nonceCount, trueCounts.sum())
     }
 
     @Test
