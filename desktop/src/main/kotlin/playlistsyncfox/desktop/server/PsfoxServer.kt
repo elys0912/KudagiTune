@@ -30,6 +30,7 @@ import io.ktor.util.AttributeKey
 import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.readByteArray
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import playlistsyncfox.desktop.DesktopValues
@@ -246,6 +247,14 @@ private fun decodeBase64Url(text: String): ByteArray? = try {
 /** 検査 1 で読んだ本文を文字列にしたもの。 */
 private fun ApplicationCall.bodyText(): String = attributes[BodyKey].decodeToString()
 
+/** 本文を JSON として読む。読めなければ 400 を返して null。本文の中身は応答にもログにも出さない。 */
+private suspend fun <T> decodeBody(call: ApplicationCall, serializer: KSerializer<T>): T? = try {
+    json.decodeFromString(serializer, call.bodyText())
+} catch (_: SerializationException) {
+    call.respond(HttpStatusCode.BadRequest)
+    null
+}
+
 private suspend fun ApplicationCall.fail(status: HttpStatusCode, errorNumber: Int, detail: String? = null) =
     respondText(json.encodeToString(ErrorBody.serializer(), ErrorBody("E$errorNumber", detail)), ContentType.Application.Json, status)
 
@@ -300,11 +309,7 @@ private suspend fun sendTrack(env: ServerEnv, call: ApplicationCall) {
 
 /** P4。必須項目の欠けと型の違いは 400（E なし）で保存しない。保存済みより古い報告は上書きせず 204。 */
 private suspend fun saveReport(env: ServerEnv, call: ApplicationCall) {
-    val report = try {
-        json.decodeFromString(LastSync.serializer(), call.bodyText())
-    } catch (_: SerializationException) {
-        return call.respond(HttpStatusCode.BadRequest)
-    }
+    val report = decodeBody(call, LastSync.serializer()) ?: return
     val startedAt = parseReportTime(report.startedAt)
     if (startedAt == null || parseReportTime(report.finishedAt) == null ||
         report.failureCounts.keys.any { !failureKeyPattern.matches(it) }
@@ -346,11 +351,7 @@ private fun parseReportTime(text: String): Instant? =
 
 /** P5。失敗の順と本文は X4-2-2。 */
 private suspend fun pairingStart(env: ServerEnv, call: ApplicationCall) {
-    val request = try {
-        json.decodeFromString(PairingStartRequest.serializer(), call.bodyText())
-    } catch (_: SerializationException) {
-        return call.respond(HttpStatusCode.BadRequest)
-    }
+    val request = decodeBody(call, PairingStartRequest.serializer()) ?: return
     val x = decodeBase64Url(request.x)
     if (x == null || !uuidPattern.matches(request.deviceId)) return call.respond(HttpStatusCode.BadRequest)
 
@@ -365,11 +366,7 @@ private suspend fun pairingStart(env: ServerEnv, call: ApplicationCall) {
 
 /** P6。成功の応答の前に、K1 の保存と `devices` への追加を済ませる（shared が保存を呼んでから MAC_p を返す）。 */
 private suspend fun pairingConfirm(env: ServerEnv, call: ApplicationCall) {
-    val request = try {
-        json.decodeFromString(PairingConfirmRequest.serializer(), call.bodyText())
-    } catch (_: SerializationException) {
-        return call.respond(HttpStatusCode.BadRequest)
-    }
+    val request = decodeBody(call, PairingConfirmRequest.serializer()) ?: return
     val macD = decodeBase64Url(request.macD)
     if (macD == null || !uuidPattern.matches(request.deviceId)) return call.respond(HttpStatusCode.BadRequest)
 
