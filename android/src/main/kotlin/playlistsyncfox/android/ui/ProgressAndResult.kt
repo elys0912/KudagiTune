@@ -33,7 +33,6 @@ data class ProgressUiState(
     val totalCount: Int,
     val doneBytes: Long,
     val totalBytes: Long,
-    val currentTitle: String?,
     /** 容量不足の不足分。`ACTION_MANAGE_STORAGE` の案内を添える。 */
     val shortageBytes: Long?,
     val nearLimitNote: String?,
@@ -107,7 +106,6 @@ fun progressUi(progress: SyncProgress) = ProgressUiState(
     totalCount = progress.totalCount,
     doneBytes = progress.doneBytes,
     totalBytes = progress.totalBytes,
-    currentTitle = progress.currentTitle.takeIf { progress.stage == SyncStage.Transfer },
     shortageBytes = progress.shortageBytes,
     nearLimitNote = "実行時間の上限が近づいています。残りは次の同期で続けます".takeIf { progress.nearLimit },
     notice = progress.errorDetail?.let(::noticeOf),
@@ -151,9 +149,9 @@ const val VERSION_MISMATCH_NOTICE = "PC と端末のアプリの版を合わせ�
 /** V21 結果の一覧の表示件数の上限。 */
 const val ISSUE_LIMIT = 100
 
-private fun issueList(lines: List<IssueLine>, limit: Int) = IssueList(lines.take(limit), (lines.size - limit).coerceAtLeast(0))
+private fun issueList(lines: List<IssueLine>) = IssueList(lines.take(ISSUE_LIMIT), (lines.size - ISSUE_LIMIT).coerceAtLeast(0))
 
-fun resultUi(run: SyncRun, issues: List<RunIssue>, limit: Int = ISSUE_LIMIT): ResultUiState {
+fun resultUi(run: SyncRun, issues: List<RunIssue>): ResultUiState {
     val stored = run.resultJson?.takeIf { it.isNotEmpty() }?.let { runCatching { decodeResult(it) }.getOrNull() }
     // E2 は原因欄も詳細も `error_detail` の語で出す（S3 と同じ関数）。`error_detail` が無い行は E の番号の語
     val e2Notice = stored?.errorDetail.takeIf { run.errorKind == "E2" }?.let(::noticeOf)
@@ -172,14 +170,12 @@ fun resultUi(run: SyncRun, issues: List<RunIssue>, limit: Int = ISSUE_LIMIT): Re
         excluded = issueList(
             issues.filter { it.kind == RunIssue.KIND_EXCLUDED }
                 .map { IssueLine(it.title, listOfNotNull(it.artist, reasonWord(it.reason).takeIf(String::isNotEmpty)).joinToString(" / ")) },
-            limit,
         ),
         unplayable = issueList(
             issues.filter { it.kind == RunIssue.KIND_UNPLAYABLE }
                 .map { IssueLine(it.title, listOfNotNull(it.format, reasonWord(it.reason).takeIf(String::isNotEmpty)).joinToString(" / ")) },
-            limit,
         ),
-        failed = issueList(issues.filter { it.kind == RunIssue.KIND_FAILED }.map { IssueLine(it.title, it.errorKind.orEmpty()) }, limit),
+        failed = issueList(issues.filter { it.kind == RunIssue.KIND_FAILED }.map { IssueLine(it.title, it.errorKind.orEmpty()) }),
     )
 }
 

@@ -44,15 +44,11 @@ class ProgressTest {
     }
 
     @Test
-    fun `TA-105 曲名は transfer のときだけ出し、容量不足の不足分と E2 の案内はそのまま渡す`() {
-        val transfer = progressUi(SyncProgress(SyncStage.Transfer, currentTitle = "Song 1"))
-        val diff = progressUi(SyncProgress(SyncStage.Diff, currentTitle = "Song 1"))
+    fun `TA-105 容量不足の不足分と E2 の案内はそのまま渡す`() {
         val finished = progressUi(SyncProgress(SyncStage.Finished, shortageBytes = 100, errorDetail = ErrorDetail.ClockSkew))
 
-        assertEquals("Song 1", transfer.currentTitle)
-        assertNull(diff.currentTitle)
         assertEquals(100, finished.shortageBytes)
-        assertEquals("端末と PC の時刻がずれています", finished.notice?.title)
+        assertEquals(noticeOf(ErrorDetail.ClockSkew).title, finished.notice?.title)
     }
 }
 
