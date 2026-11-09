@@ -92,7 +92,7 @@ sealed interface PressOutcome {
     /** 保存先の SD が見つからない。同期を始めず案内する。本体へ切り替えない（D16）。 */
     data object StorageMissing : PressOutcome
 
-    /** 通知の許可の画面を出した。同期は許可の結果の後に、もう一度押す形で始める。 */
+    /** 通知の許可の画面を出した。同期は許可の結果の後に、画面側（MainActivity）が `syncPressed` を呼んで始める。 */
     data object AwaitingNotificationPermission : PressOutcome
 }
 
