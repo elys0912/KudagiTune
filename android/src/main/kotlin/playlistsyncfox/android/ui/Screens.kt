@@ -21,6 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -172,8 +173,8 @@ private fun RemovalConfirm(model: AppViewModel) {
 @Composable
 private fun PairingScreen(model: AppViewModel) {
     val state by model.pairing.state.collectAsState()
-    var manual by remember { mutableStateOf("") }
-    var code by remember { mutableStateOf("") }
+    var manual by rememberSaveable { mutableStateOf("") }
+    var code by rememberSaveable { mutableStateOf("") }
     when (val stage = state.stage) {
         PairingStage.Discovering -> {
             Label("PC を探しています", bold = true)
@@ -400,7 +401,7 @@ private fun Cleanup(items: List<StoredFile>, actions: ScreenActions) {
         Label("整理する曲はありません")
         return
     }
-    var selected by remember { mutableStateOf(emptySet<String>()) }
+    var selected by rememberSaveable { mutableStateOf(emptySet<String>()) }
     Label("${items.size} 件")
     items.forEach { file ->
         val on = file.uri in selected
@@ -414,8 +415,8 @@ private fun Cleanup(items: List<StoredFile>, actions: ScreenActions) {
 @Composable
 private fun LogScreen(model: AppViewModel, actions: ScreenActions) {
     val lines by model.logLines.collectAsState()
-    var confirmShare by remember { mutableStateOf(false) }
-    var confirmClear by remember { mutableStateOf(false) }
+    var confirmShare by rememberSaveable { mutableStateOf(false) }
+    var confirmClear by rememberSaveable { mutableStateOf(false) }
     Action("共有する") { confirmShare = true }
     Action("消去する") { confirmClear = true }
     if (confirmShare) {
@@ -431,9 +432,9 @@ private fun LogScreen(model: AppViewModel, actions: ScreenActions) {
 @Composable
 private fun LicensesScreen(model: AppViewModel, actions: ScreenActions) {
     val entries = remember { actions.licenses() }
-    var open by remember { mutableStateOf<LicenseEntry?>(null) }
+    var openIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     Back(model)
-    val chosen = open
+    val chosen = openIndex?.let { entries?.getOrNull(it) }
     when {
         entries == null -> Label("ライセンスの一覧を読み込めません")
         chosen != null -> {
@@ -442,8 +443,8 @@ private fun LicensesScreen(model: AppViewModel, actions: ScreenActions) {
             Label("${chosen.name} ${chosen.version}", bold = true)
             Label(chosen.body)
             texts.forEach { Label(it, mono = true) }
-            Action("一覧へ") { open = null }
+            Action("一覧へ") { openIndex = null }
         }
-        else -> entries.forEach { Action("${it.name} ${it.version}　${it.license}") { open = it } }
+        else -> entries.forEachIndexed { index, entry -> Action("${entry.name} ${entry.version}　${entry.license}") { openIndex = index } }
     }
 }

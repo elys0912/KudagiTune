@@ -44,6 +44,13 @@ sealed interface Screen {
 class AppViewModel(private val graph: AppGraph) : ViewModel() {
     private val store = graph.store
 
+    /**
+     * 権限の拒否の記録。拒否したら、同じ起動の間は再び求めない（X7-4-2 の 4）。
+     * 画面の回転などで Activity が作り直されても消えないよう、Activity でなくここに持つ。
+     */
+    var notificationDenied = false
+    var readDenied = false
+
     private val mutableScreen = MutableStateFlow<Screen>(Screen.Home)
     val screen: StateFlow<Screen> = mutableScreen.asStateFlow()
 

@@ -44,19 +44,16 @@ import playlistsyncfox.android.ui.permissionStep
 class MainActivity : ComponentActivity() {
     private lateinit var model: AppViewModel
 
-    // 拒否の結果は端末内に覚え、同じ起動の間は再び求めない（X7-4-2 の 4）
-    private var notificationDenied = false
-    private var readDenied = false
     private val prefs by lazy { getSharedPreferences("permissions", MODE_PRIVATE) }
 
     private val notificationLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) notificationDenied = true
+        if (!granted) model.notificationDenied = true
         // 拒否でも同期は続ける
         model.syncPressed()
     }
 
     private val readLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) readDenied = true
+        if (!granted) model.readDenied = true
         model.settings.refresh(notificationsAllowed(), if (granted) ReadAccess.Granted else ReadAccess.Denied)
     }
 
@@ -127,7 +124,7 @@ class MainActivity : ComponentActivity() {
             val permission = Manifest.permission.POST_NOTIFICATIONS
             val step = permissionStep(
                 granted = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED,
-                deniedThisLaunch = notificationDenied,
+                deniedThisLaunch = model.notificationDenied,
                 blockedByOs = prefs.getBoolean(KEY_ASKED_NOTIFICATION, false) && !shouldShowRequestPermissionRationale(permission),
             )
             when (step) {
@@ -163,7 +160,7 @@ class MainActivity : ComponentActivity() {
         val permission = readPermission()
         val step = permissionStep(
             granted = readGranted(),
-            deniedThisLaunch = readDenied,
+            deniedThisLaunch = model.readDenied,
             blockedByOs = prefs.getBoolean(KEY_ASKED_READ, false) && !shouldShowRequestPermissionRationale(permission),
         )
         when (step) {

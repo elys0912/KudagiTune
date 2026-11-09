@@ -18,7 +18,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -133,7 +133,7 @@ internal fun Confirm(text: String, ok: String, onOk: () -> Unit, onCancel: () ->
 /** 押すと確認を出し、「ok」で [onConfirmed] を行うボタン。確認を出しているかは中で持つ。 */
 @Composable
 internal fun ConfirmedAction(label: String, prompt: String, ok: String, onConfirmed: () -> Unit) {
-    var asking by remember { mutableStateOf(false) }
+    var asking by rememberSaveable { mutableStateOf(false) }
     Action(label) { asking = true }
     if (asking) {
         Confirm(prompt, ok, { asking = false; onConfirmed() }, { asking = false })
