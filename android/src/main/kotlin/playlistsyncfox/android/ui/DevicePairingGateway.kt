@@ -8,14 +8,13 @@ import playlistsyncfox.android.net.PairingClient
 import playlistsyncfox.android.sync.PairingDraft
 import playlistsyncfox.android.sync.PairingKeeper
 import playlistsyncfox.android.sync.SavedEndpoint
+import playlistsyncfox.android.sync.SyncValues
 import playlistsyncfox.shared.auth.confirmPairing
 import playlistsyncfox.shared.auth.finishPairing
 import playlistsyncfox.shared.auth.startPairing
 import playlistsyncfox.shared.crypto.CryptoProvider
 import playlistsyncfox.shared.crypto.formatFingerprintOfHash
 import java.util.UUID
-
-private const val DEVICE_ID_KEY = "device_id"
 
 private val ConnectFailed = Notice("PC に接続できません", "アドレスが正しいか、PC でアプリが起動しているかを確認して、やり直してください", "接続失敗", rePair = false)
 private val BadReply = Notice("PC からの応答を読み取れません", "やり直してください", "応答の形", rePair = false)
@@ -41,7 +40,7 @@ class DevicePairingGateway(
     }
 
     private suspend fun execute(client: PairingClient, target: PairingTarget, code: String, emit: suspend (PairingEvent) -> Unit) {
-        val deviceId = store.setting(DEVICE_ID_KEY) ?: UUID.randomUUID().toString().also { store.putSetting(DEVICE_ID_KEY, it) }
+        val deviceId = store.setting(SyncValues.DEVICE_ID_KEY) ?: UUID.randomUUID().toString().also { store.putSetting(SyncValues.DEVICE_ID_KEY, it) }
         val initiation = startPairing(crypto, deviceId, code)
 
         val reply = when (val call = client.start(deviceId, deviceName, initiation.x.encoded)) {

@@ -85,7 +85,16 @@ class AppGraph(val application: Application) {
     /** 保存先のボリューム名。T7 に無ければ本体。 */
     suspend fun storageVolume(): String = store.setting(SyncValues.STORAGE_VOLUME_KEY) ?: SyncValues.VOLUME_PRIMARY
 
+    /** 整理（S5）に使う書き込み役。ペアリングの解除の後も整理できるよう、T4 が無ければ T7 の `device_id` で作る。 */
+    suspend fun cleanupWriter(): MediaWriter {
+        val deviceId = store.pairing()?.deviceId ?: store.setting(SyncValues.DEVICE_ID_KEY).orEmpty()
+        return mediaWriter(app, storageVolume(), deviceId)
+    }
+
     fun environmentFactory() = SyncEnvironmentFactory { context, hooks -> environment(context, hooks) }
+
+    private fun mediaWriter(context: Context, volume: String, deviceId: String) =
+        MediaWriter(store, ResolverMediaStoreFiles(context, volume), deviceId, System::currentTimeMillis)
 
     private fun environment(context: Context, hooks: WorkerHooks): SyncEnvironment {
         val pairing = runBlocking(Dispatchers.IO) { store.pairing() }
@@ -94,7 +103,7 @@ class AppGraph(val application: Application) {
         val volume = runBlocking(Dispatchers.IO) { storageVolume() }
         return SyncEnvironment(
             store = store,
-            writer = MediaWriter(store, ResolverMediaStoreFiles(context, volume), pairing?.deviceId.orEmpty(), System::currentTimeMillis),
+            writer = mediaWriter(context, volume, pairing?.deviceId.orEmpty()),
             apis = apis,
             lan = NsdLanResolver(discovery),
             aliasExists = { vault.exists(it) },

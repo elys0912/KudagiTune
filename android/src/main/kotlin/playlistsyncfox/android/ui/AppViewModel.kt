@@ -17,8 +17,6 @@ import playlistsyncfox.android.AppGraph
 import playlistsyncfox.android.discovery.checkManualEndpoint
 import playlistsyncfox.android.log.LogEntry
 import playlistsyncfox.android.notify.SyncNotifications
-import playlistsyncfox.android.storage.MediaWriter
-import playlistsyncfox.android.storage.ResolverMediaStoreFiles
 import playlistsyncfox.android.sync.SyncServices
 import playlistsyncfox.android.sync.SyncValues
 
@@ -199,7 +197,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
             val cleanup = when {
                 denied -> CleanupState.Denied
                 !readGranted -> CleanupState.NeedsPermission
-                else -> CleanupState.Found(withContext(Dispatchers.IO) { writer().leftovers() })
+                else -> CleanupState.Found(withContext(Dispatchers.IO) { graph.cleanupWriter().leftovers() })
             }
             settings.value = settingsUi(
                 autoSetting = store.setting(playlistsyncfox.android.sync.SyncScheduler.AUTO_ENABLED_KEY),
@@ -233,7 +231,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     /** 「以前の場所の曲を消す」。確認は画面が済ませてある。同期が走っている間は消さない。 */
     fun deleteRelocated() {
         viewModelScope.launch {
-            val deleted = withContext(Dispatchers.IO) { cleanRelocated(writer(), syncing.value) }
+            val deleted = withContext(Dispatchers.IO) { cleanRelocated(graph.cleanupWriter(), syncing.value) }
             message.value = if (deleted == null) "同期中は削除できません" else "前の保存先から $deleted 件を削除しました"
             settings.update { it?.copy(relocatedCount = store.relocatedUris().size) }
         }
@@ -281,10 +279,5 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun openLicenses() {
         screen.value = Screen.Licenses
-    }
-
-    private suspend fun writer(): MediaWriter {
-        val deviceId = store.pairing()?.deviceId ?: store.setting("device_id").orEmpty()
-        return MediaWriter(store, ResolverMediaStoreFiles(graph.application, graph.storageVolume()), deviceId, System::currentTimeMillis)
     }
 }
