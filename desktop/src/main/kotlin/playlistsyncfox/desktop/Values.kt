@@ -13,6 +13,9 @@ object DesktopValues {
     /** V18：XML の安定待ち。フォルダの消失の後の存在の確認の間隔（V37）にも使う。 */
     val XML_STABLE_WAIT: Duration = Duration.ofSeconds(2)
 
+    /** 要求の時に XML が無いとき、置き換えの欠け（数ミリ秒）を吸収するために 1 回だけ待つ時間（X2-1。review-15）。 */
+    val XML_MISSING_GRACE: Duration = Duration.ofMillis(200)
+
     /** V31：要求の本文の上限。 */
     const val MAX_BODY_BYTES = 4 * 1024 * 1024
 

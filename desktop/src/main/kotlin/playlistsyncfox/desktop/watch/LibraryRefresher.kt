@@ -2,7 +2,9 @@ package playlistsyncfox.desktop.watch
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import playlistsyncfox.desktop.DesktopValues
 import java.time.Instant
 
 /**
@@ -45,17 +47,35 @@ class LibraryRefresher(
         if (xmlModifiedNow() != holder.held.value?.xmlModified) notifyChanged()
     }
 
-    /** P1・P3 の要求の時。更新日時が保持値と違えば、読み直してから戻る。 */
+    /**
+     * P1・P3・P7 の要求の時。XML が無ければ待たずに「読めない」にして戻る（呼び出し側が E4 で応える。X2-1）。
+     * 「読めない」の間は更新日時に関わらず読み直す（X2-3）。それ以外は更新日時が保持値と違えば読み直してから戻る。
+     */
     suspend fun refreshForRequest() {
+        if (!existsAfterGrace()) {
+            holder.apply(LoadOutcome.GaveUp)
+            return
+        }
+
         val cycle = synchronized(lock) {
             when {
                 phase != Phase.Idle -> running
-                xmlModifiedNow() != holder.held.value?.xmlModified -> startCycle(waitForStability = true)
+                needsReload() -> startCycle(waitForStability = true)
                 else -> null
             }
         }
         cycle?.await()
     }
+
+    // 置き換えの数ミリ秒の欠けを吸収するため、無いときだけ 1 回短く待って確かめ直す
+    private suspend fun existsAfterGrace(): Boolean {
+        if (xmlModifiedNow() != null) return true
+        delay(DesktopValues.XML_MISSING_GRACE.toMillis())
+        return xmlModifiedNow() != null
+    }
+
+    private fun needsReload(): Boolean =
+        holder.status.value is XmlStatus.Unreadable || xmlModifiedNow() != holder.held.value?.xmlModified
 
     // 読み取りの最中に通知があれば、安定待ちに戻ってもう 1 回読む
     private fun rereadAfterPass(): Boolean = synchronized(lock) {

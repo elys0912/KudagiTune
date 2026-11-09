@@ -189,7 +189,7 @@ class PcApp(
 
     private fun startXmlWatch(path: Path) {
         xmlWatch?.stop()
-        xmlWatch = XmlWatch(scope, path, holder, watchOpener).also { it.start() }
+        xmlWatch = XmlWatch(scope, path, holder, watchOpener, log).also { it.start() }
     }
 
     // 読めない状態の要求には null を返し、サーバーが E4 で応える。最後に読めた結果で応えない
