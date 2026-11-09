@@ -4,6 +4,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import playlistsyncfox.android.db.SelectedPlaylist
 import playlistsyncfox.android.db.SyncStore
 import playlistsyncfox.android.sync.CatalogResult
@@ -42,6 +44,8 @@ class SelectionPresenter(
     private val mutableStage = MutableStateFlow<SelectionStage>(SelectionStage.Loading)
     val stage: StateFlow<SelectionStage> = mutableStage
 
+    private val changing = Mutex()
+
     fun load() {
         scope.launch {
             mutableStage.value = SelectionStage.Loading
@@ -62,21 +66,24 @@ class SelectionPresenter(
 
     private fun change(next: (List<String>) -> List<String>) {
         scope.launch {
-            val current = mutableStage.value
-            val (nodes, rows) = when (current) {
-                is SelectionStage.Loaded -> current.nodes to current.rows
-                is SelectionStage.Failed -> emptyList<PlaylistNode>() to current.rows
-                SelectionStage.Loading -> return@launch
-            }
-            val kept = rows.associateBy { it.playlistId }
-            val names = nodes.flatMap(::leaves).associate { it.id to it.name }
-            val ids = next(rows.map { it.playlistId })
-            val updated = ids.map { id -> kept[id] ?: SelectedPlaylist(id, names[id].orEmpty(), now()) }
-            store.replaceSelection(updated)
-            mutableStage.value = when (current) {
-                is SelectionStage.Loaded -> current.copy(rows = updated)
-                is SelectionStage.Failed -> current.copy(rows = updated)
-                SelectionStage.Loading -> current
+            // 保存が終わる前に次の変更が来ても、前の変更の結果に重ねる。順に 1 件ずつ行う
+            changing.withLock {
+                val current = mutableStage.value
+                val (nodes, rows) = when (current) {
+                    is SelectionStage.Loaded -> current.nodes to current.rows
+                    is SelectionStage.Failed -> emptyList<PlaylistNode>() to current.rows
+                    SelectionStage.Loading -> return@launch
+                }
+                val kept = rows.associateBy { it.playlistId }
+                val names = nodes.flatMap(::leaves).associate { it.id to it.name }
+                val ids = next(rows.map { it.playlistId })
+                val updated = ids.map { id -> kept[id] ?: SelectedPlaylist(id, names[id].orEmpty(), now()) }
+                store.replaceSelection(updated)
+                mutableStage.value = when (current) {
+                    is SelectionStage.Loaded -> current.copy(rows = updated)
+                    is SelectionStage.Failed -> current.copy(rows = updated)
+                    SelectionStage.Loading -> current
+                }
             }
         }
     }
