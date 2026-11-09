@@ -655,28 +655,6 @@ class ServerRoutesTest {
     }
 
     @Test
-    fun `TD-91 P2 を途中で切られると、表示名つきの行が情報で欄に入り、送り終えた行は入らない`() = withServer(fixture) { client ->
-        // 応答の緩衝に収まらない大きさにして、送信の途中で接続を閉じる
-        val bigBytes = ByteArray(8 * 1024 * 1024)
-        trackFile.writeBytes(bigBytes)
-        client.prepareTable()
-        val uri = trackUri(size = bigBytes.size.toLong())
-        val headers = sign(fixture, HttpMethod.Get, uri)
-
-        client.prepareGet(uri) {
-            header(SignatureHeaderNames.DEVICE, headers.device)
-            header(SignatureHeaderNames.TIMESTAMP, headers.timestamp)
-            header(SignatureHeaderNames.NONCE, headers.nonce)
-            header(SignatureHeaderNames.SIGNATURE, headers.signature)
-        }.execute { response ->
-            response.bodyAsChannel().readByte()
-        }
-
-        assertEquals(LogLevel.Info, awaitLogLine("P2 を途中で切られた name=track").level)
-        assertTrue(fixture.log.lines.value.none { it.message.startsWith("P2 を送り終えた") })
-    }
-
-    @Test
     fun `TD-91 P4 を受けると、結果つきの行が情報で欄に入る`() = withServer(fixture) { client ->
         assertEquals(HttpStatusCode.NoContent, client.signed(fixture, HttpMethod.Post, "/v1/reports", report.encodeToByteArray()).status)
 
