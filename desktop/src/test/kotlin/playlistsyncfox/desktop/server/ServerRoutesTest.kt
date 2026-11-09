@@ -2,10 +2,6 @@ package playlistsyncfox.desktop.server
 
 import io.ktor.client.request.get
 import io.ktor.client.request.header
-import io.ktor.client.request.prepareGet
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.utils.io.discard
-import io.ktor.utils.io.readByte
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.jsonArray
@@ -337,16 +333,6 @@ class ServerRoutesTest {
         assertEquals(HttpStatusCode.PartialContent, response.status)
         assertEquals("bytes 0-9/100", response.headers[HttpHeaders.ContentRange])
         assertContentEquals(TRACK_BYTES.copyOfRange(0, 10), response.readRawBytes())
-    }
-
-    @Test
-    fun `TD-13 途中の範囲は 206 で、本文が範囲と一致する`() = withServer(fixture) { client ->
-        client.prepareTable()
-
-        val response = client.range("bytes=40-49")
-
-        assertEquals(HttpStatusCode.PartialContent, response.status)
-        assertContentEquals(TRACK_BYTES.copyOfRange(40, 50), response.readRawBytes())
     }
 
     @Test

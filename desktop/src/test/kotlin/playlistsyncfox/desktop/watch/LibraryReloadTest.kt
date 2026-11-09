@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import playlistsyncfox.desktop.DesktopValues
 import playlistsyncfox.desktop.EMPTY_LIBRARY_XML
 import playlistsyncfox.desktop.MutableClock
@@ -204,6 +205,52 @@ class LibraryReloadTest {
     }
 
     @Test
+    fun `場所の切り替えで停止した世代の要求が、XML の無い短い待ちの後に戻っても、読めない状態にしない`() = runTest {
+        val holder = holder()
+        holder.apply(LoadOutcome.Loaded(emptyLibrary(), T0))
+        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { XML_BYTES }, stable, holder, { null })
+
+        val request = async { refresher.refreshForRequest() }
+        runCurrent()
+        refresher.stop()
+        request.await()
+
+        assertEquals(XmlStatus.Normal, holder.status.value)
+    }
+
+    @Test
+    fun `場所の切り替えで停止した世代の読み取りが、切り替えの後に終わっても、結果を holder に入れない`() = runTest {
+        var reads = 0
+        val holder = holder()
+        lateinit var refresher: LibraryRefresher
+        val loader = LibraryLoader(xml, log) {
+            reads++
+            refresher.stop()
+            XML_BYTES
+        }
+        refresher = LibraryRefresher(backgroundScope, loader, stable, holder, { null })
+
+        refresher.start()
+        runCurrent()
+
+        assertEquals(1, reads)
+        assertEquals(null, holder.held.value)
+        assertEquals(XmlStatus.Unchecked, holder.status.value)
+    }
+
+    @Test
+    fun `停止した XmlWatch への要求は、待たずに戻り、読み直さない`() = runTest {
+        val holder = holder()
+        val watch = XmlWatch(backgroundScope, xml, holder, { events(null, hang = true) }, log)
+        watch.stop()
+
+        // 戻らなければ、仮想時間の 1 秒で時間切れになる
+        withTimeout(1_000) { watch.refreshForRequest() }
+
+        assertEquals(null, holder.held.value)
+    }
+
+    @Test
     fun `TD-94 読めたときは、読んだ件数の診断を 1 行ログに書く`() = runTest {
         LibraryLoader(xml, log) { XML_BYTES }.load()
 
@@ -309,7 +356,7 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `TD-71 XML の場所が相対パスでも、現在のフォルダを基にした絶対パスのフォルダを監視する`() = runTest {
+    fun `XML の場所が相対パスでも、現在のフォルダを基にした絶対パスのフォルダを監視する`() = runTest {
         val opened = mutableListOf<Path>()
         val opener = DirectoryEventsOpener { dir ->
             opened += dir

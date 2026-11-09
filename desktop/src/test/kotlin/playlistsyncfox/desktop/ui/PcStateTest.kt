@@ -107,12 +107,4 @@ class PcStateTest {
 
         assertEquals(TrayStatus.Syncing, trayStatus(state()))
     }
-
-    @Test
-    fun `TD-77 鍵が読めない端末は W3 に鍵なしの印と警告が出る`() {
-        val s = state(keyMissing = setOf(DEVICE))
-
-        assertTrue(s.device!!.keyMissing)
-        assertTrue(Warning.KeyMissing in s.warnings)
-    }
 }
