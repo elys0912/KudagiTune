@@ -356,7 +356,7 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `TD-71 XML の場所が相対パスでも、現在のフォルダを基にした絶対パスのフォルダを監視する`() = runTest {
+    fun `XML の場所が相対パスでも、現在のフォルダを基にした絶対パスのフォルダを監視する`() = runTest {
         val opened = mutableListOf<Path>()
         val opener = DirectoryEventsOpener { dir ->
             opened += dir

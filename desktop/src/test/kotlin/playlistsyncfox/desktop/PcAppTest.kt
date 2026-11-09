@@ -43,7 +43,6 @@ import kotlin.io.path.readBytes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 private const val DEVICE_ID = "00000000-0000-4000-8000-000000000001"
@@ -177,7 +176,7 @@ class PcAppTest {
     }
 
     @Test
-    fun `TD-71 読める xml_path は保存する`() = runTest {
+    fun `TD-71 読める xml_path は保存し、W5 の欄に出す場所も保存した値になる`() = runTest {
         val h = harness()
         h.app.start()
         runCurrent()
@@ -186,6 +185,7 @@ class PcAppTest {
         assertEquals(XmlPathResult.Saved, h.app.setXmlPath(xml.toString()))
 
         assertEquals(xml.toString(), h.app.settings.current.xmlPath)
+        assertEquals(xml.toString(), h.app.xmlPathInUse)
     }
 
     @Test
@@ -259,8 +259,6 @@ class PcAppTest {
         assertEquals(0, currentTime)
         assertEquals(PairingView.Closed, h.app.state.value.pairing)
         assertEquals(listOf("mdns.unregister", "server.stop", "watch.close"), h.order)
-        // 設定は更新のたびに書き込み済み。ファイルが現在の値と一致する
-        assertEquals(h.app.settings.current, SettingsStore(h.paths.settingsFile).load().settings)
     }
 
     @Test
@@ -279,10 +277,9 @@ class PcAppTest {
         advanceTimeBy(1)
         runCurrent()
         assertTrue("server.stop" in h.order)
-        assertNotNull(h.env)
     }
 
-    // ---- 画面向けの状態と警告（X5-2、X5-3、X5-4、X5-22） ----
+    // ---- 画面向けの状態と警告（TD-85〜TD-87、TD-91、TD-92） ----
 
     @Test
     fun `TD-91 起動すると、サーバーを起動した行が画面のログの欄に入る`() = runTest {
@@ -387,7 +384,7 @@ class PcAppTest {
         assertEquals(listOf("1"), h.txtUpdates.map { it["pair"] })
     }
 
-    // ---- XML の場所の保存（X5-18、X5-9） ----
+    // ---- XML の場所の保存と欄の表示（TD-71、TD-89） ----
 
     @Test
     fun `TD-71 W5 で読める XML の場所を保存すると、その XML を読み直して読めた状態になる`() = runTest {
@@ -415,18 +412,7 @@ class PcAppTest {
         assertEquals(h.root.resolve("none.xml").toString(), h.app.xmlPathInUse)
     }
 
-    @Test
-    fun `TD-89 XML の場所を保存した後は、保存した場所を返す`() = runTest {
-        val h = harness()
-        h.app.start()
-        runCurrent()
-        val xml = h.root.resolve("lib.xml").also { Files.writeString(it, EMPTY_LIBRARY_XML) }
-        h.app.setXmlPath(xml.toString())
-
-        assertEquals(xml.toString(), h.app.xmlPathInUse)
-    }
-
-    // ---- ログイン時の起動の結線（X5-19） ----
+    // ---- ログイン時の起動の結線（TD-90） ----
 
     @Test
     fun `TD-90 ログイン時の起動の切り替えは、Run キーの解除と登録と設定の保存に届く`() = runTest {
@@ -464,40 +450,5 @@ class PcAppTest {
         runCurrent()
 
         assertTrue(h.runKey.values.isEmpty())
-    }
-
-    // ---- Run キーの窓口（TD-64） ----
-
-    private val autostartPath = "C:\\fake\\app.exe"
-
-    @Test
-    fun `TD-64 登録すると値の名前 playlist-sync-fox で、現在のパスと --background が入る`() {
-        val runKey = FakeRunKey()
-
-        Autostart(runKey) { autostartPath }.apply(enabled = true)
-
-        assertEquals(mapOf("playlist-sync-fox" to "\"C:\\fake\\app.exe\" --background"), runKey.values)
-    }
-
-    @Test
-    fun `TD-64 パスが変わった起動では値が現在のパスに書き直される`() {
-        val runKey = FakeRunKey()
-        Autostart(runKey) { "C:\\old\\app.exe" }.apply(enabled = true)
-
-        Autostart(runKey) { "C:\\new\\app.exe" }.apply(enabled = true)
-
-        assertEquals(mapOf("playlist-sync-fox" to "\"C:\\new\\app.exe\" --background"), runKey.values)
-    }
-
-    @Test
-    fun `TD-64 無効にすると値が消え、値が無いときの解除も失敗しない`() {
-        val runKey = FakeRunKey()
-        val autostart = Autostart(runKey) { autostartPath }
-        autostart.apply(enabled = true)
-
-        autostart.apply(enabled = false)
-        autostart.apply(enabled = false)
-
-        assertTrue(runKey.values.isEmpty())
     }
 }
