@@ -15,15 +15,16 @@ import java.time.format.DateTimeFormatter
 
 // S3 同期の進み具合（X7-1-4）と S4 結果（X7-1-5）。
 
-enum class ProgressNav { Stay, ToResult, ToHome }
+enum class ProgressNav { Stay, Started, ToResult, ToHome }
 
 /**
  * S3 の次の遷移。`finished` で S4 へ。同期が動いていなければ S1 へ戻る（通知の古いタップへの備え）。
- * [awaitingStart] は、この画面から開始した直後で、ワーカーの最初の進捗を待っている間。
+ * [awaitingStart] は、この画面から開始した直後で、ワーカーの最初の進捗を待っている間。最初の進捗が届いたら [ProgressNav.Started]（待ちを終える）。
  */
 fun progressNav(progress: SyncProgress?, awaitingStart: Boolean): ProgressNav = when {
     progress?.stage == SyncStage.Finished -> ProgressNav.ToResult
     progress == null && !awaitingStart -> ProgressNav.ToHome
+    progress != null && awaitingStart -> ProgressNav.Started
     else -> ProgressNav.Stay
 }
 

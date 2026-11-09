@@ -38,6 +38,12 @@ class ProgressTest {
     }
 
     @Test
+    fun `TA-104 開始の直後の待ちの間は最初の進捗で待ちを終え、finished が先に届いていれば S4 へ進む`() {
+        assertEquals(ProgressNav.Started, progressNav(SyncProgress(SyncStage.Connecting), awaitingStart = true))
+        assertEquals(ProgressNav.ToResult, progressNav(SyncProgress(SyncStage.Finished), awaitingStart = true))
+    }
+
+    @Test
     fun `TA-105 near_limit が真のときだけ注記が出る`() {
         assertNotNull(progressUi(SyncProgress(SyncStage.Transfer, nearLimit = true)).nearLimitNote)
         assertNull(progressUi(SyncProgress(SyncStage.Transfer, nearLimit = false)).nearLimitNote)

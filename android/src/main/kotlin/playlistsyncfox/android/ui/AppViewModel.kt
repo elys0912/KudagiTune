@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -20,7 +21,6 @@ import playlistsyncfox.android.storage.MediaWriter
 import playlistsyncfox.android.storage.ResolverMediaStoreFiles
 import playlistsyncfox.android.sync.SyncServices
 import playlistsyncfox.android.sync.SyncValues
-import playlistsyncfox.android.sync.SyncStage
 
 const val NO_SELECTION_NOTICE = "同期するプレイリストを選んでください"
 const val STORAGE_MISSING_NOTICE = "保存先の SD カードが見つかりません。SD カードを確認するか、設定で保存先を変更してください"
@@ -60,13 +60,18 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     val confirm = MutableStateFlow<PressOutcome.Confirm?>(null)
     val message = MutableStateFlow<String?>(null)
 
+    /** 同期が動いているか。S1 の状態、S4 の最新の行、S5 の削除の可否が使う。 */
+    val syncing: StateFlow<Boolean> = SyncServices.progress
+        .map(::isSyncing)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, isSyncing(SyncServices.progress.value))
+
     val home: StateFlow<HomeUiState> = combine(
         store.observePairing(),
         store.observeRuns(),
         store.observePlaylists(),
         store.observeSelectedPlaylists(),
-        SyncServices.progress,
-    ) { pairing, runs, playlists, selected, progress -> homeState(pairing, runs, playlists, selected.size, isSyncing(progress)) }
+        syncing,
+    ) { pairing, runs, playlists, selected, syncing -> homeState(pairing, runs, playlists, selected.size, syncing) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, HomeUiState(HomeKind.Unpaired))
 
     val progress: StateFlow<ProgressUiState?> = SyncServices.progress
@@ -116,10 +121,8 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
                 when (progressNav(progress, current.awaitingStart)) {
                     ProgressNav.ToResult -> openResult(null)
                     ProgressNav.ToHome -> screen.value = Screen.Home
-                    ProgressNav.Stay ->
-                        if (current.awaitingStart && progress != null && progress.stage != SyncStage.Finished) {
-                            screen.value = current.copy(awaitingStart = false)
-                        }
+                    ProgressNav.Started -> screen.value = current.copy(awaitingStart = false)
+                    ProgressNav.Stay -> Unit
                 }
             }
         }
@@ -181,7 +184,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
 
     fun openResult(runId: Long?) {
         viewModelScope.launch {
-            result.value = loadResult(store, runId, isSyncing(SyncServices.progress.value))
+            result.value = loadResult(store, runId, syncing.value)
             screen.value = Screen.Result(runId)
         }
     }
@@ -230,7 +233,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     /** 「以前の場所の曲を消す」。確認は画面が済ませてある。同期が走っている間は消さない。 */
     fun deleteRelocated() {
         viewModelScope.launch {
-            val deleted = withContext(Dispatchers.IO) { cleanRelocated(writer(), isSyncing(SyncServices.progress.value)) }
+            val deleted = withContext(Dispatchers.IO) { cleanRelocated(writer(), syncing.value) }
             message.value = if (deleted == null) "同期中は削除できません" else "前の保存先から $deleted 件を削除しました"
             settings.update { it?.copy(relocatedCount = store.relocatedUris().size) }
         }

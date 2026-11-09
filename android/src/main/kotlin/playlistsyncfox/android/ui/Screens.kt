@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.sp
 import playlistsyncfox.android.R
 import playlistsyncfox.android.log.LogLevel
 import playlistsyncfox.android.storage.StoredFile
-import playlistsyncfox.android.sync.SyncServices
 import playlistsyncfox.shared.manifest.PlaylistNode
 import playlistsyncfox.shared.manifest.leafIds
 
@@ -574,7 +573,7 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     var confirmUnpair by remember { mutableStateOf(false) }
     var confirmRelocated by remember { mutableStateOf(false) }
     var confirmSaveLog by remember { mutableStateOf(false) }
-    val syncing = isSyncing(SyncServices.progress.collectAsState().value)
+    val syncing by model.syncing.collectAsState()
     val ui = state
     if (ui == null) {
         Label("読み込んでいます")
