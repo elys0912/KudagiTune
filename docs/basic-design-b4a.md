@@ -1,7 +1,7 @@
 # KudagiTune 基本設計 B4a 接続・認証
 
 - 索引：basic-design.md（B1）
-- 稿：第 5 稿（2026-11-06。review-13 を反映）。2026-11-07 に D15（P1・P3 を POST にし、P7 を足した）と D18（指紋 → 確認コード）を反映した。2026-11-09 に review-15 を反映した（正式名 KudagiTune。識別子は変えない。ペアリング済みの間はコードを開かない。確認コードのコピー、MagicDNS 名の表示は Q13 の後。通常でないプレイリストの ID は `unresolved_playlists`）
+- 稿：第 5 稿（2026-11-06。review-13 を反映）。2026-11-07 に D15（P1・P3 を POST にし、P7 を足した）と D18（指紋 → 確認コード）を反映した。2026-11-09 に review-15 を反映した（正式名 KudagiTune。識別子は変えない。ペアリング済みの間はコードを開かない。確認コードのコピー。通常でないプレイリストの ID は `unresolved_playlists`）。同日の 2 周目で、MagicDNS 名は PC が取得しないと決めた（Q13）
 - 参照：B1 は basic-design.md、B2 は basic-design-b2.md、B3 は basic-design-b3.md、B4 の後半は basic-design-b4b.md。概要設計は design-overview.md、requirements.md、open-questions.md、review-01（notes。この repo には無い）
 
 ## B4 の書く項目
@@ -64,7 +64,7 @@ B4 は 2 ファイルのまま。B4-1〜B4-4 は本ファイル、B4-5〜B4-8 �
 
 - 入力の形は `ホスト名` または `ホスト名:ポート`。ホスト名は MagicDNS 名（例 `pc-name.tailnet.example.invalid`）、または IPv4（例 `192.0.2.10`）。ポートを省くと既定のポート
 - 入力できる文字は英数字、`.`、`-`、`:`。パスと `https://` は受け付けない（決定（未付番）。接続先を 1 つの host:port に揃えるため）
-- 端末から MagicDNS 名が引けることは確認済み（2026-11-05 先生）。PC は W4（B4b）で自分の MagicDNS 名を表示し、手入力を省けるようにする（F2-3）。ただし表示とコピーのボタンは、取得の方法（Q13）が決まってから足す（2026-11-09。review-15 の X5-8）。それまでは、利用者が Tailscale の管理画面などで調べた名前を端末に入力する
+- 端末から MagicDNS 名が引けることは確認済み（2026-11-05 先生）。PC は自分の MagicDNS 名を取得せず、W4（B4b）にも表示しない（Q13。2026-11-09 先生の決定。review-15 の X5-8 の保留を確定した）。利用者が Tailscale のアプリで PC の名前を見て、端末に入力する（説明書）
 - 入力した宛先は、ペアリング後に端末が保存する。以後の同期では入力しない
 
 ### 3 USB テザリング時の到達（F2-4、Q2）
