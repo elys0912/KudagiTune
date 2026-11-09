@@ -31,6 +31,13 @@ fun noticeOf(detail: ErrorDetail): Notice = when (detail) {
 /** S2 だけに出る `pairing_closed`。 */
 val PairingClosedNotice = Notice("PC にペアリングコードが表示されていません", "PC でペアリングコードを表示してから、やり直してください", "コード未表示", rePair = false)
 
+// S2 のペアリングの途中の失敗（[DevicePairingGateway] が失敗の段へ載せる）
+val ConnectFailedNotice = Notice("PC に接続できません", "アドレスが正しいか、PC でアプリが起動しているかを確認して、やり直してください", "接続失敗", rePair = false)
+val BadReplyNotice = Notice("PC からの応答を読み取れません", "やり直してください", "応答の形", rePair = false)
+val PcRefusedNotice = Notice("PC がペアリングを受け付けませんでした", "PC の画面を確認して、やり直してください", "PC の拒否", rePair = false)
+val BadProofNotice = Notice("PC の確認に失敗しました", "PC の画面の「端末」で解除してから、やり直してください", "確認の印", rePair = true)
+val CertificateChangedNotice = Notice("接続の途中で PC の証明書が変わりました", "ネットワークを確認して、やり直してください", "証明書の変更", rePair = false)
+
 /** T3 の `result` に 1 対 1 の表示語（X3-5）。 */
 fun resultWord(result: String): String = when (result) {
     SyncRun.RESULT_SUCCESS -> "完了"
