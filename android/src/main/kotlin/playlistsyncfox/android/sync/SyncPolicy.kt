@@ -91,6 +91,10 @@ internal fun SyncRun.isAfter(other: SyncRun) = startedAt > other.startedAt || (s
 /** 差分なし・同じ `content_digest` の判定の基準：`content_digest` が NULL でない最新の行。 */
 fun digestBase(runs: List<SyncRun>): SyncRun? = runs.firstOrNull { it.contentDigest != null }
 
+/** 基準の行が、[digest] と同じ内容を完了（success）したものか。 */
+fun matchesCompleted(base: SyncRun, digest: String): Boolean =
+    base.contentDigest == digest && base.result == SyncRun.RESULT_SUCCESS
+
 /** 強制終了の跡の行（始めの整理で閉じた行）。`content_digest` が NULL で基準から外れるため別に見る。 */
 fun isCrashTrace(run: SyncRun): Boolean =
     run.result == SyncRun.RESULT_INTERRUPTED && run.endedAt == run.startedAt && run.errorKind == null && run.resultJson == null

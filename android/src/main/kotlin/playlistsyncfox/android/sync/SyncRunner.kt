@@ -219,9 +219,7 @@ class SyncRunner(private val env: SyncEnvironment) {
 
             if (trigger == SyncTrigger.Auto) {
                 val base = digestBase(runs)
-                if (base != null && base.contentDigest == connected.value && base.result == SyncRun.RESULT_SUCCESS &&
-                    !env.writer.relocationNeeded(env.volume)
-                ) {
+                if (base != null && matchesCompleted(base, connected.value) && !env.writer.relocationNeeded(env.volume)) {
                     env.log.line("内容が前回と同じため、何もせず終える")
                     return null
                 }
@@ -314,8 +312,8 @@ class SyncRunner(private val env: SyncEnvironment) {
 
             // 差分が空で、前回の完了と同じ内容なら、m3u8 の書き出しと「消す」を省く（J37）
             val base = digestBase(runs)
-            if (!relocating && first.isEmpty() && base != null && base.contentDigest == loaded.manifest.contentDigest &&
-                base.result == SyncRun.RESULT_SUCCESS && runs.none { isCrashTrace(it) && it.isAfter(base) }
+            if (!relocating && first.isEmpty() && base != null && matchesCompleted(base, loaded.manifest.contentDigest) &&
+                runs.none { isCrashTrace(it) && it.isAfter(base) }
             ) {
                 skippedUnchanged = true
                 return conclude(userInterrupted = false, afterCancel = false)
