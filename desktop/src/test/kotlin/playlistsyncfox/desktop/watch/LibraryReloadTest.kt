@@ -359,7 +359,7 @@ class LibraryReloadTest {
     fun `TD-105 XML の場所が相対パスでも、現在のフォルダを基にした絶対パスのフォルダを監視する`() = runTest {
         val opened = mutableListOf<Path>()
         val opener = DirectoryEventsOpener { dir ->
-            opened += dir
+            opened.add(dir)
             events(null, hang = true)
         }
 
