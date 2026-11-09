@@ -59,6 +59,7 @@ class ProgressTest {
 private fun resultJson(
     removalSkipped: Boolean = false,
     detail: ErrorDetail? = null,
+    manifestVersionMismatch: Boolean = false,
 ) = encodeResult(
     SyncResult(
         startedAt = "2026-11-07T00:00:00.000Z",
@@ -79,6 +80,7 @@ private fun resultJson(
         removalSkipped = removalSkipped,
         keyMismatch = null,
         errorDetail = detail,
+        manifestVersionMismatch = manifestVersionMismatch,
     ),
 )
 
@@ -168,6 +170,15 @@ class ResultUiTest {
         assertEquals("削除の確認が済んでいないため、削除しませんでした。もう一度同期すると確認が出ます", skipped.removalNote)
         assertNull(kept.removalNote)
         assertEquals("削除が必要な曲があります。手動で同期すると、確認のうえ削除します", auto.removalNote)
+    }
+
+    @Test
+    fun `X6-9 マニフェストの版違いで止まった行だけ、版を合わせる案内を出す`() {
+        val mismatch = resultUi(finishedRun(1, result = SyncRun.RESULT_FAILED, json = resultJson(manifestVersionMismatch = true)), emptyList())
+        val other = resultUi(finishedRun(1, result = SyncRun.RESULT_FAILED, json = resultJson()), emptyList())
+
+        assertEquals("PC と端末のアプリの版を合わせてください", mismatch.versionMismatchNote)
+        assertNull(other.versionMismatchNote)
     }
 
     @Test

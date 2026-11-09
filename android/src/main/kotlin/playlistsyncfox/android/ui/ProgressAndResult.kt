@@ -134,6 +134,8 @@ data class ResultUiState(
     /** E2 の表示語（`error_detail` から選ぶ）。 */
     val noticeLabel: String?,
     val removalNote: String?,
+    /** マニフェストの版違いで止まったときの案内（X6-9）。それ以外は null。 */
+    val versionMismatchNote: String?,
     /** 消さなかった件数（差分の「消す」のうち実行しなかった分）。0 なら出さない。 */
     val notRemoved: Int,
     val excluded: IssueList,
@@ -142,6 +144,9 @@ data class ResultUiState(
 ) {
     data class Counts(val added: Int, val replaced: Int, val removed: Int, val failed: Int)
 }
+
+/** マニフェストの版違い（X6-9）。壊れたマニフェストは対象外で、汎用の表示のまま。 */
+const val VERSION_MISMATCH_NOTICE = "PC と端末のアプリの版を合わせてください"
 
 /** V21 結果の一覧の表示件数の上限。 */
 const val ISSUE_LIMIT = 100
@@ -162,6 +167,7 @@ fun resultUi(run: SyncRun, issues: List<RunIssue>, limit: Int = ISSUE_LIMIT): Re
         errorWord = e2Notice?.title ?: errorWord(run.errorKind),
         noticeLabel = e2Notice?.label,
         removalNote = removalNote(run.trigger).takeIf { stored?.removalSkipped == true },
+        versionMismatchNote = VERSION_MISMATCH_NOTICE.takeIf { stored?.manifestVersionMismatch == true },
         notRemoved = if (stored == null) 0 else (stored.counts.toRemove - run.removed).coerceAtLeast(0),
         excluded = issueList(
             issues.filter { it.kind == RunIssue.KIND_EXCLUDED }

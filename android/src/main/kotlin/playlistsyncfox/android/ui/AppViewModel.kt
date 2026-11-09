@@ -25,6 +25,7 @@ import playlistsyncfox.android.sync.SyncStage
 const val NO_SELECTION_NOTICE = "同期するプレイリストを選んでください"
 const val STORAGE_MISSING_NOTICE = "保存先の SD カードが見つかりません。SD カードを確認するか、設定で保存先を変更してください"
 const val STORAGE_CHANGED_NOTICE = "保存先を変更しました。次の同期で、新しい保存先へ全曲を転送し直します"
+const val STORAGE_LEFTOVER_NOTICE = "前の場所に曲が残っています。次の同期の前に、「前の保存先の曲を削除する」で、先に前の場所の曲を消してください"
 
 /** 画面の遷移は S1 を起点にする（X7-1-1 の 4）。 */
 sealed interface Screen {
@@ -238,7 +239,7 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         viewModelScope.launch {
             store.putSetting(SyncValues.STORAGE_VOLUME_KEY, volume)
             settings.update { it?.copy(storage = storageUi(graph.volumes.mounted(), volume)) }
-            message.value = STORAGE_CHANGED_NOTICE
+            message.value = storageChangedNotice(store.relocatedUris().size)
         }
     }
 

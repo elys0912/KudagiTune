@@ -7,9 +7,11 @@ import playlistsyncfox.android.InMemoryStore
 import playlistsyncfox.android.db.SelectedPlaylist
 import playlistsyncfox.android.sync.CatalogResult
 import playlistsyncfox.shared.manifest.PlaylistNode
+import playlistsyncfox.shared.result.ErrorDetail
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 private const val FOLDER = "F000000000000001"
 private const val LEAF_A = "A000000000000001"
@@ -87,5 +89,18 @@ class SelectionTest {
         runCurrent()
 
         assertEquals(listOf(LEAF_C), store.selected.map { it.playlistId })
+    }
+
+    @Test
+    fun `X6-13 取得が E2 で断られたときの語と案内は S3 と同じ noticeOf で、ほかの失敗には案内を足さない`() {
+        val clockSkew = CatalogResult.Rejected(ErrorDetail.ClockSkew)
+        val rateLimited = CatalogResult.Rejected(ErrorDetail.RateLimited)
+
+        assertEquals(noticeOf(ErrorDetail.ClockSkew).title, catalogWord(clockSkew))
+        assertEquals(noticeOf(ErrorDetail.ClockSkew).guidance, catalogGuidance(clockSkew))
+        assertEquals(noticeOf(ErrorDetail.RateLimited).title, catalogWord(rateLimited))
+        assertEquals("PC に接続できません", catalogWord(CatalogResult.Unreachable))
+        assertNull(catalogGuidance(CatalogResult.Unreachable))
+        assertNull(catalogGuidance(CatalogResult.KeyMismatch))
     }
 }

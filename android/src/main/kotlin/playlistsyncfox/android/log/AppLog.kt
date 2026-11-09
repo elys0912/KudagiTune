@@ -20,7 +20,6 @@ data class LogEntry(val at: Long, val level: LogLevel, val module: String, val m
  */
 class AppLog(
     private val dir: File,
-    private val enabled: () -> Boolean,
     private val now: () -> Long,
     private val maxBytes: Long = MAX_FILE_BYTES,
     private val executor: Executor = Executors.newSingleThreadExecutor(),
@@ -31,7 +30,6 @@ class AppLog(
     val recent: StateFlow<List<LogEntry>> = screenLines
 
     fun log(level: LogLevel, module: String, message: String, errorNumber: Int? = null) {
-        if (!enabled()) return
         val at = now()
         val text = clean(message)
         val line = listOf(Instant.ofEpochMilli(at).toString(), level.text, module, text, errorNumber?.let { "E$it" }.orEmpty())

@@ -14,7 +14,7 @@ private fun tempDir(): File = createTempDirectory("applog").toFile().also { it.d
 
 class AppLogTest {
     private fun log(dir: File, maxBytes: Long = AppLog.MAX_FILE_BYTES) =
-        AppLog(dir, enabled = { true }, now = { 0L }, maxBytes = maxBytes, executor = direct)
+        AppLog(dir, now = { 0L }, maxBytes = maxBytes, executor = direct)
 
     @Test
     fun `TA-115 上限を超えて書くと世代が送られ、3 世代を超えて残らない`() {
@@ -101,18 +101,6 @@ class AppLogTest {
         assertEquals(AppLog.SCREEN_LINES, log.recent.value.size)
         assertEquals("行 1", log.recent.value.first().message)
         assertEquals("行 ${AppLog.SCREEN_LINES}", log.recent.value.last().message)
-    }
-
-    @Test
-    fun `TA-136 ログが無効なら画面の欄にもファイルにも入らない`() {
-        val dir = tempDir()
-
-        val log = AppLog(dir, enabled = { false }, now = { 0L }, executor = direct)
-
-        log.log(LogLevel.Error, "m", "入らない行")
-
-        assertTrue(log.recent.value.isEmpty())
-        assertFalse(File(dir, "app.log").exists())
     }
 
     @Test

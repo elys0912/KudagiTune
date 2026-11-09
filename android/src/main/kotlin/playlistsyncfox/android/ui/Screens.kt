@@ -221,6 +221,7 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions, notification
                     Box(Modifier.size(8.dp).background(c.success, RoundedCornerShape(4.dp)))
                     Label(state.pcName.orEmpty(), bold = true)
                 }
+                Label("接続先：${state.endpoint.orEmpty()}", color = c.muted)
                 if (state.kind == HomeKind.Syncing) Label("同期中", color = c.muted)
                 val last = state.last
                 if (last == null) {
@@ -342,6 +343,7 @@ private fun SelectionScreen(model: AppViewModel, current: Screen.Selection) {
         }
         is SelectionStage.Failed -> {
             Label(catalogWord(s.reason), bold = true)
+            catalogGuidance(s.reason)?.let { Label(it) }
             s.rows.forEach { row ->
                 Label(row.name)
                 Action("外す") { model.selection.remove(row.playlistId) }
@@ -532,6 +534,7 @@ private fun ResultScreen(model: AppViewModel, actions: ScreenActions) {
     } else {
         Label("${state.word}（${state.trigger}）　${formatTime(state.atMillis)}", bold = true)
         state.removalNote?.let { Label(it, bold = true) }
+        state.versionMismatchNote?.let { Label(it, bold = true) }
         if (state.notRemoved > 0) Label("削除しなかった曲：${state.notRemoved} 件")
         state.counts?.let { Label("追加 ${it.added}　更新 ${it.replaced}　削除 ${it.removed}　失敗 ${it.failed}") }
         state.bytes?.let { Label("転送量 ${formatBytes(it)}") }
