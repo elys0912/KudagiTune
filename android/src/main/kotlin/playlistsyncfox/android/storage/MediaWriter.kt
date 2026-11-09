@@ -108,7 +108,7 @@ class MediaWriter(
         placedVolume() != volume || isRelocating()
     }
 
-    private suspend fun isRelocating() = store.setting(SyncValues.RELOCATING_KEY) == "true"
+    private suspend fun isRelocating() = store.setting(SyncValues.RELOCATING_KEY) == SyncValues.SETTING_ON
 
     /** 取り直しが完了で終わった。 */
     suspend fun finishRelocation() = withContext(io) { store.putSetting(SyncValues.RELOCATING_KEY, "false") }

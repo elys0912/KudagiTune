@@ -69,7 +69,7 @@ object SyncNotifications {
             append("追加 ${run.added}、更新 ${run.replaced}、削除 ${run.removed}、失敗 ${run.failed}")
             // E7 は続きを次の同期で行う
             if (run.errorKind == ERROR_TIME_LIMIT) append("。残りは次の同期で続けます")
-            progress.shortageBytes?.let { append("。あと ${it / (1024 * 1024)} MiB の空きが必要です。タップするとストレージの設定を開きます") }
+            progress.shortageBytes?.let { append("。あと ${it / BYTES_PER_MIB} MiB の空きが必要です。タップするとストレージの設定を開きます") }
             // 自動が「消す」を飛ばしたときは、確認が要る旨を足す（J9）
             if (trigger == SyncTrigger.Auto && removalSkipped(run)) append("。削除の確認が必要な曲があります")
         }
@@ -115,6 +115,9 @@ object SyncNotifications {
     }
 
     private const val PROGRESS_SCALE = 1000
+
+    /** 1 MiB のバイト数（2 の 20 乗）。不足の容量を通知の文面の MiB 単位に直す。 */
+    private const val BYTES_PER_MIB = 1024L * 1024
 
     /** `error_kind` の E7（時間上限。前面サービスの上限に当たった）。残りは次の同期で続ける（B2 の E 表）。 */
     private const val ERROR_TIME_LIMIT = "E7"
