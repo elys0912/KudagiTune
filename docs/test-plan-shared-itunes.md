@@ -164,8 +164,8 @@
 | TS-161 | 1 | マニフェストの読み | `playlists` と `unresolved_playlists` の重複の落とし（X3-1。review-15） | 同じ `persistent_id` の `playlists` が 2 件（`track_ids` が違う）。同じ `persistent_id` の `unresolved_playlists` が 2 件 | それぞれ最初の 1 件だけが残る。`duplicatesDropped` は変わらない（曲だけ数える） | 単体 | ○ |
 | TS-162 | 1 | `content_digest` | `content_hash` を含める（X3-6） | `content_hash` だけが違う 2 つのマニフェスト（ほかは同じ） | 違う値 | 単体 | ○ |
 | TS-163 | 1 | `buildTrackCandidate` と `assemblePath` | 異常に長い拡張子（X3-2。X3-3 の手順 6） | 拡張子が V23 − 8 − 19 − 1 バイト（8 は `Untitled`、19 は全文の接尾辞。V23 が 240 なら 212）ちょうどと、1 バイト長いもの。曲名は空 | 前者はそのまま、後者は切れる。接尾辞なしと全文の接尾辞つきの要素が、どちらも V23 以内 | 単体 | ○ |
-| TS-164 | 1 | `computeDiff` | 再生できない形式（X3-2。X6-10） | `isPlayable` が偽の保護付きでない曲（記録なし）。`protected` が真で `isPlayable` が偽の曲。`isPlayable` を渡さない呼び出し | 前者は `unsupported` に入り、`toAdd` に入らない。後者は `unplayable` に入り、`unsupported` に入らない。渡さなければ `unsupported` は空 | 単体 | ○ |
-| TS-165 | 1 | `computeDiff` | 再生できない形式の曲の記録（X3-2。X6-10） | `SyncRecord` を持ち、`size` が違い、`isPlayable` が偽の曲 | `toReplace` にも `toRemove` にも入らず、`unsupported` に入る（保護付きと同じ） | 単体 | ○ |
+| TS-164 | 1 | `computeDiff` | 再生できない形式（X3-2。X6-10） | `isPlayable` が偽の保護付きでない曲（記録なし）。`protected` が真で `isPlayable` が偽の曲。`isPlayable` を渡さない呼び出し | 前者は `unsupported` に入り、かつ `toAdd` に入る（転送する）。後者は `unplayable` だけに入り、`unsupported` にも `toAdd` にも入らない（転送しない）。渡さなければ `unsupported` は空 | 単体 | ○ |
+| TS-165 | 1 | `computeDiff` | 再生できない形式の曲の記録（X3-2。X6-10） | `SyncRecord` を持ち、`size` が違い、`isPlayable` が偽の曲。同じ値で `presentIds` にあり、`isPlayable` が偽の曲 | 前者は `unsupported` と `toReplace` の両方に入る。後者は `unsupported` に入り、`unchangedCount` に数える。どちらも `toRemove` に入らない | 単体 | ○ |
 | TS-166 | 1 | `toUnplayable` | 理由の写し（X3-11） | 保護付きの曲と、再生できない形式の曲（第 2 引数）。第 2 引数を省いた呼び出し | 保護付きは `protected`、再生できない形式は `unsupported_format`（保護付きが先）。曲名・`kind`・拡張子を写す。省けば後者は空 | 単体 | ○ |
 | TS-167 | 2 | plist の読み手 | `Track Type` が `File` でない（X2-12） | `Track Type` が `URL` で `Location` を持つトラック | 場所なし（`Location` を復号しない） | 単体 | ○ |
 | TS-168 | 2 | `decodeFileUrl` | 共有名が空（X2-12） | `file://nas.example.invalid/`、`file://nas.example.invalid//a.mp3` | どちらも復号不能：ホストを直せない | 単体 | ○ |
