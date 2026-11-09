@@ -103,6 +103,12 @@ class SyncRunner(private val env: SyncEnvironment) {
         class Wrote(val result: TrackWriteResult) : Attempt
     }
 
+    /** 1 回の取得の本文の受け取り。[bytes] は受けた量、[endedNormally] は取得元が切れずに閉じたか（X6-11）。 */
+    private class BodyTally {
+        var bytes = 0L
+        var endedNormally = false
+    }
+
     private inner class Execution(
         private val input: RunInput,
         private val opened: MutableList<SyncApi>,
@@ -461,6 +467,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             while (true) {
                 val plan = env.writer.plan(track, path, placed, replace, fromScratch)
                 fromScratch = false
+                val tally = BodyTally()
 
                 val outcome: Attempt? = if (plan is WritePlan.Complete) {
                     // 書き終えていた（IS_PENDING の切り替えの前後で落ちた）。取得せずに読み戻しへ進む
@@ -480,8 +487,9 @@ class SyncRunner(private val env: SyncEnvironment) {
                         if (body.sizeHeader != expectedSize || body.modifiedAtHeader != expectedModified) {
                             Attempt.Stale
                         } else {
-                            val written = env.writer.write(plan, TrackBody(body.startAt, counting(track.persistentId, name, body.startAt, body.source)))
-                            if (written is TrackWriteResult.Placed) bytesTransferred += track.size - body.startAt
+                            val written = env.writer.write(plan, TrackBody(body.startAt, counting(track.persistentId, name, body.startAt, body.source, tally)))
+                            // 切断からの再開を挟んでも、この実行で受けた分の全部を数える（最後の接続の分だけにしない）
+                            if (written is TrackWriteResult.Placed) bytesTransferred += track.size - trackBase
                             Attempt.Wrote(written)
                         }
                     }
@@ -511,7 +519,11 @@ class SyncRunner(private val env: SyncEnvironment) {
                         is TrackWriteResult.Failed -> return TrackStep.Failed(SyncError.WriteFailed(track.persistentId, name, result.step))
                         is TrackWriteResult.OutOfSpace -> return TrackStep.Stop(SyncError.InsufficientStorage(result.missingBytes, StoragePhase.Writing))
                         TrackWriteResult.NeedRestart -> fromScratch = true
-                        TrackWriteResult.Disconnected -> Unit
+                        TrackWriteResult.Disconnected -> if (plan is WritePlan.Resume && tally.endedNormally && tally.bytes == 0L) {
+                            // 正常に閉じた短い本文を続きから取り直しても 1 バイトも増えない。この曲を E9 にして次へ進む（X6-11）
+                            env.writer.discardPending(track.persistentId)
+                            return TrackStep.Failed(SyncError.WriteFailed(track.persistentId, name, WriteStep.TempFileWrite))
+                        }
                     }
                     null -> Unit
                 }
@@ -550,12 +562,14 @@ class SyncRunner(private val env: SyncEnvironment) {
         }
 
         /** 受け取った量を数える（MediaWriter は変えない）。書き込みの 1 区切りごとに行を更新する。 */
-        private fun counting(id: String, name: String, startAt: Long, inner: TrackSource) = object : TrackSource {
+        private fun counting(id: String, name: String, startAt: Long, inner: TrackSource, tally: BodyTally) = object : TrackSource {
             private var position = startAt
 
             override suspend fun read(buffer: ByteArray): Int {
                 val count = inner.read(buffer)
+                if (count < 0) tally.endedNormally = true
                 if (count > 0) {
+                    tally.bytes += count
                     position += count
                     inFlightBytes = (position - trackBase).coerceAtLeast(0)
                     updateRow(id) { it.copy(receivedBytes = position) }
@@ -680,7 +694,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             // 9b. 取り直しがすべて済んだ（完了）。古い場所のファイルは消さない（S5 の操作で消す。D16）
             if (relocating && !afterCancel && outcome == SyncOutcome.Completed) env.writer.finishRelocation()
 
-            return record(outcome, loaded, finalDiff, afterCancel)
+            return record(outcome, loaded, finalDiff, afterCancel, userInterrupted)
         }
 
         private fun classify(userInterrupted: Boolean) = classifyOutcome(errors, transferStarted, userInterrupted, stoppedWithoutE)
@@ -702,7 +716,7 @@ class SyncRunner(private val env: SyncEnvironment) {
         }
 
         /** 10〜12. T3 の更新、P4 の報告、終了の通知。 */
-        private suspend fun record(outcome: SyncOutcome, loaded: Manifest?, finalDiff: Diff?, afterCancel: Boolean): SyncRun {
+        private suspend fun record(outcome: SyncOutcome, loaded: Manifest?, finalDiff: Diff?, afterCancel: Boolean, userInterrupted: Boolean): SyncRun {
             val current = checkNotNull(run)
             val endedAt = env.now()
             val trackErrors = errors.filter { it.scope == ErrorScope.Track }
@@ -752,7 +766,8 @@ class SyncRunner(private val env: SyncEnvironment) {
                     SyncOutcome.Failed -> SyncRun.RESULT_FAILED
                 }
             }
-            val errorKind = (errors.firstOrNull { it.scope == ErrorScope.Run } ?: errors.firstOrNull())?.let { "E${it.number}" }
+            // 利用者の中断は、先に曲単位の失敗があっても空にする。曲単位の失敗は件数と T6 に残る
+            val errorKind = if (userInterrupted) null else (errors.firstOrNull { it.scope == ErrorScope.Run } ?: errors.firstOrNull())?.let { "E${it.number}" }
             val finished = current.copy(
                 endedAt = endedAt,
                 result = resultText,
