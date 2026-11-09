@@ -1372,7 +1372,7 @@ class SyncRunnerTest {
 
         assertEquals(setOf(id(1), id(2), id(3)), h.lanApi.trackRequests.map { it.persistentId }.toSet())
         val reasons = h.store.issueRows.filter { it.kind == RunIssue.KIND_UNPLAYABLE }.associate { it.persistentId to it.reason }
-        assertEquals(mapOf(id(9) to "protected", id(2) to "unsupported_format"), reasons)
+        assertEquals(mapOf<String?, String?>(id(9) to "protected", id(2) to "unsupported_format"), reasons)
         assertEquals(listOf(UnplayableReason.Protected, UnplayableReason.UnsupportedFormat), row.result().unplayable.map { it.reason })
     }
 
