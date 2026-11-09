@@ -859,6 +859,8 @@ class SyncRunnerTest {
         assertEquals(SyncRun.RESULT_PARTIAL, row.result)
         assertEquals(1, h.store.issueRows.count { it.kind == RunIssue.KIND_FAILED })
         assertEquals(1, h.lanApi.reports.size)
+        assertEquals(1, h.finished.size)
+        assertEquals(SyncStage.Finished, h.progress.value?.stage)
     }
 
     @Test
@@ -872,6 +874,8 @@ class SyncRunnerTest {
         assertEquals(SyncRun.RESULT_PARTIAL, row.result)
         assertEquals(1, h.store.issueRows.count { it.kind == RunIssue.KIND_FAILED })
         assertEquals(1, h.lanApi.reports.size)
+        assertEquals(1, h.finished.size)
+        assertEquals(SyncStage.Finished, h.progress.value?.stage)
     }
 
     @Test
@@ -886,6 +890,8 @@ class SyncRunnerTest {
         assertEquals(SyncRun.RESULT_SUCCESS, row.result)
         assertEquals(0, row.reported)
         assertEquals(1, h.lanApi.reports.size)
+        assertEquals(1, h.finished.size)
+        assertEquals(SyncStage.Finished, h.progress.value?.stage)
     }
 
     /** 3 曲の同期で 2 曲目だけ PC にファイルが無い（E5）。T6 の `failed` に 1 行残る。 */
