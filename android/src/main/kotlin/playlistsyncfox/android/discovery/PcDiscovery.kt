@@ -69,6 +69,7 @@ class PcDiscovery(context: Context) {
             acquire()
         }
 
+        // NSD のコールバックのスレッドと解決のコルーチンが触る。更新と送信を found のロックの内で行い、送る一覧を最新に保つ
         val found = LinkedHashMap<String, DiscoveredPc>()
         val queue = Channel<NsdServiceInfo>(Channel.UNLIMITED)
 
@@ -76,8 +77,10 @@ class PcDiscovery(context: Context) {
         launch {
             for (info in queue) {
                 val resolved = withTimeoutOrNull(RESOLVE_WAIT_MS) { resolve(nsd, info) } ?: continue
-                selectDiscovered(resolved, onlyPairingOpen)?.let { found[it.serviceName] = it }
-                trySend(found.values.toList())
+                synchronized(found) {
+                    selectDiscovered(resolved, onlyPairingOpen)?.let { found[it.serviceName] = it }
+                    trySend(found.values.toList())
+                }
             }
         }
 
@@ -87,8 +90,10 @@ class PcDiscovery(context: Context) {
             }
 
             override fun onServiceLost(serviceInfo: NsdServiceInfo) {
-                found.remove(serviceInfo.serviceName)
-                trySend(found.values.toList())
+                synchronized(found) {
+                    found.remove(serviceInfo.serviceName)
+                    trySend(found.values.toList())
+                }
             }
 
             override fun onDiscoveryStarted(serviceType: String) = Unit
