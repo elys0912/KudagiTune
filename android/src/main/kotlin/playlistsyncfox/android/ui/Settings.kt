@@ -65,6 +65,9 @@ fun storageUi(mounted: Set<String>, saved: String): StorageUi {
 fun storageChangedNotice(relocatedCount: Int): String =
     if (relocatedCount > 0) "$STORAGE_CHANGED_NOTICE。$STORAGE_LEFTOVER_NOTICE" else STORAGE_CHANGED_NOTICE
 
+/** 「以前の場所の曲を消す」を終えた後の案内。 */
+fun relocatedDeletedNotice(deleted: Int): String = "前の保存先から $deleted 件を削除しました"
+
 data class SettingsUiState(
     val autoEnabled: Boolean,
     /** 「PC に無い曲を端末から消す」。既定は OFF。 */
@@ -147,7 +150,7 @@ class SettingsPresenter(
 
     fun toggleAuto(enabled: Boolean) {
         scope.launch {
-            if (!setAutoEnabled(enabled)) showMessage("自動同期の設定に失敗しました")
+            if (!setAutoEnabled(enabled)) showMessage(AUTO_SYNC_FAILED_NOTICE)
             mutableState.update { it?.copy(autoEnabled = store.setting(SyncScheduler.AUTO_ENABLED_KEY) == SyncValues.SETTING_ON) }
         }
     }
@@ -164,7 +167,7 @@ class SettingsPresenter(
     fun deleteRelocated() {
         scope.launch {
             val deleted = cleanRelocated(cleanupWriter(), syncing())
-            showMessage(if (deleted == null) "同期中は削除できません" else "前の保存先から $deleted 件を削除しました")
+            showMessage(if (deleted == null) SYNCING_NO_DELETE_NOTICE else relocatedDeletedNotice(deleted))
             mutableState.update { it?.copy(relocatedCount = store.relocatedUris().size) }
         }
     }
@@ -181,7 +184,7 @@ class SettingsPresenter(
     /** ペアリングの解除。解除できなければ知らせを出して偽を返す。 */
     suspend fun unpair(): Boolean {
         val unpaired = unpairDevice()
-        if (!unpaired) showMessage("鍵の削除に失敗したため、解除できませんでした")
+        if (!unpaired) showMessage(UNPAIR_FAILED_NOTICE)
         return unpaired
     }
 }

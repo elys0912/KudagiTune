@@ -144,9 +144,6 @@ data class ResultUiState(
     data class Counts(val added: Int, val replaced: Int, val removed: Int, val failed: Int)
 }
 
-/** マニフェストの版違い（X6-9）。壊れたマニフェストは対象外で、汎用の表示のまま。 */
-const val VERSION_MISMATCH_NOTICE = "PC と端末のアプリの版を合わせてください"
-
 /** V21 結果の一覧の表示件数の上限。 */
 const val ISSUE_LIMIT = 100
 

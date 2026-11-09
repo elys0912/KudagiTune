@@ -95,8 +95,6 @@ sealed interface PressOutcome {
     data object StorageMissing : PressOutcome
 }
 
-const val APPROVAL_UNUSED_NOTICE = "自動の同期が実行中だったため、今回は削除しません。終わってから、もう一度「同期」を押してください"
-
 /**
  * 手動の同期の開始（X7-1-2）。確認の要否は画面側が決め、ワーカーの起動は [start] に任せる。
  * [start] の引数は、承認した件数（承認しないなら null）と `reach_failed`。

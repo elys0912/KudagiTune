@@ -121,7 +121,7 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions) {
             Card {
                 Caption("同期するプレイリスト")
                 if (state.selectedCount == 0) {
-                    Label("同期するプレイリストを選んでください")
+                    Label(NO_SELECTION_NOTICE)
                 } else if (state.playlists.isEmpty()) {
                     Label("選んだプレイリスト：${state.selectedCount} 件（まだ同期していません）")
                 } else {
@@ -340,7 +340,7 @@ private fun StorageSection(model: AppViewModel, ui: SettingsUiState) {
     if (ui.relocatedCount > 0) {
         Label("前の保存先に残っている曲とプレイリスト：${ui.relocatedCount} 件")
         if (syncing) {
-            Label("同期中は削除できません")
+            Label(SYNCING_NO_DELETE_NOTICE)
         } else {
             ConfirmedAction(
                 label = "前の保存先の曲を削除する",
