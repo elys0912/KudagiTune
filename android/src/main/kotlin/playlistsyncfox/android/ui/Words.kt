@@ -15,7 +15,7 @@ data class Notice(val title: String, val guidance: String, val label: String, va
 
 private const val REPAIR_GUIDE = "PC の画面の「端末」とこのアプリの設定の両方で解除してから、もう一度ペアリングしてください"
 
-// E の番号の語（[errorWord]）と、S6 の取得の失敗の語（[catalogWord]）で共通の文
+// E の番号の語（[errorWord]）、S6 の取得の失敗の語（[catalogWord]）、接続失敗の案内（[ConnectFailedNotice]）で共通の文
 private const val CONNECT_FAILED_WORD = "PC に接続できません"
 private const val REPAIR_NEEDED_WORD = "ペアリングのやり直しが必要です"
 private const val XML_UNAVAILABLE_WORD = "PC の iTunes ライブラリ（XML）を読めません"
@@ -33,7 +33,7 @@ fun noticeOf(detail: ErrorDetail): Notice = when (detail) {
 val PairingClosedNotice = Notice("PC にペアリングコードが表示されていません", "PC でペアリングコードを表示してから、やり直してください", "コード未表示", rePair = false)
 
 // S2 のペアリングの途中の失敗（[DevicePairingGateway] が失敗の段へ載せる）
-val ConnectFailedNotice = Notice("PC に接続できません", "アドレスが正しいか、PC でアプリが起動しているかを確認して、やり直してください", "接続失敗", rePair = false)
+val ConnectFailedNotice = Notice(CONNECT_FAILED_WORD, "アドレスが正しいか、PC でアプリが起動しているかを確認して、やり直してください", "接続失敗", rePair = false)
 val BadReplyNotice = Notice("PC からの応答を読み取れません", "やり直してください", "応答の形", rePair = false)
 val PcRefusedNotice = Notice("PC がペアリングを受け付けませんでした", "PC の画面を確認して、やり直してください", "PC の拒否", rePair = false)
 val BadProofNotice = Notice("PC の確認に失敗しました", "PC の画面の「端末」で解除してから、やり直してください", "確認の印", rePair = true)
