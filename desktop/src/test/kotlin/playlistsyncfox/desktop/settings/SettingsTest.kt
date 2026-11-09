@@ -128,6 +128,21 @@ class SettingsTest {
     }
 
     @Test
+    fun `TD-30 連番として読めない名前の psfox ログがあっても、無視して連番の新しいファイルへ切り替わる`() {
+        val logDir = dir.resolve("logs")
+        Files.createDirectories(logDir)
+        val stray = logDir.resolve("psfox-backup.log").also { it.writeText("利用者が置いたファイル") }
+        val log = AppLog(logDir, MutableClock(T0), maxBytes = 1, generations = 3)
+
+        log.info("m", "行 0")
+        log.info("m", "行 1")
+
+        val numbered = Files.list(logDir).use { s -> s.map { it.fileName.toString() }.filter { it != stray.fileName.toString() }.sorted().toList() }
+        assertEquals(listOf("psfox-000001.log", "psfox-000002.log"), numbered)
+        assertEquals("利用者が置いたファイル", stray.readText())
+    }
+
+    @Test
     fun `TD-30 ログの 1 行は時刻 レベル モジュール メッセージ E の番号をタブで区切る`() {
         val logDir = dir.resolve("logs")
 

@@ -15,6 +15,8 @@ enum class LogLevel(val label: String) { Info("INFO"), Warn("WARN"), Error("ERRO
 /** 画面のログの欄の 1 行（X5-4）。ファイルへ書く行と同じ内容。 */
 data class LogLine(val at: Instant, val level: LogLevel, val module: String, val message: String, val errorNumber: Int?)
 
+private val logFileName = Regex("psfox-([0-9]+)[.]log")
+
 /**
  * PC のログ（X5-4）。1 行 1 件で、時刻、レベル、モジュール、メッセージ、E の番号をタブで区切る。
  * 鍵、コード、署名の値は呼び出し側がメッセージに渡さない。ここは書式と切り替えだけを持つ。
@@ -71,9 +73,10 @@ class AppLog(
         return next
     }
 
-    private fun indexOf(file: Path): Int = file.fileName.toString().removePrefix("psfox-").removeSuffix(".log").toInt()
+    // 連番として読めない名前（利用者が置いたファイルなど）は null。世代の対象にも、削除の対象にもしない
+    private fun indexOf(file: Path): Int? = logFileName.matchEntire(file.fileName.toString())?.groupValues?.get(1)?.toIntOrNull()
 
     private fun logFiles(): List<Path> =
-        Files.list(dir).use { s -> s.filter { it.fileName.toString().startsWith("psfox-") && it.toString().endsWith(".log") }.toList() }
+        Files.list(dir).use { s -> s.filter { indexOf(it) != null }.toList() }
             .sortedBy { it.fileName.toString() }
 }
