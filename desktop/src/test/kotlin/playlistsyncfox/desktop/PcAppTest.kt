@@ -122,8 +122,6 @@ private fun Harness.completePairing() {
 class FakeRunKey : RunKey {
     val values = HashMap<String, String>()
 
-    override fun get(name: String) = values[name]
-
     override fun set(name: String, data: String) {
         values[name] = data
     }
