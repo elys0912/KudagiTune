@@ -11,11 +11,11 @@ import android.os.Bundle
 import android.os.storage.StorageManager
 import android.provider.MediaStore
 import android.provider.Settings
-import android.view.WindowInsetsController
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         val graph = (application as PsfoxApp).graph
         model = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
@@ -92,9 +93,9 @@ class MainActivity : ComponentActivity() {
         )
         setContent {
             val screen by model.screen.collectAsState()
-            // ダークのとき白い地が出ないよう、窓の地の色とステータスバーの文字色を配色に合わせる（D20）
+            // ダークのとき白い地が出ないよう、窓の地の色を配色に合わせる（D20）
             val dark = isSystemInDarkTheme()
-            SideEffect { applySystemBars(dark) }
+            SideEffect { applyWindowBackground(dark) }
             BackHandler(enabled = screen != Screen.Home) { model.back() }
             AppScreen(model, actions)
         }
@@ -104,10 +105,8 @@ class MainActivity : ComponentActivity() {
     private fun readAsset(path: String): String? =
         runCatching { assets.open(path).bufferedReader().use { it.readText() } }.getOrNull()
 
-    private fun applySystemBars(dark: Boolean) {
+    private fun applyWindowBackground(dark: Boolean) {
         window.setBackgroundDrawable(ColorDrawable((if (dark) DarkColors else LightColors).background.toArgb()))
-        val light = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
-        window.insetsController?.setSystemBarsAppearance(if (dark) 0 else light, light)
     }
 
     override fun onNewIntent(intent: Intent) {

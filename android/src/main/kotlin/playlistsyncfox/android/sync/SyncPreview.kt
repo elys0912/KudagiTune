@@ -12,7 +12,6 @@ import playlistsyncfox.shared.diff.SyncRecord
 import playlistsyncfox.shared.diff.computeDiff
 import playlistsyncfox.shared.manifest.Manifest
 import playlistsyncfox.shared.manifest.ManifestReadResult
-import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.manifest.readManifest
 import playlistsyncfox.shared.result.Transport
 
@@ -103,15 +102,11 @@ internal suspend fun <T> SyncEnvironment.reachPc(
 
 internal fun PlacedTrack.toSyncRecord() = SyncRecord(persistentId, sourceSize, sourceModified, relativePath)
 
-/**
- * マニフェストと、端末に置いた曲（T1）・MediaStore の現状との差分。同期本体と画面側が同じ計算をする。
- * [isPlayable] は端末で再生できる形式の曲か。渡さなければ全曲を再生できるものとして扱う。
- */
+/** マニフェストと、端末に置いた曲（T1）・MediaStore の現状との差分。同期本体と画面側が同じ計算をする。 */
 internal suspend fun SyncEnvironment.diffFor(
     manifest: Manifest,
     placed: List<PlacedTrack>,
     recordedLibraryId: String?,
-    isPlayable: (ManifestTrack) -> Boolean = { true },
 ): Diff = computeDiff(
     tracks = manifest.tracks,
     records = placed.map { it.toSyncRecord() },
@@ -121,7 +116,6 @@ internal suspend fun SyncEnvironment.diffFor(
     recordedLibraryId = recordedLibraryId,
     removalConfirmThreshold = SyncValues.REMOVAL_CONFIRM_THRESHOLD,
     unresolvedPlaylists = manifest.unresolvedPlaylists,
-    isPlayable = isPlayable,
 )
 
 /** T4 の `pc_id` の先頭 8 桁と前方一致する PC を NSD から引き直す（X6-3 の 2 の 2）。 */

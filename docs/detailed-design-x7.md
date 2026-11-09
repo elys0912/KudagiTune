@@ -166,7 +166,7 @@ E2 の `detail`（X4-3、B4-4 の 8 の表）ごとの表示（S2 と S3 で共�
 | 容量 | T3 の `bytes_transferred` | 人が読む単位 |
 | 原因の種類 | T3 の `error_kind` | E の番号を表示語に直す。空なら出さない。E2 のときは E の番号の語（一律のペアリングのやり直し）を使わず、`result_json` の `error_detail` から X7-1-3 の表の語を選ぶ（S3 と同じ関数。`clock_skew`、`replay`、`rate_limited` で再ペアリングへ誘導しない。review-15） |
 | 除外の一覧 | T6 の `kind` が `excluded` | 曲名、アーティスト、理由（J23） |
-| 再生不可の一覧 | T6 の `kind` が `unplayable` | 曲名、形式、理由（J23）。理由は `protected`（著作権保護。転送しない）と `unsupported_format`（端末のデコーダが無い ALAC・AIFF。転送しない。X6-10） |
+| 再生不可の一覧 | T6 の `kind` が `unplayable` | 曲名、形式、理由（J23）。理由は `protected`（著作権保護。転送しない）。過去の結果の `unsupported_format` は語だけ残す（X6-10） |
 | 失敗の一覧 | T6 の `kind` が `failed` | 曲名と E の番号（J23） |
 
 - 各一覧は V21 の件数まで出し、超えた分は件数だけ「ほか N 件」と出す

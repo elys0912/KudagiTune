@@ -486,7 +486,6 @@ class Harness(val trigger: SyncTrigger = SyncTrigger.Manual) {
     var manualActive = false
     var stopCause = StopCause.UserCancel
     var failOnFinished = false
-    var isPlayable: (ManifestTrack) -> Boolean = { true }
     val progress = MutableStateFlow<SyncProgress?>(null)
 
     init {
@@ -537,7 +536,6 @@ class Harness(val trigger: SyncTrigger = SyncTrigger.Manual) {
         stopCause = { stopCause },
         gate = gate,
         wait = { waits += it },
-        isPlayable = { isPlayable(it) },
     )
 
     suspend fun run(

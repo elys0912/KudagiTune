@@ -1503,36 +1503,19 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `TA-244 端末が再生できない形式の曲は転送せず、T6 と結果の unplayable に unsupported_format で載せる`() = runTest {
+    fun `TA-244 ALAC と AIFF も転送し、保護付きの曲だけを unplayable に載せる`() = runTest {
         val h = Harness()
         val alac = track(2, extension = "m4a").copy(kind = "Apple Lossless audio file")
-        val aac = track(3, extension = "m4a").copy(kind = "AAC audio file")
-        h.sync(listOf(track(1), alac, aac, track(9).copy(isProtected = true)))
-        // 端末にデコーダが無い
-        val noDecoder = Playability { false }
-        h.isPlayable = noDecoder::isPlayable
+        val aiff = track(3, extension = "aiff").copy(kind = "AIFF audio file")
+        h.sync(listOf(track(1), alac, aiff, track(9).copy(isProtected = true)))
 
         val row = assertNotNull(h.run())
 
-        assertEquals(setOf(id(1), id(3)), h.lanApi.trackRequests.map { it.persistentId }.toSet())
-        assertNull(h.store.placed[id(2)])
+        assertEquals(setOf(id(1), id(2), id(3)), h.lanApi.trackRequests.map { it.persistentId }.toSet())
+        assertNotNull(h.store.placed[id(2)])
         val reasons = h.store.issueRows.filter { it.kind == RunIssue.KIND_UNPLAYABLE }.associate { it.persistentId to it.reason }
-        assertEquals(mapOf<String?, String?>(id(9) to "protected", id(2) to "unsupported_format"), reasons)
-        assertEquals(listOf(UnplayableReason.Protected, UnplayableReason.UnsupportedFormat), row.result().unplayable.map { it.reason })
-    }
-
-    @Test
-    fun `TA-244 端末にデコーダがあれば ALAC は unsupported_format に載せない`() = runTest {
-        val h = Harness()
-        h.sync(listOf(track(2, extension = "m4a").copy(kind = "Apple Lossless audio file")))
-        val allDecoders = Playability { true }
-        h.isPlayable = allDecoders::isPlayable
-
-        val row = assertNotNull(h.run())
-
-        assertEquals(listOf(id(2)), h.lanApi.trackRequests.map { it.persistentId })
-        assertTrue(row.result().unplayable.isEmpty())
-        assertTrue(h.store.issueRows.none { it.kind == RunIssue.KIND_UNPLAYABLE })
+        assertEquals(mapOf<String?, String?>(id(9) to "protected"), reasons)
+        assertEquals(listOf(UnplayableReason.Protected), row.result().unplayable.map { it.reason })
     }
 
     private fun sampleJson(startedAt: String): String {
