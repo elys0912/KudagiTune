@@ -128,7 +128,7 @@ class MainActivity : ComponentActivity() {
                 }
                 // 直後に S3 へ移っても消えないよう、画面の知らせでなくトーストで出す（X7-1）
                 PermissionStep.GuideToSettings ->
-                    Toast.makeText(this, "通知が出ない。出すには設定アプリで通知を許可してほしい", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "通知が出ません。出すには設定アプリで通知を許可してください", Toast.LENGTH_LONG).show()
                 PermissionStep.Granted, PermissionStep.SkipDenied -> Unit
             }
         }
