@@ -180,8 +180,28 @@ class RequestAuthTest {
         assertTrue(store.recordIfNew(DEVICE_ID, "a", 0))
     }
 
+    // 全スレッドが開始の合図を待って同時に [task] を始め、スレッドごとの戻り値を返す。スレッド内の例外は get() が投げ直す
+    private fun <T> runConcurrently(threadCount: Int, task: (threadIndex: Int) -> T): List<T> {
+        val startSignal = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(threadCount)
+
+        try {
+            val futures = (1..threadCount).map { threadIndex ->
+                executor.submit<T> {
+                    startSignal.await()
+                    task(threadIndex)
+                }
+            }
+            startSignal.countDown()
+
+            return futures.map { it.get() }
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
     @Test
-    fun `同じ記録を複数のスレッドが同時に追加しても記録ごとに真を返すのは 1 回だけになる`() {
+    fun `TS-173 同じ記録を複数のスレッドが同時に追加しても記録ごとに真を返すのは 1 回だけになる`() {
         val store = NonceStore()
         val threadCount = 8
         val nonceCount = 1_000
@@ -202,5 +222,37 @@ class RequestAuthTest {
         } finally {
             executor.shutdownNow()
         }
+    }
+
+    @Test
+    fun `TS-174 異なる記録を複数のスレッドが同時に上限より多く追加しても例外が出ず全て追加できて件数は上限になる`() {
+        val limit = 50
+        val threadCount = 8
+        val nonceCount = 200
+        val store = NonceStore(limit)
+
+        // スレッドごとに別の nonce を使うので、どの追加も新規として通る
+        val acceptedCounts = runConcurrently(threadCount) { threadIndex ->
+            (1..nonceCount).count { store.recordIfNew(DEVICE_ID, "nonce-$threadIndex-$it", 0) }
+        }
+
+        assertEquals(threadCount * nonceCount, acceptedCounts.sum())
+        assertEquals(limit, store.size)
+    }
+
+    @Test
+    fun `TS-174 期間を過ぎた記録は異なる記録の同時の追加の間に消え新しい記録は欠けずに残る`() {
+        val threadCount = 8
+        val nonceCount = 200
+        val store = NonceStore()
+        repeat(20) { store.recordIfNew(DEVICE_ID, "stale-$it", 0) }
+        val afterExpiry = 2 * tolerance + 1
+
+        runConcurrently(threadCount) { threadIndex ->
+            (1..nonceCount).forEach { store.recordIfNew(DEVICE_ID, "nonce-$threadIndex-$it", afterExpiry) }
+        }
+
+        // 古い記録 20 件は消え、追加した全件が上限（V41）以内で残る
+        assertEquals(threadCount * nonceCount, store.size)
     }
 }

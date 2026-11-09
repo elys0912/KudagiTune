@@ -152,6 +152,20 @@ class Spake2Test {
     }
 
     @Test
+    fun `TS-176 曲線上にない点の Y を端末は拒否し MAC_d を作らない`() {
+        val offCurve = ByteArray(65) { 1 }.also { it[0] = 4 }
+
+        assertNull(confirmPairing(crypto, deviceStart(), PC_ID, offCurve, SPKI_HASH))
+    }
+
+    @Test
+    fun `TS-176 無限遠点の Y を端末は拒否し MAC_d を作らない`() {
+        listOf(ByteArray(65), byteArrayOf(0)).forEach { infinity ->
+            assertNull(confirmPairing(crypto, deviceStart(), PC_ID, infinity, SPKI_HASH))
+        }
+    }
+
+    @Test
     fun `TS-142 コードから導く w は手で計算した値と一致する`() {
         assertContentEquals(
             "45fa7bedbf01204d8fbcddd98dbc9925f5d808afbd6588c5f7fba7b9792dd0c5".hexToByteArray(),
