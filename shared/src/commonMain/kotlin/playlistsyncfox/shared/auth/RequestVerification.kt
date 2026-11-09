@@ -18,6 +18,10 @@ sealed interface AuthResult {
     class Failure(val reason: AuthFailure) : AuthResult
 }
 
+// nonce の記録を残す期間。署名の時刻の許容は前後に CLOCK_TOLERANCE_SECONDS ずつで、全幅はその 2 倍になる。
+// 記録から全幅を過ぎると、同じ署名の再送は時刻の検査で先に拒否されるため、記録は要らない
+private const val NONCE_RETENTION_SECONDS = AuthValues.CLOCK_TOLERANCE_SECONDS * 2
+
 /**
  * 再送の記録（X4-3-3）。PC のメモリだけで持ち、再起動で消える。
  * 記録は追加の順に並び、期間を過ぎたものと、[limit] を超えた分の古いものから消える。
@@ -39,7 +43,7 @@ class NonceStore(private val limit: Int = AuthValues.NONCE_RECORD_LIMIT) {
             if (key in records) return false
 
             val iterator = records.iterator()
-            while (iterator.hasNext() && now - iterator.next().value > AuthValues.CLOCK_TOLERANCE_SECONDS * 2) {
+            while (iterator.hasNext() && now - iterator.next().value > NONCE_RETENTION_SECONDS) {
                 iterator.remove()
             }
             records[key] = now

@@ -1,9 +1,11 @@
 package playlistsyncfox.shared.m3u8
 
 import playlistsyncfox.shared.manifest.ManifestPlaylist
+import playlistsyncfox.shared.path.UNTITLED
 import playlistsyncfox.shared.path.sanitizeElement
 import playlistsyncfox.shared.path.suffixOf
 import playlistsyncfox.shared.path.truncateToBytes
+import playlistsyncfox.shared.path.utf8Length
 
 private const val M3U8_EXTENSION = ".m3u8"
 
@@ -33,8 +35,8 @@ fun buildPlaylistFileName(
     maxBytes: Int,
 ): Map<String, String> {
     fun fileName(playlist: ManifestPlaylist, suffix: String): String {
-        val stemBytes = maxBytes - M3U8_EXTENSION.length - suffix.encodeToByteArray().size
-        val stem = truncateToBytes(sanitizeElement(playlist.name, "Untitled"), stemBytes, "Untitled")
+        val stemBytes = maxBytes - utf8Length(M3U8_EXTENSION) - utf8Length(suffix)
+        val stem = truncateToBytes(sanitizeElement(playlist.name, UNTITLED), stemBytes, UNTITLED)
 
         return stem + suffix + M3U8_EXTENSION
     }

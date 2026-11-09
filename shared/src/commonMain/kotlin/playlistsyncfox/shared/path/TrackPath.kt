@@ -3,8 +3,14 @@ package playlistsyncfox.shared.path
 import playlistsyncfox.shared.diff.SyncRecord
 import playlistsyncfox.shared.manifest.ManifestTrack
 
-/** 曲名が空になったときの代わりの名前。 */
-private const val UNTITLED = "Untitled"
+/** 曲名（m3u8 ではプレイリスト名）が空になったときの代わりの名前。 */
+internal const val UNTITLED = "Untitled"
+
+/** アーティスト名が空になったときの代わりのフォルダ名。 */
+private const val UNKNOWN_ARTIST = "Unknown Artist"
+
+/** アルバム名が空になったときの代わりのフォルダ名。 */
+private const val UNKNOWN_ALBUM = "Unknown Album"
 
 // 全文の接尾辞 ` [` ＋ `persistent_id` の 16 桁 ＋ `]` のバイト数。接尾辞の最長
 private const val MAX_SUFFIX_BYTES = 2 + 16 + 1
@@ -24,11 +30,11 @@ internal data class PathParts(
 internal fun buildTrackCandidate(track: ManifestTrack, maxBytes: Int): PathParts {
     val artist = track.albumArtist.takeUnless { it.isNullOrEmpty() }
         ?: track.artist.takeUnless { it.isNullOrEmpty() }
-        ?: "Unknown Artist"
+        ?: UNKNOWN_ARTIST
 
     return PathParts(
-        artistFolder = folderName(artist, "Unknown Artist", maxBytes),
-        albumFolder = folderName(track.album.orEmpty(), "Unknown Album", maxBytes),
+        artistFolder = folderName(artist, UNKNOWN_ARTIST, maxBytes),
+        albumFolder = folderName(track.album.orEmpty(), UNKNOWN_ALBUM, maxBytes),
         title = sanitizeElement(track.name.orEmpty(), UNTITLED),
         extension = extensionPart(track.extension, maxBytes),
         maxBytes = maxBytes,

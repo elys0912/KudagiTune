@@ -1,8 +1,8 @@
 package playlistsyncfox.shared.diff
 
 import playlistsyncfox.shared.manifest.ManifestTrack
-import playlistsyncfox.shared.manifest.isProtectedTrack
 import playlistsyncfox.shared.manifest.UnresolvedPlaylist
+import playlistsyncfox.shared.manifest.isProtectedTrack
 
 /** 端末が置いた曲の記録。値はマニフェストのまま持つ。 */
 data class SyncRecord(
