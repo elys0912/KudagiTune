@@ -64,6 +64,13 @@ fun decideStop(cause: StopCause): StopDecision = when (cause) {
 
 enum class SuppressReason { RecentManual, KeyMismatch, StorageShortage }
 
+/** T3 の `error_kind` と P4 の `failure_counts` のキーに書く E の番号の表記（例：5 → `E5`）。 */
+fun errorKindText(number: Int): String = "E$number"
+
+/** E2（鍵の不一致を含む）と E3（容量不足）の `error_kind`。自動の抑止の判定に使う。 */
+private const val ERROR_KIND_E2 = "E2"
+private const val ERROR_KIND_E3 = "E3"
+
 /**
  * 自動の抑止（X6-3 の 2 の 1）。T3 の行の種類と T4 の `paired_at` から導く。[runs] は新しい順。
  * (a) 手動の `success`・`partial` の最新の `ended_at` から V19 以内（失敗、中断、`not_started` は起点にしない）
@@ -77,11 +84,11 @@ fun autoSuppression(runs: List<SyncRun>, pairedAt: Long, now: Long): SuppressRea
     val lastManualEnd = runs.filter { it.isManualDone() }.maxOfOrNull { it.endedAt!! }
     if (lastManualEnd != null && now - lastManualEnd < SyncValues.AUTO_SUPPRESS_MS) return SuppressReason.RecentManual
 
-    if (runs.any { it.endedAt != null && it.endedAt >= pairedAt && it.errorKind == "E2" && isKeyMismatch(it.resultJson) }) {
+    if (runs.any { it.endedAt != null && it.endedAt >= pairedAt && it.errorKind == ERROR_KIND_E2 && isKeyMismatch(it.resultJson) }) {
         return SuppressReason.KeyMismatch
     }
 
-    val lastStorageShortage = runs.firstOrNull { it.errorKind == "E3" } ?: return null
+    val lastStorageShortage = runs.firstOrNull { it.errorKind == ERROR_KIND_E3 } ?: return null
     val resolved = runs.any { it.isManualDone() && it.isAfter(lastStorageShortage) }
     return if (resolved) null else SuppressReason.StorageShortage
 }
@@ -152,7 +159,7 @@ fun reportBody(run: SyncRun): String? {
             report.capacity.freeBytesAfter?.let { put("free_bytes_after", it) }
         })
         put("failure_counts", buildJsonObject {
-            report.failureCounts.toSortedMap().forEach { (number, count) -> put("E$number", JsonPrimitive(count)) }
+            report.failureCounts.toSortedMap().forEach { (number, count) -> put(errorKindText(number), JsonPrimitive(count)) }
         })
         put("excluded_count", report.excludedCount)
     }

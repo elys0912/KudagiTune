@@ -166,7 +166,7 @@ class SyncPreview(private val env: SyncEnvironment) {
         }
     }
 
-    private suspend fun gateOf(pairing: Pairing, api: playlistsyncfox.android.net.SyncApi, selectedIds: List<String>): RemovalCheck {
+    private suspend fun gateOf(pairing: Pairing, api: SyncApi, selectedIds: List<String>): RemovalCheck {
         val body = (api.manifest(selectedIds) as? ApiResult.Ok)?.value ?: return RemovalCheck.Failed(reachFailed = false)
         val manifest = (readManifest(body) as? ManifestReadResult.Loaded)?.manifest ?: return RemovalCheck.Failed(reachFailed = false)
         val placed = env.store.placedTracks(pairing.deviceId)

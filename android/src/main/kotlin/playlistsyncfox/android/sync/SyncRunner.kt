@@ -4,7 +4,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -340,6 +339,7 @@ class SyncRunner(private val env: SyncEnvironment) {
 
         private fun shortageOf(requiredBytes: Long, free: Long?): Long? {
             if (free == null) return null
+
             val needed = requiredBytes + SyncValues.STORAGE_MARGIN_BYTES
             return if (free < needed) needed - free else null
         }
@@ -367,6 +367,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             errors.removeAll { it is SyncError.ManifestStale || (it is TrackError && it.persistentId in targetIds) }
 
             if (targets.isEmpty()) return
+
             val shortage = shortageOf(requiredBytes(again), env.freeBytes())
             if (shortage != null) {
                 // 転送の後なので not_started にはしない
@@ -660,7 +661,8 @@ class SyncRunner(private val env: SyncEnvironment) {
             // 8. m3u8。止まった後は時間があれば書く（数秒以内に戻る必要がある）
             if (loaded != null && !skipPlaylists && !skippedUnchanged) {
                 if (afterCancel) {
-                    withTimeoutOrNullQuiet(SyncValues.PLAYLIST_ON_STOP_WAIT_MS) { writePlaylists(loaded) }
+                    // 時間切れは書けなかっただけ。次の同期で書き直す
+                    withTimeoutOrNull(SyncValues.PLAYLIST_ON_STOP_WAIT_MS) { writePlaylists(loaded) }
                 } else {
                     writePlaylists(loaded)
                 }
@@ -681,7 +683,11 @@ class SyncRunner(private val env: SyncEnvironment) {
                     val placed = env.store.placedTracks(deviceId).associateBy { it.persistentId }
                     for (record in finalDiff.toRemove) {
                         val row = placed[record.persistentId] ?: continue
-                        if (env.writer.delete(row)) removed++ else errors += SyncError.WriteFailed(record.persistentId, record.placedPath.substringAfterLast('/'), WriteStep.MediaStoreRegistration)
+                        if (env.writer.delete(row)) {
+                            removed++
+                        } else {
+                            errors += SyncError.WriteFailed(record.persistentId, record.placedPath.substringAfterLast('/'), WriteStep.MediaStoreRegistration)
+                        }
                     }
                     removalExecuted = finalDiff.toRemove.isNotEmpty()
                 } else {
@@ -773,7 +779,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             }
 
             // 12. 終了の通知
-            val shortage = (errors.firstOrNull { it is SyncError.InsufficientStorage } as? SyncError.InsufficientStorage)?.shortfallBytes
+            val shortage = errors.filterIsInstance<SyncError.InsufficientStorage>().firstOrNull()?.shortfallBytes
             val finalProgress = progressNow(SyncStage.Finished).copy(
                 outcome = resultText,
                 errorDetail = errorDetail.takeIf { errors.any { it is SyncError.KeyMismatch } },
@@ -812,14 +818,6 @@ class SyncRunner(private val env: SyncEnvironment) {
         private suspend fun reportWithin(client: SyncApi, body: String, afterCancel: Boolean): Boolean {
             if (!afterCancel) return client.report(body) is ApiResult.Ok
             return withTimeoutOrNull(SyncValues.PLAYLIST_ON_STOP_WAIT_MS) { client.report(body) is ApiResult.Ok } ?: false
-        }
-
-        private suspend fun withTimeoutOrNullQuiet(ms: Long, block: suspend () -> Unit) {
-            try {
-                withTimeoutOrNull(ms) { block() }
-            } catch (_: TimeoutCancellationException) {
-                // 時間切れは書けなかっただけ。次の同期で書き直す
-            }
         }
     }
 

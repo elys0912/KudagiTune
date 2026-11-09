@@ -104,9 +104,13 @@ internal fun resultTextOf(outcome: SyncOutcome, storagePreCheck: Boolean): Strin
 }
 
 /** T3 の `error_kind`。同期全体の E を先に、無ければ最初の曲単位の E。 */
-internal fun errorKindOf(errors: List<SyncError>, userInterrupted: Boolean): String? =
+internal fun errorKindOf(errors: List<SyncError>, userInterrupted: Boolean): String? {
     // 利用者の中断は、先に曲単位の失敗があっても空にする。曲単位の失敗は件数と T6 に残る
-    if (userInterrupted) null else (errors.firstOrNull { it.scope == ErrorScope.Run } ?: errors.firstOrNull())?.let { "E${it.number}" }
+    if (userInterrupted) return null
+
+    val representative = errors.firstOrNull { it.scope == ErrorScope.Run } ?: errors.firstOrNull()
+    return representative?.let { errorKindText(it.number) }
+}
 
 internal fun issuesOf(runId: Long, loaded: Manifest?, finalDiff: Diff?, trackErrors: List<SyncError>): List<RunIssue> {
     val issues = mutableListOf<RunIssue>()
@@ -124,7 +128,7 @@ internal fun issuesOf(runId: Long, loaded: Manifest?, finalDiff: Diff?, trackErr
     for (error in trackErrors) {
         if (error !is TrackError) continue
 
-        issues += RunIssue(runId = runId, persistentId = error.persistentId, title = error.name, kind = RunIssue.KIND_FAILED, errorKind = "E${error.number}")
+        issues += RunIssue(runId = runId, persistentId = error.persistentId, title = error.name, kind = RunIssue.KIND_FAILED, errorKind = errorKindText(error.number))
     }
     return issues
 }
