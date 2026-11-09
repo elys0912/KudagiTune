@@ -18,7 +18,6 @@ import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.encodeResult
 import playlistsyncfox.android.net.ApiFailure
 import playlistsyncfox.android.net.ApiResult
-import playlistsyncfox.android.net.Endpoint
 import playlistsyncfox.android.net.SyncApi
 import playlistsyncfox.android.storage.PlaylistWriteResult
 import playlistsyncfox.android.storage.TrackBody
@@ -77,18 +76,10 @@ class SyncRunner(private val env: SyncEnvironment) {
         } finally {
             sender.cancel()
             opened.forEach { runCatching { it.close() } }
+            // 完了（Finished）を出さずに終えたときは、どの経路でも進行状態を消す（X6-1）。出した完了は S4 が読むので残す
+            if (env.progress.value?.stage != SyncStage.Finished) env.progress.value = null
             env.gate.unlock()
         }
-    }
-
-    private sealed interface Reach {
-        class Connected(val api: SyncApi, val endpoint: Endpoint, val digest: String) : Reach
-
-        /** 全部の接続先が応えない。[mismatch] は証明書の固定の不一致が 1 つでもあったか。 */
-        class Unreachable(val mismatch: Boolean) : Reach
-
-        /** P3 が E2、E4、500 を返した。次の接続先を試さない。 */
-        class Stopped(val failure: ApiFailure) : Reach
     }
 
     private sealed interface TrackStep {
@@ -110,6 +101,12 @@ class SyncRunner(private val env: SyncEnvironment) {
         data object Stale : Attempt
 
         class Wrote(val result: TrackWriteResult) : Attempt
+    }
+
+    /** 1 回の取得の本文の受け取り。[bytes] は受けた量、[endedNormally] は取得元が切れずに閉じたか（X6-11）。 */
+    private class BodyTally {
+        var bytes = 0L
+        var endedNormally = false
     }
 
     private inner class Execution(
@@ -151,6 +148,8 @@ class SyncRunner(private val env: SyncEnvironment) {
         private var baseLibraryId: String? = null
         private var freeBefore: Long? = null
         private var skippedUnchanged = false
+        private var recorded = false
+        private var manifestVersionMismatch = false
 
         // 曲ごとの行と、転送中の曲のこの実行での転送量（done_bytes に足す。X6-3 の SyncProgress）
         private var rows: List<TrackRow> = emptyList()
@@ -241,7 +240,7 @@ class SyncRunner(private val env: SyncEnvironment) {
 
             if (trigger == SyncTrigger.Auto) {
                 val base = digestBase(runs)
-                if (base != null && base.contentDigest == connected.digest && base.result == SyncRun.RESULT_SUCCESS &&
+                if (base != null && base.contentDigest == connected.value && base.result == SyncRun.RESULT_SUCCESS &&
                     !env.writer.relocationNeeded(env.volume)
                 ) {
                     env.log.line("内容が前回と同じため、何もせず終える")
@@ -264,7 +263,32 @@ class SyncRunner(private val env: SyncEnvironment) {
                     conclude(decision.userInterrupted, afterCancel = true)
                 }
                 throw e
+            } catch (e: Exception) {
+                // 終わりの記録（T3）の後の例外は、結果を変えずにワーカーへ渡す
+                if (recorded) throw e
+                closeAfterUnexpected(e)
             }
+        }
+
+        /**
+         * 想定外の例外（M1、通信、保存の例外。X6-12）。T3 の行を「失敗」で閉じ、ログに残す。
+         * `error_kind` は空。`result_json` が無く P4 の本文を作れないので、`reported`＝1 にして再送しない。
+         */
+        private suspend fun closeAfterUnexpected(cause: Exception): SyncRun {
+            env.log.line("想定外の例外で同期を失敗として閉じた：${cause.javaClass.simpleName}")
+            val closed = checkNotNull(run).copy(
+                endedAt = env.now(),
+                result = SyncRun.RESULT_FAILED,
+                errorKind = null,
+                added = added,
+                replaced = replaced,
+                removed = removed,
+                failed = errors.count { it.scope == ErrorScope.Track },
+                bytesTransferred = bytesTransferred,
+                reported = 1,
+            )
+            env.store.finishRun(closed)
+            return closed
         }
 
         private suspend fun execute(api: SyncApi, runs: List<SyncRun>): SyncRun {
@@ -334,6 +358,7 @@ class SyncRunner(private val env: SyncEnvironment) {
                 recordedLibraryId = recordedLibraryId(runs),
                 removalConfirmThreshold = SyncValues.REMOVAL_CONFIRM_THRESHOLD,
                 unresolvedPlaylists = manifest.unresolvedPlaylists,
+                isPlayable = env.isPlayable,
             )
 
         /** 全部の曲の後、E8 になった曲があれば、マニフェストを取り直して 1 回だけ行う。 */
@@ -444,6 +469,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             while (true) {
                 val plan = env.writer.plan(track, path, placed, replace, fromScratch)
                 fromScratch = false
+                val tally = BodyTally()
 
                 val outcome: Attempt? = if (plan is WritePlan.Complete) {
                     // 書き終えていた（IS_PENDING の切り替えの前後で落ちた）。取得せずに読み戻しへ進む
@@ -463,8 +489,9 @@ class SyncRunner(private val env: SyncEnvironment) {
                         if (body.sizeHeader != expectedSize || body.modifiedAtHeader != expectedModified) {
                             Attempt.Stale
                         } else {
-                            val written = env.writer.write(plan, TrackBody(body.startAt, counting(track.persistentId, name, body.startAt, body.source)))
-                            if (written is TrackWriteResult.Placed) bytesTransferred += track.size - body.startAt
+                            val written = env.writer.write(plan, TrackBody(body.startAt, counting(track.persistentId, name, body.startAt, body.source, tally)))
+                            // 切断からの再開を挟んでも、この実行で受けた分の全部を数える（最後の接続の分だけにしない）
+                            if (written is TrackWriteResult.Placed) bytesTransferred += track.size - trackBase
                             Attempt.Wrote(written)
                         }
                     }
@@ -494,7 +521,11 @@ class SyncRunner(private val env: SyncEnvironment) {
                         is TrackWriteResult.Failed -> return TrackStep.Failed(SyncError.WriteFailed(track.persistentId, name, result.step))
                         is TrackWriteResult.OutOfSpace -> return TrackStep.Stop(SyncError.InsufficientStorage(result.missingBytes, StoragePhase.Writing))
                         TrackWriteResult.NeedRestart -> fromScratch = true
-                        TrackWriteResult.Disconnected -> Unit
+                        TrackWriteResult.Disconnected -> if (plan is WritePlan.Resume && tally.endedNormally && tally.bytes == 0L) {
+                            // 正常に閉じた短い本文を続きから取り直しても 1 バイトも増えない。この曲を E9 にして次へ進む（X6-11）
+                            env.writer.discardPending(track.persistentId)
+                            return TrackStep.Failed(SyncError.WriteFailed(track.persistentId, name, WriteStep.TempFileWrite))
+                        }
                     }
                     null -> Unit
                 }
@@ -515,8 +546,13 @@ class SyncRunner(private val env: SyncEnvironment) {
                 when (val response = api.manifest(selectedIds)) {
                     is ApiResult.Ok -> return when (val read = readManifest(response.value)) {
                         is ManifestReadResult.Loaded -> Fetch.Loaded(read)
-                        // 版が合わない、壊れている：端末の更新の案内が要る。E なしで止める
-                        else -> Fetch.Stop(TrackStep.Stop(null))
+                        // 版が合わない：端末の更新の案内が要る。印を残し、E なしで止める（X6-9）
+                        is ManifestReadResult.VersionMismatch -> {
+                            manifestVersionMismatch = true
+                            Fetch.Stop(TrackStep.Stop(null))
+                        }
+                        // 壊れている：印は付けず、E なしで止める
+                        is ManifestReadResult.Broken -> Fetch.Stop(TrackStep.Stop(null))
                     }
                     is ApiResult.Fail -> {
                         if (response.failure != ApiFailure.Disconnected) return Fetch.Stop(stopFor(response.failure))
@@ -533,12 +569,14 @@ class SyncRunner(private val env: SyncEnvironment) {
         }
 
         /** 受け取った量を数える（MediaWriter は変えない）。書き込みの 1 区切りごとに行を更新する。 */
-        private fun counting(id: String, name: String, startAt: Long, inner: TrackSource) = object : TrackSource {
+        private fun counting(id: String, name: String, startAt: Long, inner: TrackSource, tally: BodyTally) = object : TrackSource {
             private var position = startAt
 
             override suspend fun read(buffer: ByteArray): Int {
                 val count = inner.read(buffer)
+                if (count < 0) tally.endedNormally = true
                 if (count > 0) {
+                    tally.bytes += count
                     position += count
                     inFlightBytes = (position - trackBase).coerceAtLeast(0)
                     updateRow(id) { it.copy(receivedBytes = position) }
@@ -564,58 +602,12 @@ class SyncRunner(private val env: SyncEnvironment) {
             }
         }
 
-        /** 到達確認（X6-3 の 2 の 2）。 */
-        private suspend fun reach(): Reach {
+        /** 到達確認（X6-3 の 2 の 2）。P3 が通った接続先を使う。選び方は画面側と共有する（[reachPc]）。 */
+        private suspend fun reach(): Reach<String> {
             // 画面側が同じ試行を済ませているときは、繰り返さない
             if (input.reachFailed) return Reach.Unreachable(mismatch = false)
 
-            var mismatch = false
-            for (kind in endpointOrder(pairing)) {
-                val endpoint = endpointFor(kind) ?: continue
-                val candidate = env.apis.open(endpoint).also { opened += it }
-                when (val result = candidate.digest(selectedIds)) {
-                    is ApiResult.Ok -> {
-                        if (pairing.lastEndpoint != kind) {
-                            pairing = pairing.copy(lastEndpoint = kind)
-                            env.store.updatePairing(pairing)
-                        }
-                        return Reach.Connected(candidate, endpoint, result.value)
-                    }
-                    is ApiResult.Fail -> when (val failure = result.failure) {
-                        ApiFailure.Disconnected -> env.log.line("$kind は応えない")
-                        ApiFailure.PinMismatch -> {
-                            env.log.line("$kind は証明書の固定が合わない")
-                            mismatch = true
-                        }
-                        // E2、E4、500：PC には届いているので、次の接続先を試さない
-                        else -> return Reach.Stopped(failure)
-                    }
-                }
-                runCatching { candidate.close() }
-                opened.remove(candidate)
-            }
-            return Reach.Unreachable(mismatch)
-        }
-
-        private suspend fun endpointFor(kind: String): Endpoint? = when (kind) {
-            LAN -> resolveLan()
-            TAILSCALE -> parseHostPort(Transport.Tailscale, pairing.endpointTailscale)
-            else -> parseHostPort(Transport.UsbTethering, pairing.endpointUsb)
-        }
-
-        /** T4 の `pc_id` の先頭 8 桁と前方一致する PC を NSD から引き直す。名前が変わっていれば保存し直す。 */
-        private suspend fun resolveLan(): Endpoint? {
-            val found = withTimeoutOrNull(SyncValues.NSD_RESOLVE_WAIT_MS) { env.lan.discover() }
-            val service = found?.firstOrNull { it.pcIdPrefix.isNotEmpty() && pairing.pcId.startsWith(it.pcIdPrefix) }
-            if (service == null) {
-                env.log.line("LAN は引き直しで見つからない")
-                return null
-            }
-            if (service.serviceName != pairing.endpointLan) {
-                pairing = pairing.copy(endpointLan = service.serviceName)
-                env.store.updatePairing(pairing)
-            }
-            return Endpoint(Transport.Lan, service.host, service.port)
+            return env.reachPc(pairing, opened) { it.digest(selectedIds) }
         }
 
         /** P3 が通った後に、`reported`＝0 の行を古い順に全部、1 回の同期で 1 度ずつ再送する。 */
@@ -709,7 +701,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             // 9b. 取り直しがすべて済んだ（完了）。古い場所のファイルは消さない（S5 の操作で消す。D16）
             if (relocating && !afterCancel && outcome == SyncOutcome.Completed) env.writer.finishRelocation()
 
-            return record(outcome, loaded, finalDiff, afterCancel)
+            return record(outcome, loaded, finalDiff, afterCancel, userInterrupted)
         }
 
         private fun classify(userInterrupted: Boolean) = classifyOutcome(errors, transferStarted, userInterrupted, stoppedWithoutE)
@@ -731,7 +723,7 @@ class SyncRunner(private val env: SyncEnvironment) {
         }
 
         /** 10〜12. T3 の更新、P4 の報告、終了の通知。 */
-        private suspend fun record(outcome: SyncOutcome, loaded: Manifest?, finalDiff: Diff?, afterCancel: Boolean): SyncRun {
+        private suspend fun record(outcome: SyncOutcome, loaded: Manifest?, finalDiff: Diff?, afterCancel: Boolean, userInterrupted: Boolean): SyncRun {
             val current = checkNotNull(run)
             val endedAt = env.now()
             val trackErrors = errors.filter { it.scope == ErrorScope.Track }
@@ -762,7 +754,7 @@ class SyncRunner(private val env: SyncEnvironment) {
                 capacity = Capacity(plannedBytes, bytesTransferred, freeBefore, if (transferStarted && !afterCancel) env.freeBytes() else freeBefore),
                 errors = errors.toList(),
                 excluded = loaded?.excluded.orEmpty(),
-                unplayable = finalDiff?.let { toUnplayable(it.unplayable) }.orEmpty(),
+                unplayable = finalDiff?.let { toUnplayable(it.unplayable, it.unsupported) }.orEmpty(),
                 libraryId = libraryId,
                 contentDigest = loaded?.contentDigest,
                 unresolvedPlaylists = loaded?.unresolvedPlaylists?.map { it.lastKnownName }.orEmpty(),
@@ -770,6 +762,7 @@ class SyncRunner(private val env: SyncEnvironment) {
                 removalSkipped = removalSkipped,
                 keyMismatch = keyMismatch.takeIf { errors.any { it is SyncError.KeyMismatch } },
                 errorDetail = errorDetail.takeIf { errors.any { it is SyncError.KeyMismatch } },
+                manifestVersionMismatch = manifestVersionMismatch,
             )
 
             val resultText = when {
@@ -781,7 +774,8 @@ class SyncRunner(private val env: SyncEnvironment) {
                     SyncOutcome.Failed -> SyncRun.RESULT_FAILED
                 }
             }
-            val errorKind = (errors.firstOrNull { it.scope == ErrorScope.Run } ?: errors.firstOrNull())?.let { "E${it.number}" }
+            // 利用者の中断は、先に曲単位の失敗があっても空にする。曲単位の失敗は件数と T6 に残る
+            val errorKind = if (userInterrupted) null else (errors.firstOrNull { it.scope == ErrorScope.Run } ?: errors.firstOrNull())?.let { "E${it.number}" }
             val finished = current.copy(
                 endedAt = endedAt,
                 result = resultText,
@@ -797,6 +791,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             )
             env.store.addIssues(issuesOf(current.runId, loaded, finalDiff, trackErrors))
             env.store.finishRun(finished)
+            recorded = true
 
             // 11. P4 で報告する。失敗しても結果に影響しない。報告できなかった行は次回の同期で再送する
             var saved = finished
@@ -836,17 +831,8 @@ class SyncRunner(private val env: SyncEnvironment) {
                     kind = RunIssue.KIND_EXCLUDED,
                 )
             }
-            finalDiff?.unplayable?.forEach {
-                issues += RunIssue(
-                    runId = runId,
-                    persistentId = it.persistentId,
-                    title = it.name ?: it.fileName,
-                    artist = it.artist,
-                    reason = "protected",
-                    format = it.kind ?: it.extension,
-                    kind = RunIssue.KIND_UNPLAYABLE,
-                )
-            }
+            finalDiff?.unplayable?.forEach { issues += unplayableIssue(runId, it, UNPLAYABLE_PROTECTED) }
+            finalDiff?.unsupported?.forEach { issues += unplayableIssue(runId, it, UNPLAYABLE_UNSUPPORTED_FORMAT) }
             for (error in trackErrors) {
                 val (id, name) = when (error) {
                     is SyncError.FileMissing -> error.persistentId to error.name
@@ -858,6 +844,17 @@ class SyncRunner(private val env: SyncEnvironment) {
             }
             return issues
         }
+
+        /** T6 の `unplayable` の行。[reason] は `protected`（転送しない）か `unsupported_format`（転送する）。 */
+        private fun unplayableIssue(runId: Long, track: ManifestTrack, reason: String) = RunIssue(
+            runId = runId,
+            persistentId = track.persistentId,
+            title = track.name ?: track.fileName,
+            artist = track.artist,
+            reason = reason,
+            format = track.kind ?: track.extension,
+            kind = RunIssue.KIND_UNPLAYABLE,
+        )
 
         private fun progressNow(stage: SyncStage, title: String? = null, shortage: Long? = null) = SyncProgress(
             stage = stage,
@@ -930,6 +927,9 @@ class SyncRunner(private val env: SyncEnvironment) {
     }
 
 }
+
+private const val UNPLAYABLE_PROTECTED = "protected"
+private const val UNPLAYABLE_UNSUPPORTED_FORMAT = "unsupported_format"
 
 private fun SyncRun.isAfterRun(other: SyncRun) =
     startedAt > other.startedAt || (startedAt == other.startedAt && runId > other.runId)

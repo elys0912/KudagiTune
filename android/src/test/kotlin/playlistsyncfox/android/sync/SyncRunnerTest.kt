@@ -1,5 +1,6 @@
 package playlistsyncfox.android.sync
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -31,8 +32,10 @@ import playlistsyncfox.shared.result.SyncError
 import playlistsyncfox.shared.result.SyncOutcome
 import playlistsyncfox.shared.result.SyncTrigger
 import playlistsyncfox.shared.result.Transport
+import playlistsyncfox.shared.result.UnplayableReason
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -1171,6 +1174,220 @@ class SyncRunnerTest {
         h.run()
 
         assertTrue(h.lanApi.progressBodies.isEmpty() && h.tailApi.progressBodies.isEmpty())
+    }
+
+    @Test
+    fun `X6-1 前面への昇格が拒否されて終えたとき進行状態が消える`() = runTest {
+        val h = Harness()
+        h.promoteResult = false
+        h.sync(tracks)
+
+        assertNull(h.run())
+
+        assertNull(h.progress.value)
+    }
+
+    @Test
+    fun `X6-1 手動が実行中か待機中の自動が何もせず終えたとき進行状態が消える`() = runTest {
+        val h = Harness(SyncTrigger.Auto)
+        h.sync(tracks)
+        h.manualActive = true
+
+        assertNull(h.run())
+
+        assertNull(h.progress.value)
+    }
+
+    @Test
+    fun `X6-1 内容が前回と同じ自動が何もせず終えたとき進行状態が消える`() = runTest {
+        val h = Harness(SyncTrigger.Auto)
+        h.sync(tracks)
+        h.addRun(digest = "digest-1")
+
+        assertNull(h.run())
+
+        assertNull(h.progress.value)
+    }
+
+    @Test
+    fun `X6-1 自動の抑止で終えたとき進行状態が消える`() = runTest {
+        val h = Harness(SyncTrigger.Auto)
+        h.sync(tracks)
+        h.addRun(trigger = SyncRun.TRIGGER_MANUAL, startedAt = h.clock - 10 * MIN, endedAt = h.clock - 10 * MIN)
+
+        assertNull(h.run())
+
+        assertNull(h.progress.value)
+    }
+
+    @Test
+    fun `X6-1 T3 の行を作る前に中断されたとき進行状態が消える`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        h.onDiscover = { throw CancellationException("中断") }
+
+        assertFailsWith<CancellationException> { h.run() }
+
+        assertNull(h.progress.value)
+        assertTrue(h.runs.isEmpty())
+    }
+
+    @Test
+    fun `X6-1 完了を出して終えた同期の進行状態は S4 のために残る`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+
+        h.run()
+
+        assertEquals(SyncStage.Finished, h.progress.value?.stage)
+    }
+
+    @Test
+    fun `X6-12 想定外の例外は T3 の行を error_kind が空の failed で閉じ、ログに残し、進行状態を消して例外を出さない`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        h.lanApi.trackScript = { error("想定外") }
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(SyncRun.RESULT_FAILED, row.result)
+        assertNull(row.errorKind)
+        assertEquals(1, row.reported)
+        assertEquals(row, h.runs.single())
+        assertTrue(h.logs.any { it.contains("想定外の例外") })
+        assertNull(h.progress.value)
+        assertTrue(h.finished.isEmpty())
+    }
+
+    @Test
+    fun `X6-12 終わりの記録の後の例外は T3 の結果を変えずに呼び出し側へ渡す`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        h.failOnFinished = true
+
+        assertFailsWith<IllegalStateException> { h.run() }
+
+        assertEquals(SyncRun.RESULT_SUCCESS, h.runs.single().result)
+    }
+
+    @Test
+    fun `X6-6 同じ曲で切断からの再開を挟んでも、その曲に受けた分を足し上げて bytes_transferred と done_bytes に数える`() = runTest {
+        val h = Harness()
+        val one = listOf(track(1))
+        h.sync(one)
+        var requests = 0
+        // 1 回目は 40 バイトで切れ、2 回目で続きを受ける
+        h.lanApi.trackScript = {
+            TrackScript.Body(Harness.contentOf(one[0]), startAt = it.rangeFrom, disconnectAfter = if (requests++ == 0) 40 else null)
+        }
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(listOf(0L, 40L), h.lanApi.trackRequests.map { it.rangeFrom })
+        assertEquals(100, row.bytesTransferred)
+        assertEquals(100, h.finished.single().second.doneBytes)
+    }
+
+    @Test
+    fun `X6-7 利用者の中断では、先に曲単位の失敗があっても error_kind が空で、失敗は件数と一覧に残る`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        val serve = h.lanApi.trackScript
+        h.lanApi.trackScript = { if (it.persistentId == id(1)) TrackScript.Fail(ApiFailure.FileMissing) else serve(it) }
+        h.stopCause = StopCause.UserCancel
+
+        val row = cancelDuringWrite(h)
+
+        assertEquals(SyncRun.RESULT_INTERRUPTED, row.result)
+        assertNull(row.errorKind)
+        assertEquals(1, row.failed)
+        assertEquals(listOf("E5"), h.store.issueRows.filter { it.kind == RunIssue.KIND_FAILED }.map { it.errorKind })
+    }
+
+    @Test
+    fun `X6-11 正常に閉じた短い本文は 1 回目は E6 として続きから取り直し、増えれば完了する`() = runTest {
+        val h = Harness()
+        val one = listOf(track(1))
+        h.sync(one)
+        val content = Harness.contentOf(one[0])
+        h.lanApi.trackScript = {
+            if (it.rangeFrom == 0L) TrackScript.Body(content.copyOf(40)) else TrackScript.Body(content, startAt = it.rangeFrom)
+        }
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(listOf(0L, 40L), h.lanApi.trackRequests.map { it.rangeFrom })
+        assertEquals(listOf(2000L), h.waits)
+        assertEquals(SyncRun.RESULT_SUCCESS, row.result)
+    }
+
+    @Test
+    fun `X6-11 続きから取り直しても 1 バイトも増えなければ、その曲を E9 にして pending を消し次の曲へ進む`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        val serve = h.lanApi.trackScript
+        val short = Harness.contentOf(tracks[0]).copyOf(40)
+        h.lanApi.trackScript = { if (it.persistentId == id(1)) TrackScript.Body(short, startAt = it.rangeFrom) else serve(it) }
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(listOf(0L, 40L), h.lanApi.trackRequests.filter { it.persistentId == id(1) }.map { it.rangeFrom })
+        assertEquals(listOf(2000L), h.waits)
+        assertEquals(SyncRun.RESULT_PARTIAL, row.result)
+        assertEquals("E9", row.errorKind)
+        assertEquals(setOf(id(2), id(3)), h.store.placed.keys)
+        assertTrue(h.store.pendingRows.isEmpty())
+        assertEquals(2, h.media.entries.size)
+    }
+
+    @Test
+    fun `X6-9 マニフェストの版違いで止めたとき結果に印を残し、壊れた本文では印を付けない`() = runTest {
+        val mismatch = Harness()
+        mismatch.lanApi.manifestResults.clear()
+        mismatch.lanApi.manifestResults += ApiResult.Ok("""{"format_version":99}""")
+        val mismatchRow = assertNotNull(mismatch.run())
+        assertEquals(SyncRun.RESULT_FAILED, mismatchRow.result)
+        assertNull(mismatchRow.errorKind)
+        assertTrue(mismatchRow.result().manifestVersionMismatch)
+
+        val broken = Harness()
+        broken.lanApi.manifestResults.clear()
+        broken.lanApi.manifestResults += ApiResult.Ok("not json")
+        val brokenRow = assertNotNull(broken.run())
+        assertEquals(SyncRun.RESULT_FAILED, brokenRow.result)
+        assertFalse(brokenRow.result().manifestVersionMismatch)
+    }
+
+    @Test
+    fun `X6-10 端末が再生できない形式の曲は転送し、T6 と結果の unplayable に unsupported_format で載せる`() = runTest {
+        val h = Harness()
+        val alac = track(2, extension = "m4a").copy(kind = "Apple Lossless audio file")
+        val aac = track(3, extension = "m4a").copy(kind = "AAC audio file")
+        h.sync(listOf(track(1), alac, aac, track(9).copy(isProtected = true)))
+        // 端末にデコーダが無い
+        val noDecoder = Playability { false }
+        h.isPlayable = noDecoder::isPlayable
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(setOf(id(1), id(2), id(3)), h.lanApi.trackRequests.map { it.persistentId }.toSet())
+        val reasons = h.store.issueRows.filter { it.kind == RunIssue.KIND_UNPLAYABLE }.associate { it.persistentId to it.reason }
+        assertEquals(mapOf(id(9) to "protected", id(2) to "unsupported_format"), reasons)
+        assertEquals(listOf(UnplayableReason.Protected, UnplayableReason.UnsupportedFormat), row.result().unplayable.map { it.reason })
+    }
+
+    @Test
+    fun `X6-10 端末にデコーダがあれば ALAC は unsupported_format に載せない`() = runTest {
+        val h = Harness()
+        h.sync(listOf(track(2, extension = "m4a").copy(kind = "Apple Lossless audio file")))
+        val allDecoders = Playability { true }
+        h.isPlayable = allDecoders::isPlayable
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(listOf(id(2)), h.lanApi.trackRequests.map { it.persistentId })
+        assertTrue(row.result().unplayable.isEmpty())
+        assertTrue(h.store.issueRows.none { it.kind == RunIssue.KIND_UNPLAYABLE })
     }
 
     private fun sampleJson(startedAt: String): String {
