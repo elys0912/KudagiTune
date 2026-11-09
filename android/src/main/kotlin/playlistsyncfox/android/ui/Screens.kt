@@ -244,7 +244,7 @@ private fun SelectionScreen(model: AppViewModel, current: Screen.Selection) {
 
 @Composable
 private fun NodeRow(model: AppViewModel, stage: SelectionStage.Loaded, node: PlaylistNode, depth: Int) {
-    var open by remember { mutableStateOf(true) }
+    var open by rememberSaveable { mutableStateOf(true) }
     val children = node.children
     if (children == null) {
         val on = node.id in stage.selectedIds
