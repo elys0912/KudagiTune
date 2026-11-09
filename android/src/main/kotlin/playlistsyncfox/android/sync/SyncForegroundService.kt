@@ -34,8 +34,10 @@ class SyncForegroundService : Service() {
             return START_NOT_STICKY
         }
         if (job?.isActive == true) return START_NOT_STICKY
-        val factory = SyncServices.factory
-        if (factory == null) {
+        // lateinit の `isInitialized` は宣言の外から使えないため、未設定の例外で判定する
+        val factory = try {
+            SyncServices.factory
+        } catch (_: UninitializedPropertyAccessException) {
             stopSelf(startId)
             return START_NOT_STICKY
         }
