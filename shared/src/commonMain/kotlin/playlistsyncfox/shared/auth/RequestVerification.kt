@@ -54,17 +54,6 @@ class NonceStore(private val limit: Int = AuthValues.NONCE_RECORD_LIMIT) {
         }
     }
 
-    /** 記録の件数。上限が守られることをテストが確かめるために読む。 */
-    internal val size: Int
-        get() {
-            lock()
-            try {
-                return records.size
-            } finally {
-                unlock()
-            }
-        }
-
     private fun lock() {
         while (!isLocked.compareAndSet(false, true)) {
             // 他のスレッドが unlock するまで繰り返す

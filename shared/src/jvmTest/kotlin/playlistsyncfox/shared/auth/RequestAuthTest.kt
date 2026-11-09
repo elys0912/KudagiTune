@@ -217,7 +217,7 @@ class RequestAuthTest {
     }
 
     @Test
-    fun `TS-174 異なる記録を複数のスレッドが同時に上限より多く追加しても例外が出ず全て追加できて件数は上限になる`() {
+    fun `TS-174 異なる記録を複数のスレッドが同時に上限より多く追加しても例外が出ず全て追加できて上限を超えた古い記録は再び新規になる`() {
         val limit = 50
         val threadCount = 8
         val nonceCount = 200
@@ -229,7 +229,12 @@ class RequestAuthTest {
         }
 
         assertEquals(threadCount * nonceCount, acceptedCounts.sum())
-        assertEquals(limit, store.size)
+
+        // 各スレッドは自分の nonce を順に追加する。後ろに limit 件以上続いた nonce は、他のスレッドとの順序によらず上限で押し出されている
+        val shouldBeEvicted = (1..threadCount).flatMap { threadIndex -> (1..nonceCount - limit).map { "nonce-$threadIndex-$it" } }
+        val stillRemembered = shouldBeEvicted.filterNot { store.recordIfNew(DEVICE_ID, it, 0) }
+
+        assertEquals(emptyList(), stillRemembered)
     }
 
     @Test
@@ -244,7 +249,12 @@ class RequestAuthTest {
             (1..nonceCount).forEach { store.recordIfNew(DEVICE_ID, "nonce-$threadIndex-$it", afterExpiry) }
         }
 
-        // 古い記録 20 件は消え、追加した全件が上限（V41）以内で残る
-        assertEquals(threadCount * nonceCount, store.size)
+        // 追加した全件が上限（V41）以内で残り、古い記録 20 件は消えて再び新規になる。残りの確認を先にする（新規の記録は確認で追加される）
+        val added = (1..threadCount).flatMap { threadIndex -> (1..nonceCount).map { "nonce-$threadIndex-$it" } }
+        val lost = added.filter { store.recordIfNew(DEVICE_ID, it, afterExpiry) }
+        val staleRemembered = (0 until 20).filterNot { store.recordIfNew(DEVICE_ID, "stale-$it", afterExpiry) }
+
+        assertEquals(emptyList(), lost)
+        assertEquals(emptyList(), staleRemembered)
     }
 }
