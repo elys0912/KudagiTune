@@ -12,11 +12,11 @@
 - 試料はすべて合成。実在の曲名・パス・ID・IP・ドメインを使わない（IP は 192.0.2.0/24、名前は `example.invalid`）
 - 時刻と乱数は引数で固定する。暗号の乱数は固定の偽の実体を渡し、乱数を得る順は試験ベクターに合わせて固定する（x の次に y）。nonce の件数の上限など、試験で小さくしたい値は引数で渡す
 - 束 1〜3 は JVM だけで動き、実機も Windows の実環境も要らない。したがって全件が CI の対象
-- 試験ベクターは公開されたもの（RFC 9382 の付録、HKDF と HMAC の RFC の例、SHA-256 の標準の例）を使い、値は実装時に原本から写す。本稿に値は書かない。置き場は :shared：手順（M1）と固定の暗号の実体を組み合わせた検算（TS-130）。実体（HMAC、HKDF、SHA-256、点演算）の既知の入力・既知の値は :desktop（TD-54）と :android（TA-120）のテストで確かめる（X4-5。review-12）
+- 試験ベクターは公開されたもの（RFC 9382 の付録、HKDF と HMAC の RFC の例、SHA-256 の標準の例）を使い、値は実装時に原本から写す。本稿に値は書かない。実体（HMAC、HKDF、SHA-256、点演算）の既知の入力・既知の値は、本番の実体を持つ :desktop（TD-54）と :android（TA-120）のテストに集約する（X4-5。review-12）。:shared に置いていた手順（M1）と固定の暗号の実体の検算（TS-130）は、同じ公開の例を TD-54・TA-120 が確かめるため削った（review-15）
 
 ## 2 テストケースの一覧
 
-- 件数：束 1 が 89 件（TS-01〜TS-14、TS-16〜TS-23、TS-25〜TS-33、TS-35〜TS-36、TS-38、TS-40〜TS-51、TS-53〜TS-54、TS-56〜TS-65、TS-67〜TS-78、TS-131〜TS-134、TS-143、TS-147、TS-149〜TS-150、TS-153、TS-157〜TS-166）、束 2 が 26 件（TS-80〜TS-87、TS-91〜TS-93、TS-95〜TS-99、TS-101〜TS-102、TS-135〜TS-136、TS-167〜TS-172）、束 3 が 41 件（TS-103〜TS-116、TS-118〜TS-128、TS-130、TS-137〜TS-142、TS-152、TS-154〜TS-156、TS-173〜TS-177）。計 156 件。追加分（review-11、review-12、review-13、review-14、review-15）は既存の番号を保つため末尾に付けた
+- 件数：束 1 が 88 件（TS-01〜TS-14、TS-16〜TS-22、TS-25〜TS-33、TS-35〜TS-36、TS-38、TS-40〜TS-51、TS-53〜TS-54、TS-56〜TS-65、TS-67〜TS-78、TS-131〜TS-134、TS-143、TS-147、TS-149〜TS-150、TS-153、TS-157〜TS-166）、束 2 が 26 件（TS-80〜TS-87、TS-91〜TS-93、TS-95〜TS-99、TS-101〜TS-102、TS-135〜TS-136、TS-167〜TS-172）、束 3 が 40 件（TS-103〜TS-116、TS-118〜TS-128、TS-137〜TS-142、TS-152、TS-154〜TS-156、TS-173〜TS-177）。計 154 件。追加分（review-11、review-12、review-13、review-14、review-15）は既存の番号を保つため末尾に付けた
 - 層の「薄い統合」は、複数の関数をつないで純粋なまま確かめるもの。「実機」は束 1〜3 に無い
 - 表中の「V」は basic-design.md の B1-7 の値（V1 コードの桁数、V2 試行の上限、V3 コードの有効時間、V4 超過後の待ち、V7 規模の目標、V12 時刻の許容、V20 消す確認の閾値、V23 要素の上限バイト、V24 接尾辞の文字数、V42 偏り除外の上限回数）
 
@@ -43,7 +43,6 @@
 | TS-20 | 1 | `computeDiff` | 保護付き（`protected` 真） | `SyncRecord` が無い曲 | `unplayable` に入り、`toAdd` に入らない | 単体 | ○ |
 | TS-21 | 1 | `computeDiff` | 保護付き（`m4p`） | `protected` は偽で `extension` が `m4p` の曲 | `unplayable` に入る | 単体 | ○ |
 | TS-22 | 1 | `computeDiff` | 保護付きで記録のある曲 | `SyncRecord` にあり `protected` 真の曲 | `unplayable` に入り、`toRemove` に入らない | 単体 | ○ |
-| TS-23 | 1 | `computeDiff` | 1 曲が複数のプレイリストに入る | 2 本のプレイリストが同じ曲を持つマニフェスト | `toAdd` は 1 件 | 単体 | ○ |
 | TS-25 | 1 | `computeDiff` | ファイルが無く、マニフェストにも無い記録 | `presentIds` に無く入力の曲にも無い記録 | `toRemove` に入る | 単体 | ○ |
 | TS-26 | 1 | `computeDiff` | `recordedLibraryId` が null | null と任意の `manifestLibraryId` | `removalGate` は `Allowed` | 単体 | ○ |
 | TS-27 | 1 | `computeDiff` | `recordedLibraryId` が違う | 記録と違う `manifestLibraryId`。消す対象あり／消す対象が 0 件 | `LibraryChanged`。`toRemove` は計算して返す。`toRemove` が 0 件なら `Allowed`（J25、B2-5。2026-11-06） | 単体 | ○ |
@@ -135,7 +134,6 @@
 | TS-126 | 3 | nonce の掃除 | 保持の期間 | V12 の 2 倍を過ぎた記録と、過ぎていない記録 | 過ぎたものだけ消える | 単体 | ○ |
 | TS-127 | 3 | nonce の掃除 | 件数の上限 | 上限（引数。試験用に小さくした値を渡す）を超える追加 | 古い順に消える | 単体 | ○ |
 | TS-128 | 3 | 確認コードの表示 | 形式 | 既知の SPKI の DER（`formatFingerprint`） | 24 桁の小文字 16 進を 4 桁ずつ空白で区切る。先頭 12 バイトだけ | 単体 | ○ |
-| TS-130 | 3 | 暗号の部品 | 公開の試験ベクター | HKDF-SHA256、HMAC-SHA256、SHA-256 の公開の例を、手順（M1）と固定の暗号の実体の組み合わせに通す | 既知の値と一致（実体の既知の値は TD-54、TA-120。review-12） | 単体 | ○ |
 | TS-131 | 1 | `computeDiff` | 未解決のプレイリストがあるとき | 未解決が 1 件以上で `toRemove` が V20 以下の 1 件以上（記録の一部）。未解決が 1 件以上で `toRemove` が 0 件。未解決が 0 件 | 1 件目は `NeedsConfirmation`。`toRemove` は返す。2 件目と 3 件目は `Allowed`（J24。review-13） | 単体 | ○ |
 | TS-132 | 1 | `computeDiff` | `LibraryChanged` と `NeedsConfirmation` の両方 | 記録と違う `manifestLibraryId` かつ `toRemove` が V20 + 1 件 | `LibraryChanged`（X3-2）。`toRemove` は返す | 単体 | ○ |
 | TS-133 | 1 | `hasMore` | 未完了の有無 | 中断で未完了あり／なし、中断以外で未完了あり | 中断で未完了ありのときだけ真 | 単体 | ○ |
@@ -179,7 +177,7 @@
 | TS-176 | 3 | SPAKE2 | 端末側の Y の検査（X4-7） | PC が返す Y が曲線上にない点、または無限遠点 | 端末は MAC_d を作らず失敗にする | 単体 | ○ |
 | TS-177 | 3 | 確認コードの表示 | SHA-256 の値からの表示（X4-5） | 既知の SHA-256 の値（32 バイト）と、同じ値になる SPKI の DER | `formatFingerprintOfHash` は先頭 12 バイトの 24 桁を 4 桁ずつ空白で区切る。`formatFingerprint` は同じ結果 | 単体 | ○ |
 
-削った ID：TS-15、TS-24、TS-34、TS-37、TS-39、TS-52、TS-55、TS-66、TS-79、TS-88、TS-89、TS-90、TS-94、TS-100、TS-117、TS-129、TS-144、TS-146、TS-148、TS-151（review-13）、TS-145（review-14。区分から T3 の `result` への写しは M4 の手順で、TA-077 で確かめる）
+削った ID：TS-15、TS-24、TS-34、TS-37、TS-39、TS-52、TS-55、TS-66、TS-79、TS-88、TS-89、TS-90、TS-94、TS-100、TS-117、TS-129、TS-144、TS-146、TS-148、TS-151（review-13）、TS-145（review-14。区分から T3 の `result` への写しは M4 の手順で、TA-077 で確かめる）、TS-23（TS-13 の 1 件目と入力も結果も同じ。`computeDiff` の入力は `tracks` だけで、プレイリストの数は結果に現れない）、TS-130（公開の例は TD-54・TA-120 が本番の実体で確かめ、`abc` の指紋は TS-177 と同じ）（review-15）
 
 ## 3 束の終わりに回すテストの範囲
 
