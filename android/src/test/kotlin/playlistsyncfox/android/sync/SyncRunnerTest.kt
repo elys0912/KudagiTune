@@ -1,5 +1,6 @@
 package playlistsyncfox.android.sync
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -33,6 +34,7 @@ import playlistsyncfox.shared.result.SyncTrigger
 import playlistsyncfox.shared.result.Transport
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -1171,6 +1173,100 @@ class SyncRunnerTest {
         h.run()
 
         assertTrue(h.lanApi.progressBodies.isEmpty() && h.tailApi.progressBodies.isEmpty())
+    }
+
+    @Test
+    fun `X6-1 前面への昇格が拒否されて終えたとき進行状態が消える`() = runTest {
+        val h = Harness()
+        h.promoteResult = false
+        h.sync(tracks)
+
+        assertNull(h.run())
+
+        assertNull(h.progress.value)
+    }
+
+    @Test
+    fun `X6-1 手動が実行中か待機中の自動が何もせず終えたとき進行状態が消える`() = runTest {
+        val h = Harness(SyncTrigger.Auto)
+        h.sync(tracks)
+        h.manualActive = true
+
+        assertNull(h.run())
+
+        assertNull(h.progress.value)
+    }
+
+    @Test
+    fun `X6-1 内容が前回と同じ自動が何もせず終えたとき進行状態が消える`() = runTest {
+        val h = Harness(SyncTrigger.Auto)
+        h.sync(tracks)
+        h.addRun(digest = "digest-1")
+
+        assertNull(h.run())
+
+        assertNull(h.progress.value)
+    }
+
+    @Test
+    fun `X6-1 自動の抑止で終えたとき進行状態が消える`() = runTest {
+        val h = Harness(SyncTrigger.Auto)
+        h.sync(tracks)
+        h.addRun(trigger = SyncRun.TRIGGER_MANUAL, startedAt = h.clock - 10 * MIN, endedAt = h.clock - 10 * MIN)
+
+        assertNull(h.run())
+
+        assertNull(h.progress.value)
+    }
+
+    @Test
+    fun `X6-1 T3 の行を作る前に中断されたとき進行状態が消える`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        h.onDiscover = { throw CancellationException("中断") }
+
+        assertFailsWith<CancellationException> { h.run() }
+
+        assertNull(h.progress.value)
+        assertTrue(h.runs.isEmpty())
+    }
+
+    @Test
+    fun `X6-1 完了を出して終えた同期の進行状態は S4 のために残る`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+
+        h.run()
+
+        assertEquals(SyncStage.Finished, h.progress.value?.stage)
+    }
+
+    @Test
+    fun `X6-12 想定外の例外は T3 の行を error_kind が空の failed で閉じ、ログに残し、進行状態を消して例外を出さない`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        h.lanApi.trackScript = { error("想定外") }
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(SyncRun.RESULT_FAILED, row.result)
+        assertNull(row.errorKind)
+        assertEquals(1, row.reported)
+        assertEquals(row, h.runs.single())
+        assertTrue(h.logs.any { it.contains("想定外の例外") })
+        assertNull(h.progress.value)
+        assertTrue(h.finished.isEmpty())
+    }
+
+    @Test
+    fun `X6-12 終わりの記録の後の例外は T3 の結果を変えずに呼び出し側へ渡す`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        h.failOnFinished = true
+
+        assertFailsWith<IllegalStateException> { h.run() }
+
+        assertEquals(SyncRun.RESULT_SUCCESS, h.runs.single().result)
     }
 
     private fun sampleJson(startedAt: String): String {

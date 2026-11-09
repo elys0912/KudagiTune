@@ -42,8 +42,8 @@ object SyncServices {
 }
 
 /**
- * 同期のワーカー（X6-3）。手動と自動で 1 つの実装を使う。結果は T3 に持つので、常に `Result.success` を返し、
- * 再試行は WorkManager に求めない。
+ * 同期のワーカー（X6-3）。手動と自動で 1 つの実装を使う。結果は T3 に持つので、想定外の例外でも
+ * `Result.success` を返し、再試行は WorkManager に求めない（X6-12）。
  */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -96,9 +96,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // 想定外の例外では終了の進み具合が出ず、S3 が途中の段階のまま止まる。消して S1 へ戻す（T3 の行は中断として出る）
-                SyncServices.progress.value = null
-                throw e
+                // T3 の行を作った後の例外は SyncRunner が「失敗」で閉じる。ここへ届くのは、行を作る前の例外と、閉じる処理の例外。
+                // 進行状態は SyncRunner が消す。ログに残し、結果は T3 にあるので成功で終える（X6-12）
+                environment.log.line("想定外の例外で同期を終えた：${e.javaClass.simpleName}")
             } finally {
                 updates.cancel()
             }

@@ -76,6 +76,8 @@ class SyncRunner(private val env: SyncEnvironment) {
         } finally {
             sender.cancel()
             opened.forEach { runCatching { it.close() } }
+            // 完了（Finished）を出さずに終えたときは、どの経路でも進行状態を消す（X6-1）。出した完了は S4 が読むので残す
+            if (env.progress.value?.stage != SyncStage.Finished) env.progress.value = null
             env.gate.unlock()
         }
     }
@@ -140,6 +142,7 @@ class SyncRunner(private val env: SyncEnvironment) {
         private var baseLibraryId: String? = null
         private var freeBefore: Long? = null
         private var skippedUnchanged = false
+        private var recorded = false
 
         // 曲ごとの行と、転送中の曲のこの実行での転送量（done_bytes に足す。X6-3 の SyncProgress）
         private var rows: List<TrackRow> = emptyList()
@@ -253,7 +256,32 @@ class SyncRunner(private val env: SyncEnvironment) {
                     conclude(decision.userInterrupted, afterCancel = true)
                 }
                 throw e
+            } catch (e: Exception) {
+                // 終わりの記録（T3）の後の例外は、結果を変えずにワーカーへ渡す
+                if (recorded) throw e
+                closeAfterUnexpected(e)
             }
+        }
+
+        /**
+         * 想定外の例外（M1、通信、保存の例外。X6-12）。T3 の行を「失敗」で閉じ、ログに残す。
+         * `error_kind` は空。`result_json` が無く P4 の本文を作れないので、`reported`＝1 にして再送しない。
+         */
+        private suspend fun closeAfterUnexpected(cause: Exception): SyncRun {
+            env.log.line("想定外の例外で同期を失敗として閉じた：${cause.javaClass.simpleName}")
+            val closed = checkNotNull(run).copy(
+                endedAt = env.now(),
+                result = SyncRun.RESULT_FAILED,
+                errorKind = null,
+                added = added,
+                replaced = replaced,
+                removed = removed,
+                failed = errors.count { it.scope == ErrorScope.Track },
+                bytesTransferred = bytesTransferred,
+                reported = 1,
+            )
+            env.store.finishRun(closed)
+            return closed
         }
 
         private suspend fun execute(api: SyncApi, runs: List<SyncRun>): SyncRun {
@@ -740,6 +768,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             )
             env.store.addIssues(issuesOf(current.runId, loaded, finalDiff, trackErrors))
             env.store.finishRun(finished)
+            recorded = true
 
             // 11. P4 で報告する。失敗しても結果に影響しない。報告できなかった行は次回の同期で再送する
             var saved = finished
