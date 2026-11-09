@@ -23,6 +23,9 @@ import playlistsyncfox.shared.result.toUnplayable
  * 呼ぶ順と保存は [SyncRunner] が持つ。
  */
 
+/** 曲の表示名。名前が無い曲はファイル名。 */
+internal val ManifestTrack.title: String get() = name ?: fileName
+
 /** 同期 1 回の件数と容量。計画は差分の値、実績は転送した値。 */
 internal class RunTotals(
     val plannedAdd: Int,
@@ -133,7 +136,7 @@ private const val UNPLAYABLE_UNSUPPORTED_FORMAT = "unsupported_format"
 private fun unplayableIssue(runId: Long, track: ManifestTrack, reason: String) = RunIssue(
     runId = runId,
     persistentId = track.persistentId,
-    title = track.name ?: track.fileName,
+    title = track.title,
     artist = track.artist,
     reason = reason,
     format = track.kind ?: track.extension,

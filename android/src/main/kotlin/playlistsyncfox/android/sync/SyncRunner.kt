@@ -398,7 +398,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             // 手順 7 の始めに全部を waiting で作る。取り直しでは、まだ無い行だけ足す
             val known = rows.mapTo(HashSet()) { it.persistentId }
             rows = rows + targets.map { it.first }.filter { it.persistentId !in known }
-                .map { TrackRow(it.persistentId, it.name ?: it.fileName, it.size) }
+                .map { TrackRow(it.persistentId, it.title, it.size) }
             publish(SyncStage.Transfer)
             val stale = mutableListOf<String>()
             for ((track, replace) in targets) {
@@ -408,13 +408,13 @@ class SyncRunner(private val env: SyncEnvironment) {
                     TrackStep.Done -> {
                         if (replace) replaced++ else added++
                         updateRow(track.persistentId) { it.copy(state = TrackState.Done, receivedBytes = it.size) }
-                        env.log.line("保存した：${track.name ?: track.fileName}")
+                        env.log.line("保存した：${track.title}")
                     }
                     is TrackStep.Failed -> {
                         errors += step.error
                         if (step.error is SyncError.ManifestStale) stale += track.persistentId
                         updateRow(track.persistentId) { it.copy(state = TrackState.Failed, errorNumber = step.error.number) }
-                        env.log.failure("保存に失敗した：${track.name ?: track.fileName}", step.error.number)
+                        env.log.failure("保存に失敗した：${track.title}", step.error.number)
                     }
                     is TrackStep.Stop -> {
                         applyStop(step)
@@ -435,7 +435,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             placed: PlacedTrack?,
             retried: Boolean,
         ): TrackStep {
-            val name = track.name ?: track.fileName
+            val name = track.title
             var failures = 0
             var fromScratch = false
             // この曲にこの実行で受けた量のうち、終わった取得の分。切断からの再開や最初からの取り直しを挟んでも足し上げる（X6-6）
@@ -496,7 +496,7 @@ class SyncRunner(private val env: SyncEnvironment) {
                 return Attempt.Wrote(env.writer.write(plan, null))
             }
 
-            val name = track.name ?: track.fileName
+            val name = track.title
             transferStarted = true
             updateRow(track.persistentId) { it.copy(receivedBytes = plan.resumeFrom) }
             publish(SyncStage.Transfer, title = name)
