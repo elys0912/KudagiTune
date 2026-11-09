@@ -6,6 +6,7 @@ import playlistsyncfox.shared.result.ErrorDetail
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToLong
 
 // 画面に出す語（X7-1）。見た目は書かず、語だけを決める。
 
@@ -74,13 +75,23 @@ fun reasonWord(reason: String?): String = when (reason) {
     else -> reason
 }
 
-/** 人が読む単位。 */
-fun formatBytes(bytes: Long): String = when {
-    bytes >= 1L shl 30 -> "%.1f GiB".format(bytes.toDouble() / (1L shl 30))
-    bytes >= 1L shl 20 -> "%.1f MiB".format(bytes.toDouble() / (1L shl 20))
-    bytes >= 1L shl 10 -> "%.1f KiB".format(bytes.toDouble() / (1L shl 10))
-    else -> "$bytes B"
+private val BYTE_UNITS = listOf("B", "KiB", "MiB", "GiB")
+private const val BYTE_UNIT_STEP = 1024.0
+
+/**
+ * 人が読む単位。小数 1 桁に丸めて 1024 に達するときは、上の単位で出す。例：1 MiB の 1 バイト手前は「1.0 MiB」（「1024.0 KiB」にしない）。
+ */
+fun formatBytes(bytes: Long): String {
+    var value = bytes.toDouble()
+    var unitIndex = 0
+    while (unitIndex < BYTE_UNITS.lastIndex && roundedToTenths(value) >= BYTE_UNIT_STEP) {
+        value /= BYTE_UNIT_STEP
+        unitIndex++
+    }
+    return if (unitIndex == 0) "$bytes B" else "%.1f %s".format(value, BYTE_UNITS[unitIndex])
 }
+
+private fun roundedToTenths(value: Double): Double = (value * 10).roundToLong() / 10.0
 
 private val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 

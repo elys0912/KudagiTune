@@ -152,8 +152,11 @@ class FormatBytesTest {
     }
 
     @Test
-    fun `1 MiB の 1 バイト手前は、丸めのため 1024 KiB と出る`() {
-        assertEquals("1024.0 KiB", formatBytes((1L shl 20) - 1))
+    fun `小数 1 桁に丸めて 1024 になる値は、上の単位で出す`() {
+        assertEquals("1023.9 KiB", formatBytes(1048524))
+        assertEquals("1.0 MiB", formatBytes(1048525))
+        assertEquals("1.0 MiB", formatBytes((1L shl 20) - 1))
+        assertEquals("1.0 GiB", formatBytes((1L shl 30) - 1))
     }
 }
 
