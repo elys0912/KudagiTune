@@ -2,9 +2,13 @@ package playlistsyncfox.shared.auth
 
 import playlistsyncfox.shared.crypto.SigningKeyRef
 import playlistsyncfox.shared.crypto.TestCrypto
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RequestAuthTest {
@@ -36,6 +40,26 @@ class RequestAuthTest {
     ) = verifyRequest(crypto, request, signature, at, started, findKey, nonces)
 
     private fun AuthResult.failure() = (this as AuthResult.Failure).reason
+
+    // 全スレッドが開始の合図を待って同時に [task] を始め、スレッドごとの戻り値を返す。スレッド内の例外は get() が投げ直す
+    private fun <T> runConcurrently(threadCount: Int, task: (threadIndex: Int) -> T): List<T> {
+        val startSignal = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(threadCount)
+
+        try {
+            val futures = (1..threadCount).map { threadIndex ->
+                executor.submit<T> {
+                    startSignal.await()
+                    task(threadIndex)
+                }
+            }
+            startSignal.countDown()
+
+            return futures.map { it.get() }
+        } finally {
+            executor.shutdownNow()
+        }
+    }
 
     @Test
     fun `TS-115 固定の入力から 7 行の文字列が一致し末尾に LF が付かない`() {
@@ -139,7 +163,7 @@ class RequestAuthTest {
         val wrongSignature = verify(request, signature = "AAAA").failure()
 
         assertEquals(wrongSignature, unregistered)
-        assertEquals(null, unregistered.detail)
+        assertNull(unregistered.detail)
     }
 
     @Test
@@ -165,7 +189,7 @@ class RequestAuthTest {
         store.recordIfNew(DEVICE_ID, "kept", 0)
         store.recordIfNew(DEVICE_ID, "other", 2 * tolerance)
 
-        assertEquals(false, store.recordIfNew(DEVICE_ID, "kept", 2 * tolerance))
+        assertFalse(store.recordIfNew(DEVICE_ID, "kept", 2 * tolerance))
     }
 
     @Test
@@ -173,8 +197,64 @@ class RequestAuthTest {
         val store = NonceStore(limit = 2)
         listOf("a", "b", "c").forEach { store.recordIfNew(DEVICE_ID, it, 0) }
 
-        assertEquals(false, store.recordIfNew(DEVICE_ID, "c", 0))
-        assertEquals(false, store.recordIfNew(DEVICE_ID, "b", 0))
+        assertFalse(store.recordIfNew(DEVICE_ID, "c", 0))
+        assertFalse(store.recordIfNew(DEVICE_ID, "b", 0))
         assertTrue(store.recordIfNew(DEVICE_ID, "a", 0))
+    }
+
+    @Test
+    fun `TS-173 同じ記録を複数のスレッドが同時に追加しても記録ごとに真を返すのは 1 回だけになる`() {
+        val store = NonceStore()
+        val threadCount = 8
+        val nonceCount = 1_000
+
+        // 全スレッドが同じ nonce を同じ順で追加する。どのスレッドが先でも、各 nonce の最初の 1 回だけが真になる
+        val trueCounts = runConcurrently(threadCount) { _ ->
+            (1..nonceCount).count { store.recordIfNew(DEVICE_ID, "nonce-$it", 0) }
+        }
+
+        assertEquals(nonceCount, trueCounts.sum())
+    }
+
+    @Test
+    fun `TS-174 異なる記録を複数のスレッドが同時に上限より多く追加しても例外が出ず全て追加できて上限を超えた古い記録は再び新規になる`() {
+        val limit = 50
+        val threadCount = 8
+        val nonceCount = 200
+        val store = NonceStore(limit)
+
+        // スレッドごとに別の nonce を使うので、どの追加も新規として通る
+        val acceptedCounts = runConcurrently(threadCount) { threadIndex ->
+            (1..nonceCount).count { store.recordIfNew(DEVICE_ID, "nonce-$threadIndex-$it", 0) }
+        }
+
+        assertEquals(threadCount * nonceCount, acceptedCounts.sum())
+
+        // 各スレッドは自分の nonce を順に追加する。後ろに limit 件以上続いた nonce は、他のスレッドとの順序によらず上限で押し出されている
+        val shouldBeEvicted = (1..threadCount).flatMap { threadIndex -> (1..nonceCount - limit).map { "nonce-$threadIndex-$it" } }
+        val stillRemembered = shouldBeEvicted.filterNot { store.recordIfNew(DEVICE_ID, it, 0) }
+
+        assertEquals(emptyList(), stillRemembered)
+    }
+
+    @Test
+    fun `TS-174 期間を過ぎた記録は異なる記録の同時の追加の間に消え新しい記録は欠けずに残る`() {
+        val threadCount = 8
+        val nonceCount = 200
+        val store = NonceStore()
+        repeat(20) { store.recordIfNew(DEVICE_ID, "stale-$it", 0) }
+        val afterExpiry = 2 * tolerance + 1
+
+        runConcurrently(threadCount) { threadIndex ->
+            (1..nonceCount).forEach { store.recordIfNew(DEVICE_ID, "nonce-$threadIndex-$it", afterExpiry) }
+        }
+
+        // 追加した全件が上限（V41）以内で残り、古い記録 20 件は消えて再び新規になる。残りの確認を先にする（新規の記録は確認で追加される）
+        val added = (1..threadCount).flatMap { threadIndex -> (1..nonceCount).map { "nonce-$threadIndex-$it" } }
+        val lost = added.filter { store.recordIfNew(DEVICE_ID, it, afterExpiry) }
+        val staleRemembered = (0 until 20).filterNot { store.recordIfNew(DEVICE_ID, "stale-$it", afterExpiry) }
+
+        assertEquals(emptyList(), lost)
+        assertEquals(emptyList(), staleRemembered)
     }
 }

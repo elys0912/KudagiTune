@@ -12,6 +12,7 @@ import android.os.storage.StorageManager
 import android.provider.MediaStore
 import android.provider.Settings
 import android.view.WindowInsetsController
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -24,13 +25,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import playlistsyncfox.android.log.logFileName
 import playlistsyncfox.android.notify.SyncNotifications
 import playlistsyncfox.android.storage.StoredFile
 import playlistsyncfox.android.ui.AppScreen
 import playlistsyncfox.android.ui.AppViewModel
 import playlistsyncfox.android.ui.DarkColors
+import playlistsyncfox.android.ui.LICENSE_TEXT_DIR
 import playlistsyncfox.android.ui.LightColors
+import playlistsyncfox.android.ui.NOTICE_DIR
 import playlistsyncfox.android.ui.PermissionStep
+import playlistsyncfox.android.ui.ReadAccess
 import playlistsyncfox.android.ui.Screen
 import playlistsyncfox.android.ui.ScreenActions
 import playlistsyncfox.android.ui.parseLicenses
@@ -39,24 +44,25 @@ import playlistsyncfox.android.ui.permissionStep
 class MainActivity : ComponentActivity() {
     private lateinit var model: AppViewModel
 
-    // 拒否の結果は端末内に覚え、同じ起動の間は再び求めない（X7-4-2 の 4）
-    private var notificationDenied = false
-    private var readDenied = false
     private val prefs by lazy { getSharedPreferences("permissions", MODE_PRIVATE) }
 
     private val notificationLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) notificationDenied = true
+        if (!granted) model.notificationDenied = true
         // 拒否でも同期は続ける
         model.syncPressed()
     }
 
     private val readLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (!granted) readDenied = true
-        model.refreshSettings(notificationsAllowed(), readGranted(), denied = !granted)
+        if (!granted) model.readDenied = true
+        model.settings.refresh(notificationsAllowed(), if (granted) ReadAccess.Granted else ReadAccess.Denied)
+    }
+
+    private val saveLogLauncher = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) model.saveLog { text -> writeText(uri, text) }
     }
 
     private val deleteLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
-        model.refreshSettings(notificationsAllowed(), readGranted())
+        model.settings.refresh(notificationsAllowed(), readAccess())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,15 +76,19 @@ class MainActivity : ComponentActivity() {
 
         val actions = ScreenActions(
             onSyncButton = ::onSyncButton,
+            onOpenSettings = { model.openSettings(notificationsAllowed(), readAccess()) },
             onNotificationHelp = ::openNotificationSettings,
             onRequestRead = ::requestRead,
             onDeleteLeftovers = ::deleteLeftovers,
             onShareLog = ::shareLog,
+            onSaveLog = { saveLogLauncher.launch(logFileName(System.currentTimeMillis())) },
             onOpenStorageSettings = { startActivity(Intent(StorageManager.ACTION_MANAGE_STORAGE)) },
             licenses = {
                 // 資産が読めなければ null（「読み込めない」を出す。アプリは止めない）
-                runCatching { assets.open("artifacts.json").bufferedReader().use { it.readText() } }.getOrNull()?.let(::parseLicenses)
+                readAsset("artifacts.json")?.let(::parseLicenses)
             },
+            licenseText = { file -> readAsset("$LICENSE_TEXT_DIR/$file") },
+            licenseNotice = { file -> readAsset("$NOTICE_DIR/$file") },
         )
         setContent {
             val screen by model.screen.collectAsState()
@@ -86,9 +96,13 @@ class MainActivity : ComponentActivity() {
             val dark = isSystemInDarkTheme()
             SideEffect { applySystemBars(dark) }
             BackHandler(enabled = screen != Screen.Home) { model.back() }
-            AppScreen(model, actions, ::notificationsAllowed, ::readGranted)
+            AppScreen(model, actions)
         }
     }
+
+    /** 資産の [path] を文字列で読む。無い・読めないときは null。 */
+    private fun readAsset(path: String): String? =
+        runCatching { assets.open(path).bufferedReader().use { it.readText() } }.getOrNull()
 
     private fun applySystemBars(dark: Boolean) {
         window.setBackgroundDrawable(ColorDrawable((if (dark) DarkColors else LightColors).background.toArgb()))
@@ -101,26 +115,33 @@ class MainActivity : ComponentActivity() {
         model.openFromNotification(intent.getStringExtra(SyncNotifications.EXTRA_OPEN))
     }
 
-    /** 手動の同期の前に、通知の許可を 1 回だけ確かめる。拒否でも同期は続ける。 */
-    private fun onSyncButton() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val permission = Manifest.permission.POST_NOTIFICATIONS
-            val step = permissionStep(
-                granted = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED,
-                deniedThisLaunch = notificationDenied,
-                blockedByOs = prefs.getBoolean(KEY_ASKED_NOTIFICATION, false) && !shouldShowRequestPermissionRationale(permission),
-            )
-            when (step) {
-                PermissionStep.Request -> {
-                    prefs.edit().putBoolean(KEY_ASKED_NOTIFICATION, true).apply()
-                    notificationLauncher.launch(permission)
-                    return
-                }
-                PermissionStep.GuideToSettings -> model.message.value = "通知が出ない。出すには設定アプリで通知を許可してほしい"
-                PermissionStep.Granted, PermissionStep.SkipDenied -> Unit
+    private fun onSyncButton() = model.syncPressed(askNotification = ::askNotificationPermission)
+
+    /**
+     * 同期が始まると決まった後に、通知の許可を確かめる。拒否でも同期は続ける。
+     * 許可の画面を出したときは true（同期は結果の後に始める）。
+     */
+    private fun askNotificationPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+        val permission = Manifest.permission.POST_NOTIFICATIONS
+        val step = permissionStep(
+            granted = checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED,
+            deniedThisLaunch = model.notificationDenied,
+            blockedByOs = prefs.getBoolean(KEY_ASKED_NOTIFICATION, false) && !shouldShowRequestPermissionRationale(permission),
+        )
+        return when (step) {
+            PermissionStep.Request -> {
+                prefs.edit().putBoolean(KEY_ASKED_NOTIFICATION, true).apply()
+                notificationLauncher.launch(permission)
+                true
             }
+            // 直後に S3 へ移っても消えないよう、画面の知らせでなくトーストで出す（X7-1）
+            PermissionStep.GuideToSettings -> {
+                Toast.makeText(this, "通知が出ません。出すには設定アプリで通知を許可してください", Toast.LENGTH_LONG).show()
+                false
+            }
+            PermissionStep.Granted, PermissionStep.SkipDenied -> false
         }
-        model.syncPressed()
     }
 
     private fun notificationsAllowed(): Boolean = getSystemService(NotificationManager::class.java).areNotificationsEnabled()
@@ -134,12 +155,14 @@ class MainActivity : ComponentActivity() {
 
     private fun readGranted() = checkSelfPermission(readPermission()) == PackageManager.PERMISSION_GRANTED
 
+    private fun readAccess() = if (readGranted()) ReadAccess.Granted else ReadAccess.Requestable
+
     /** S5 の「以前の曲の整理」を開いたときの読み取りの権限。拒否なら項目を閉じる。 */
     private fun requestRead() {
         val permission = readPermission()
         val step = permissionStep(
             granted = readGranted(),
-            deniedThisLaunch = readDenied,
+            deniedThisLaunch = model.readDenied,
             blockedByOs = prefs.getBoolean(KEY_ASKED_READ, false) && !shouldShowRequestPermissionRationale(permission),
         )
         when (step) {
@@ -147,8 +170,8 @@ class MainActivity : ComponentActivity() {
                 prefs.edit().putBoolean(KEY_ASKED_READ, true).apply()
                 readLauncher.launch(permission)
             }
-            PermissionStep.Granted -> model.refreshSettings(notificationsAllowed(), readGranted())
-            PermissionStep.GuideToSettings, PermissionStep.SkipDenied -> model.refreshSettings(notificationsAllowed(), readGranted(), denied = true)
+            PermissionStep.Granted -> model.settings.refresh(notificationsAllowed(), ReadAccess.Granted)
+            PermissionStep.GuideToSettings, PermissionStep.SkipDenied -> model.settings.refresh(notificationsAllowed(), ReadAccess.Denied)
         }
     }
 
@@ -163,6 +186,12 @@ class MainActivity : ComponentActivity() {
     private fun shareLog(text: String) {
         val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
         startActivity(Intent.createChooser(send, null))
+    }
+
+    /** 「ファイルに保存する」で利用者が選んだ場所へ書く。開けなければ例外にして、画面に失敗を出す。権限は要らない（保存先の選択が許可になる）。 */
+    private fun writeText(uri: Uri, text: String) {
+        val output = contentResolver.openOutputStream(uri, "wt") ?: error("保存先を開けない")
+        output.use { it.write(text.toByteArray()) }
     }
 
     private companion object {

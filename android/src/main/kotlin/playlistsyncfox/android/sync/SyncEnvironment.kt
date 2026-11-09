@@ -7,6 +7,7 @@ import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.SyncStore
 import playlistsyncfox.android.net.ApiProvider
 import playlistsyncfox.android.storage.MediaWriter
+import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.result.SyncTrigger
 
 /** NSD で見つかった PC（X7-2-1 の `DiscoveredPc` のうち到達確認が使う分）。[pcIdPrefix] は TXT `pid`。 */
@@ -65,6 +66,8 @@ class SyncEnvironment(
     /** 同じプロセスで同時に走るのは 1 つだけ（X6-4）。 */
     val gate: Mutex = ProcessGate,
     val wait: suspend (Long) -> Unit = { delay(it) },
+    /** 端末で再生できる形式の曲か（X6-10）。既定は端末のデコーダの一覧で調べる。試験は偽物を渡す。 */
+    val isPlayable: (ManifestTrack) -> Boolean = Playability()::isPlayable,
 )
 
 val ProcessGate = Mutex()

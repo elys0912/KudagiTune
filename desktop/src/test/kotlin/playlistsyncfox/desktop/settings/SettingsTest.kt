@@ -9,6 +9,7 @@ import kotlin.io.path.createTempDirectory
 import kotlin.io.path.readText
 import kotlin.io.path.writeText
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -44,6 +45,18 @@ class SettingsTest {
         assertEquals("{ これは壊れている", dir.resolve("settings.json.bad").readText())
         assertEquals(DEFAULT_PORT, load.settings.port)
         assertFalse(load.firstRun)
+    }
+
+    @Test
+    fun `TD-24 UTF-8 として不正なバイト列の設定も bad へ退避して既定で起動する`() {
+        val broken = byteArrayOf(0xFF.toByte(), 0xFE.toByte(), 0x7B)
+        Files.write(file, broken)
+
+        val load = store().load()
+
+        assertNotNull(load.rescuedAs)
+        assertContentEquals(broken, Files.readAllBytes(dir.resolve("settings.json.bad")))
+        assertEquals(DEFAULT_PORT, load.settings.port)
     }
 
     @Test
@@ -125,6 +138,21 @@ class SettingsTest {
         assertEquals(3, after.size)
         assertFalse(before.first() in after)
         assertEquals(before.drop(1), after.dropLast(1))
+    }
+
+    @Test
+    fun `TD-30 連番として読めない名前の psfox ログがあっても、無視して連番の新しいファイルへ切り替わる`() {
+        val logDir = dir.resolve("logs")
+        Files.createDirectories(logDir)
+        val stray = logDir.resolve("psfox-backup.log").also { it.writeText("利用者が置いたファイル") }
+        val log = AppLog(logDir, MutableClock(T0), maxBytes = 1, generations = 3)
+
+        log.info("m", "行 0")
+        log.info("m", "行 1")
+
+        val numbered = Files.list(logDir).use { s -> s.map { it.fileName.toString() }.filter { it != stray.fileName.toString() }.sorted().toList() }
+        assertEquals(listOf("psfox-000001.log", "psfox-000002.log"), numbered)
+        assertEquals("利用者が置いたファイル", stray.readText())
     }
 
     @Test

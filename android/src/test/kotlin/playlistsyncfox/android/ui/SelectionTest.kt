@@ -1,15 +1,19 @@
 package playlistsyncfox.android.ui
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import playlistsyncfox.android.InMemoryStore
 import playlistsyncfox.android.db.SelectedPlaylist
+import playlistsyncfox.android.db.SyncStore
 import playlistsyncfox.android.sync.CatalogResult
 import playlistsyncfox.shared.manifest.PlaylistNode
+import playlistsyncfox.shared.result.ErrorDetail
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 private const val FOLDER = "F000000000000001"
 private const val LEAF_A = "A000000000000001"
@@ -44,6 +48,31 @@ class SelectionTest {
         assertEquals(listOf(LEAF_C, LEAF_A, LEAF_B), store.selected.map { it.playlistId })
         assertEquals(listOf("C", "A", "B"), store.selected.map { it.name })
         assertEquals(store.selected.map { it.playlistId }, loaded(p).selectedIds)
+    }
+
+    @Test
+    fun `TA-221 保存が終わる前に続けて変えても、1 回目の変更は消えない`() = runTest {
+        val inner = InMemoryStore()
+        val release = CompletableDeferred<Unit>()
+        val slowStore = object : SyncStore by inner {
+            override suspend fun replaceSelection(rows: List<SelectedPlaylist>) {
+                release.await()
+                inner.replaceSelection(rows)
+            }
+        }
+        val p = SelectionPresenter(backgroundScope, slowStore, { CatalogResult.Loaded(tree) }, now = { 100 }).also {
+            it.load()
+            runCurrent()
+        }
+
+        p.setLeaf(LEAF_A, true)
+        p.setLeaf(LEAF_B, true)
+        runCurrent()
+        release.complete(Unit)
+        runCurrent()
+
+        assertEquals(listOf(LEAF_A, LEAF_B), inner.selected.map { it.playlistId })
+        assertEquals(listOf(LEAF_A, LEAF_B), loaded(p).selectedIds)
     }
 
     @Test
@@ -87,5 +116,18 @@ class SelectionTest {
         runCurrent()
 
         assertEquals(listOf(LEAF_C), store.selected.map { it.playlistId })
+    }
+
+    @Test
+    fun `TA-249 取得が E2 で断られたときの語と案内は S3 と同じ noticeOf で、ほかの失敗には案内を足さない`() {
+        val clockSkew = CatalogResult.Rejected(ErrorDetail.ClockSkew)
+        val rateLimited = CatalogResult.Rejected(ErrorDetail.RateLimited)
+
+        assertEquals(noticeOf(ErrorDetail.ClockSkew).title, catalogWord(clockSkew))
+        assertEquals(noticeOf(ErrorDetail.ClockSkew).guidance, catalogGuidance(clockSkew))
+        assertEquals(noticeOf(ErrorDetail.RateLimited).title, catalogWord(rateLimited))
+        assertEquals("PC に接続できません", catalogWord(CatalogResult.Unreachable))
+        assertNull(catalogGuidance(CatalogResult.Unreachable))
+        assertNull(catalogGuidance(CatalogResult.KeyMismatch))
     }
 }

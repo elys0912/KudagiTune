@@ -15,7 +15,15 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.network.tls.certificates.generateCertificate
+import io.ktor.utils.io.ByteChannel
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import playlistsyncfox.android.DEVICE
 import playlistsyncfox.shared.auth.SignatureHeaderNames
 import playlistsyncfox.shared.crypto.CryptoProvider
@@ -42,6 +50,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -110,6 +119,31 @@ private fun MockRequestHandleScope.failure(status: Int, detail: String? = null) 
     status = HttpStatusCode.fromValue(status),
     headers = headersOf(HttpHeaders.ContentType, "application/json"),
 )
+
+/** 応答の合図を待つ実時間の上限。合図が来なかったときに失敗させるためだけの値で、通常は待たない。 */
+private const val RESPONSE_SIGNAL_TIMEOUT_MS = 10_000L
+
+/**
+ * 本文が終わらない応答を読んでいる最中に呼び出しを取り消し、呼び出しが結果を返したか（取り消しが飲まれたか）を返す。
+ * 取り消す前に、ハンドラが応答を返した合図を待つ。合図はハンドラの実行で、本文の読み取りに入るまでの短い間は残る。
+ */
+private suspend fun CoroutineScope.resultOfCancelledBodyRead(
+    status: HttpStatusCode,
+    call: suspend PsfoxClient.() -> ApiResult<*>,
+): ApiResult<*>? {
+    val responded = CompletableDeferred<Unit>()
+    val api = client {
+        responded.complete(Unit)
+        respond(ByteChannel(), status, headersOf(HttpHeaders.ContentType, "application/json"))
+    }
+    var result: ApiResult<*>? = null
+    val job = launch { result = api.call() }
+    // 仮想時間は進まないので、実時間で待つ
+    val signaled = withContext(Dispatchers.Default) { withTimeoutOrNull(RESPONSE_SIGNAL_TIMEOUT_MS) { responded.await() } }
+    assertNotNull(signaled, "取り消す前にハンドラが応答を返していない")
+    job.cancelAndJoin()
+    return result
+}
 
 class PsfoxClientTest {
     @Test
@@ -318,6 +352,20 @@ class PsfoxClientTest {
         )
 
         assertEquals(ApiResult.Fail(ApiFailure.Rejected(ErrorDetail.NoDetail, keyMismatch = true)), broken.digest(IDS))
+    }
+
+    @Test
+    fun `TA-259 P3 の応答の本文を読む途中で取り消すと、サーバーの異常の結果にせず取り消しが伝わる`() = runTest {
+        val result = resultOfCancelledBodyRead(HttpStatusCode.OK) { digest(IDS) }
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `TA-259 エラー応答の本文を読む途中で取り消すと、鍵の不一致の結果にせず取り消しが伝わる`() = runTest {
+        val result = resultOfCancelledBodyRead(HttpStatusCode.Unauthorized) { track("A", 1, 1, rangeFrom = 0) { } }
+
+        assertNull(result)
     }
 
     @Test

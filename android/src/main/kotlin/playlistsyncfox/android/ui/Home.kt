@@ -1,9 +1,11 @@
 package playlistsyncfox.android.ui
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.WrittenPlaylist
 import playlistsyncfox.android.sync.ManualStart
+import playlistsyncfox.android.sync.PairingKeeper
 import playlistsyncfox.android.sync.RemovalCheck
 import playlistsyncfox.android.sync.StartBlock
 import playlistsyncfox.android.sync.SyncProgress
@@ -51,9 +53,9 @@ fun latestRun(runs: List<SyncRun>, syncing: Boolean): LastRun? {
 /** T4 の `last_endpoint` が指す方式の値。空なら「未接続」（J30）。 */
 fun endpointText(pairing: Pairing): String {
     val value = when (pairing.lastEndpoint) {
-        "lan" -> pairing.endpointLan
-        "tailscale" -> pairing.endpointTailscale
-        "usb" -> pairing.endpointUsb
+        PairingKeeper.LAN -> pairing.endpointLan
+        PairingKeeper.TAILSCALE -> pairing.endpointTailscale
+        PairingKeeper.USB -> pairing.endpointUsb
         else -> null
     }
     return value?.takeIf { it.isNotEmpty() } ?: "未接続"
@@ -89,9 +91,10 @@ sealed interface PressOutcome {
 
     /** 保存先の SD が見つからない。同期を始めず案内する。本体へ切り替えない（D16）。 */
     data object StorageMissing : PressOutcome
-}
 
-const val APPROVAL_UNUSED_NOTICE = "自動の同期が実行中だったため、今回は削除しません。終わってから、もう一度「同期する」を押してください"
+    /** 通知の許可の画面を出した。同期は許可の結果の後に、画面側（MainActivity）が `syncPressed` を呼んで始める。 */
+    data object AwaitingNotificationPermission : PressOutcome
+}
 
 /**
  * 手動の同期の開始（X7-1-2）。確認の要否は画面側が決め、ワーカーの起動は [start] に任せる。
@@ -103,7 +106,11 @@ class ManualSyncFlow(
     private val check: suspend () -> RemovalCheck,
     private val start: suspend (approvedCount: Int?, reachFailed: Boolean) -> ManualStart,
 ) {
-    suspend fun press(paired: Boolean): PressOutcome {
+    /**
+     * [askNotification] は通知の許可を求める。同期が始まると決まった後（選択があり、保存先がある）にだけ呼び、
+     * 許可の画面を出したときは true を返す（X7-3）。拒否でも同期は続ける。
+     */
+    suspend fun press(paired: Boolean, askNotification: () -> Boolean = { false }): PressOutcome {
         if (!paired) return PressOutcome.ToPairing
         // 実行中の自動があれば、確認を出さずに S3 へ入る。自動は自動のまま（J34）
         if (autoRunning()) return PressOutcome.ToProgress()
@@ -112,6 +119,7 @@ class ManualSyncFlow(
             StartBlock.StorageMissing -> return PressOutcome.StorageMissing
             null -> Unit
         }
+        if (askNotification()) return PressOutcome.AwaitingNotificationPermission
         return when (val result = check()) {
             RemovalCheck.Allowed -> started(null, reachFailed = false)
             is RemovalCheck.NeedsConfirmation -> PressOutcome.Confirm(result.toRemove)
@@ -131,3 +139,22 @@ class ManualSyncFlow(
         return PressOutcome.ToProgress(APPROVAL_UNUSED_NOTICE.takeIf { unused })
     }
 }
+
+/**
+ * 手動の同期の開始。前回の終了の進捗が [progress] に残っていると、開始した直後に S4 へ進むため、新しい仕事を作ったときだけ消す。
+ * 作らなかったとき（自動か手動が実行中）は、走っているワーカーの進捗を残す。新しいワーカーが先に出した進捗も消さない。
+ */
+suspend fun startManualSync(progress: MutableStateFlow<SyncProgress?>, start: suspend () -> ManualStart): ManualStart {
+    val before = progress.value
+    val result = start()
+    if (result == ManualStart.Started) progress.compareAndSet(before, null)
+    return result
+}
+
+/**
+ * 同期ボタンを押した時点の進捗 [atPress] が、開始の処理の後（[now]）も同じ完了（`finished`）のまま残っているときに、その完了を返す。
+ * 自動が始まる直前だと進捗が消されず、S3 が前の実行の完了を新しい実行の完了と取り違えて S4 へ進むため、S3 が無視する。
+ * 進捗が入れ替わっていれば null。内容が同じでも別の完了は、新しい実行のものとして扱う。
+ */
+fun staleFinished(atPress: SyncProgress?, now: SyncProgress?): SyncProgress? =
+    atPress?.takeIf { it.stage == SyncStage.Finished && it === now }

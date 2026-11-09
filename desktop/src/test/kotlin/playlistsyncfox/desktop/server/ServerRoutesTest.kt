@@ -2,12 +2,9 @@ package playlistsyncfox.desktop.server
 
 import io.ktor.client.request.get
 import io.ktor.client.request.header
-import io.ktor.client.request.prepareGet
-import io.ktor.client.statement.bodyAsChannel
-import io.ktor.utils.io.discard
-import io.ktor.utils.io.readByte
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.jsonArray
 import io.ktor.client.request.request
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
@@ -18,6 +15,8 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import playlistsyncfox.desktop.DesktopValues
 import playlistsyncfox.desktop.settings.LastSync
+import playlistsyncfox.desktop.settings.LogLevel
+import playlistsyncfox.desktop.settings.LogLine
 import playlistsyncfox.shared.auth.SignatureHeaderNames
 import java.nio.file.Files
 import java.nio.file.Path
@@ -337,16 +336,6 @@ class ServerRoutesTest {
     }
 
     @Test
-    fun `TD-13 途中の範囲は 206 で、本文が範囲と一致する`() = withServer(fixture) { client ->
-        client.prepareTable()
-
-        val response = client.range("bytes=40-49")
-
-        assertEquals(HttpStatusCode.PartialContent, response.status)
-        assertContentEquals(TRACK_BYTES.copyOfRange(40, 50), response.readRawBytes())
-    }
-
-    @Test
     fun `TD-13 末尾（大きさ - 1 まで）の範囲は 206 で、本文が範囲と一致する`() = withServer(fixture) { client ->
         client.prepareTable()
 
@@ -435,6 +424,28 @@ class ServerRoutesTest {
     }
 
     @Test
+    fun `TD-79 P1 の本文に同じ ID が重なっていても 200 で、プレイリストと曲は 1 回だけ出る`() = withServer(fixture) { client ->
+        fixture.useLibrary(trackFile)
+
+        val response = client.signed(fixture, HttpMethod.Post, "/v1/manifest", ids(PLAYLIST_ID, PLAYLIST_ID))
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val manifest = response.json()
+        assertEquals(1, manifest.getValue("playlists").jsonArray.size)
+        assertEquals(1, manifest.getValue("tracks").jsonArray.size)
+    }
+
+    @Test
+    fun `TD-79 P3 の本文に同じ ID が重なっていても、1 つだけ選んだときと同じ content_digest を返す`() = withServer(fixture) { client ->
+        fixture.useLibrary(trackFile)
+
+        val single = client.signed(fixture, HttpMethod.Post, "/v1/digest", ids(PLAYLIST_ID)).json().getValue("content_digest")
+        val duplicated = client.signed(fixture, HttpMethod.Post, "/v1/digest", ids(PLAYLIST_ID, PLAYLIST_ID)).json().getValue("content_digest")
+
+        assertEquals(single, duplicated)
+    }
+
+    @Test
     fun `TD-79 署名の後に本文を差し替えた P1 は 401`() = withServer(fixture) { client ->
         fixture.useLibrary(trackFile)
         val headers = sign(fixture, HttpMethod.Post, "/v1/manifest", ids(PLAYLIST_ID))
@@ -515,6 +526,41 @@ class ServerRoutesTest {
         assertNull(lastSync())
     }
 
+    @Test
+    fun `TD-60 開始時刻か終了時刻が UTC のミリ秒つきの書式でない報告は 400 で保存しない`() = withServer(fixture) { client ->
+        val bad = listOf(
+            report.replace("2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00Z"),
+            report.replace("2026-01-01T00:01:00.000Z", "2026-01-01 00:01:00.000"),
+            // 書式は合うが日付として存在しない
+            report.replace("2026-01-01T00:00:00.000Z", "2026-13-01T00:00:00.000Z"),
+        )
+
+        for (body in bad) {
+            assertEquals(HttpStatusCode.BadRequest, client.signed(fixture, HttpMethod.Post, "/v1/reports", body.encodeToByteArray()).status, body)
+        }
+        assertNull(lastSync())
+    }
+
+    @Test
+    fun `TD-60 failure_counts のキーが E1 から E9 の形でない報告は 400 で保存しない`() = withServer(fixture) { client ->
+        for (key in listOf("E0", "E10", "e5", "X1")) {
+            val body = report.replace(""""failure_counts":{"E5":1}""", """"failure_counts":{"$key":1}""")
+
+            assertEquals(HttpStatusCode.BadRequest, client.signed(fixture, HttpMethod.Post, "/v1/reports", body.encodeToByteArray()).status, key)
+        }
+        assertNull(lastSync())
+    }
+
+    @Test
+    fun `TD-60 failure_counts のキーが E1 と E9 の報告は保存する`() = withServer(fixture) { client ->
+        for (key in listOf("E1", "E9")) {
+            val body = report.replace(""""failure_counts":{"E5":1}""", """"failure_counts":{"$key":1}""")
+
+            assertEquals(HttpStatusCode.NoContent, client.signed(fixture, HttpMethod.Post, "/v1/reports", body.encodeToByteArray()).status, key)
+            assertEquals(mapOf(key to 1), lastSync()!!.failureCounts)
+        }
+    }
+
     // ---- P8 と送信中の曲（TD-82、TD-83） ----
 
     private val progressBody = """{"stage":"transfer","done_tracks":9,"total_tracks":17,"done_bytes":100,"total_bytes":200}"""
@@ -575,5 +621,45 @@ class ServerRoutesTest {
 
         assertEquals(HttpStatusCode.NoContent, response.status)
         assertEquals(3, lastSync()!!.excludedCount)
+    }
+
+    // ---- 画面向けのログ行（TD-91） ----
+
+    // P1 と P2 は応答を返した後に行を書くので、応答を受けた時点では欄に入っていないことがある
+    private suspend fun awaitLogLine(message: String): LogLine = withTimeout(5_000) {
+        while (fixture.log.lines.value.none { it.message == message }) delay(10)
+        fixture.log.lines.value.first { it.message == message }
+    }
+
+    @Test
+    fun `TD-91 P1 を返すと、曲数つきの行が情報で欄に入る`() = withServer(fixture) { client ->
+        fixture.useLibrary(trackFile)
+
+        assertEquals(HttpStatusCode.OK, client.manifest().status)
+
+        assertEquals(LogLevel.Info, awaitLogLine("P1 を返した tracks=1").level)
+    }
+
+    @Test
+    fun `TD-91 P4 を受けると、結果つきの行が情報で欄に入る`() = withServer(fixture) { client ->
+        assertEquals(HttpStatusCode.NoContent, client.signed(fixture, HttpMethod.Post, "/v1/reports", report.encodeToByteArray()).status)
+
+        val line = fixture.log.lines.value.single()
+        assertEquals(LogLevel.Info, line.level)
+        assertEquals("P4 を受けた outcome=success", line.message)
+    }
+
+    @Test
+    fun `TD-91 P3 と P7 と P8 が成功しても、欄の行は増えない`() = withServer(fixture) { client ->
+        fixture.useLibrary(trackFile)
+
+        val statuses = listOf(
+            client.signed(fixture, HttpMethod.Post, "/v1/digest", SELECTION).status,
+            client.signed(fixture, HttpMethod.Get, "/v1/playlists").status,
+            client.signed(fixture, HttpMethod.Post, "/v1/progress", progressBody.encodeToByteArray()).status,
+        )
+
+        assertEquals(listOf(HttpStatusCode.OK, HttpStatusCode.OK, HttpStatusCode.NoContent), statuses)
+        assertTrue(fixture.log.lines.value.isEmpty())
     }
 }

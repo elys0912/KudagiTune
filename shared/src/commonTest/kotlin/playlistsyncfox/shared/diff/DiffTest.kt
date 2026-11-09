@@ -23,7 +23,8 @@ class DiffTest {
         manifestLibraryId: String = "L1",
         recordedLibraryId: String? = "L1",
         unresolved: List<UnresolvedPlaylist> = emptyList(),
-    ): Diff = computeDiff(tracks, records, present, manifestLibraryId, recordedLibraryId, V20, unresolved)
+        isPlayable: (ManifestTrack) -> Boolean = { true },
+    ): Diff = computeDiff(tracks, records, present, manifestLibraryId, recordedLibraryId, V20, unresolved, isPlayable)
 
     private fun ids(tracks: List<ManifestTrack>) = tracks.map { it.persistentId }
 
@@ -105,11 +106,55 @@ class DiffTest {
     }
 
     @Test
-    fun `TS-23 同じ曲を 2 本のプレイリストが持っても足すは 1 件になる`() {
-        // 差分の入力は tracks（集合）なので、プレイリストの数は結果に現れない
-        val result = diff(listOf(track(a)))
+    fun `TS-164 再生できない形式の曲は足すに入らず unsupported にだけ入る`() {
+        val result = diff(listOf(track(a, extension = "m4a"), track(b)), isPlayable = { it.persistentId != a })
 
-        assertEquals(1, result.toAdd.size)
+        assertEquals(listOf(b), ids(result.toAdd))
+        assertEquals(listOf(a), ids(result.unsupported))
+        assertTrue(result.unplayable.isEmpty())
+    }
+
+    @Test
+    fun `TS-165 記録と同じ値で端末にある再生できない形式の曲は変更なしに数えず unsupported にだけ入る`() {
+        val result = diff(listOf(track(a)), listOf(record(a)), isPlayable = { false })
+
+        assertEquals(0, result.unchangedCount)
+        assertEquals(listOf(a), ids(result.unsupported))
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun `TS-164 保護付きの曲は再生できるかを問わず unplayable に入り足すにも unsupported にも入らない`() {
+        val result = diff(listOf(track(a, isProtected = true)), isPlayable = { false })
+
+        assertEquals(listOf(a), ids(result.unplayable))
+        assertTrue(result.toAdd.isEmpty())
+        assertTrue(result.unsupported.isEmpty())
+    }
+
+    @Test
+    fun `TS-164 isPlayable を渡さない呼び出しでは全ての曲を再生できる扱いにして unsupported は空になる`() {
+        val result = computeDiff(
+            tracks = listOf(track(a, extension = "m4a"), track(b)),
+            records = emptyList(),
+            presentIds = emptySet(),
+            manifestLibraryId = "L1",
+            recordedLibraryId = "L1",
+            removalConfirmThreshold = V20,
+            unresolvedPlaylists = emptyList(),
+        )
+
+        assertEquals(listOf(a, b), ids(result.toAdd))
+        assertTrue(result.unsupported.isEmpty())
+    }
+
+    @Test
+    fun `TS-165 記録があり size が違う再生できない形式の曲は置き換えに入らず unsupported にだけ入って消すに入らない`() {
+        val result = diff(listOf(track(a, size = 200)), listOf(record(a, size = 100)), isPlayable = { false })
+
+        assertTrue(result.toReplace.isEmpty())
+        assertEquals(listOf(a), ids(result.unsupported))
+        assertTrue(result.toRemove.isEmpty())
     }
 
     @Test

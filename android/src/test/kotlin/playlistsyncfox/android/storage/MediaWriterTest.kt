@@ -293,6 +293,94 @@ class MediaWriterTest {
     }
 
     @Test
+    fun `TA-260 m3u8 の行を作れないと書き込みは始まらず失敗を返し T2 にも行を残さない`() = runTest {
+        h.media.failInsert = true
+
+        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
+
+        assertEquals(PlaylistWriteResult.Failed, result)
+        assertTrue(h.store.playlistRows.isEmpty())
+        assertTrue(h.media.entries.isEmpty())
+    }
+
+    @Test
+    fun `TA-260 m3u8 を書き込み用に開けないと作った pending の行を消して失敗を返す`() = runTest {
+        h.media.failTruncate = true
+
+        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
+
+        assertEquals(PlaylistWriteResult.Failed, result)
+        assertTrue(h.store.playlistRows.isEmpty())
+        assertTrue(h.media.entries.isEmpty())
+    }
+
+    @Test
+    fun `TA-260 m3u8 の書き込み中に容量が尽きると作った pending の行を消して失敗を返す`() = runTest {
+        h.media.diskFullAtTotalBytes = 0
+
+        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
+
+        assertEquals(PlaylistWriteResult.Failed, result)
+        assertTrue(h.store.playlistRows.isEmpty())
+        assertTrue(h.media.entries.isEmpty())
+    }
+
+    @Test
+    fun `TA-260 m3u8 を書いた後に公開できないと作った pending の行を消して失敗を返し T2 に行を残さない`() = runTest {
+        // 書き込みと公開の間に行が消えた状態（publish が null を返す）
+        var createdUri: String? = null
+        h.media.onWrite = {
+            createdUri = it.uri
+            h.media.entries.remove(it.uri)
+        }
+
+        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
+
+        assertEquals(PlaylistWriteResult.Failed, result)
+        assertEquals(listOf(createdUri), h.media.deleted)
+        assertTrue(h.store.playlistRows.isEmpty())
+    }
+
+    @Test
+    fun `TA-261 既存の m3u8 を書き直して公開できなくても既存の行は消さず T2 の行も残す`() = runTest {
+        val uri = h.media.addExisting(ROOT, "Mix.m3u8", playlist = true)
+        h.store.playlistRows[id(9)] = playlistRow(id(9), "Mix.m3u8", uri)
+        h.media.onWrite = { h.media.entries.remove(it.uri) }
+
+        val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
+
+        assertEquals(PlaylistWriteResult.Failed, result)
+        assertTrue(h.media.deleted.isEmpty())
+        assertEquals(uri, h.store.playlistRows.getValue(id(9)).mediaUri)
+    }
+
+    @Test
+    fun `TA-262 新規の曲の本文が size より長いと E9 の書き込みの失敗で、pending の行と T5 を消す`() = runTest {
+        val plan = h.writer.plan(song, PATH, placed = null, replace = false)
+
+        val result = h.writer.write(plan, TrackBody(0, ByteSource(bytes(150))))
+
+        assertEquals(TrackWriteResult.Failed(WriteStep.TempFileWrite), result)
+        assertTrue(h.store.placed.isEmpty())
+        assertTrue(h.store.pendingRows.isEmpty())
+        assertTrue(h.media.entries.isEmpty())
+    }
+
+    @Test
+    fun `TA-262 置き換えの本文が size より長いと失敗を返し、元の行は消さず T1 は replacing のまま残る`() = runTest {
+        val uri = h.media.addExisting("${ROOT}Artist/Album/", "Song 1.mp3", bytes = 50)
+        val placed = PlacedTrack(DEVICE, song.persistentId, PATH, uri, 50, 0, 50, PlacedTrack.STATE_PLACED, 0)
+        h.store.placed[song.persistentId] = placed
+        val plan = h.writer.plan(song, PATH, placed, replace = true)
+
+        val result = h.writer.write(plan, TrackBody(0, ByteSource(bytes(150))))
+
+        assertEquals(TrackWriteResult.Failed(WriteStep.TempFileWrite), result)
+        assertTrue(uri in h.media.entries)
+        assertEquals(PlacedTrack.STATE_REPLACING, h.store.placed.getValue(song.persistentId).state)
+    }
+
+    @Test
     fun `期限切れの T5 を回収すると pending の行と T5 が消える`() = runTest {
         val uri = h.media.insertPendingTrack("Song 1.mp3", "audio/mpeg", "${ROOT}Artist/Album/")!!
         h.store.pendingRows[song.persistentId] = pendingRow(uri).copy(startedAt = h.clock - SEVEN_DAYS - 1)

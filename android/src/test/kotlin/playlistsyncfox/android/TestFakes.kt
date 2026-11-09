@@ -1,6 +1,8 @@
 package playlistsyncfox.android
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import playlistsyncfox.android.db.PendingTransfer
 import playlistsyncfox.android.db.PlacedTrack
 import playlistsyncfox.android.db.Pairing
@@ -15,7 +17,6 @@ import playlistsyncfox.android.net.ApiResult
 import playlistsyncfox.android.net.Endpoint
 import playlistsyncfox.android.net.SyncApi
 import playlistsyncfox.android.net.TrackResponse
-import playlistsyncfox.android.storage.DeleteOutcome
 import playlistsyncfox.android.storage.MediaSink
 import playlistsyncfox.android.storage.MediaStoreFiles
 import playlistsyncfox.android.storage.MediaWriter
@@ -116,6 +117,10 @@ class InMemoryStore : SyncStore {
     val relocatedRows = mutableListOf<String>()
     private var nextRunId = 1L
 
+    /** T6・T3 を更新した直後に呼ぶ。取り消しの再現用。 */
+    var onIssuesAdded: () -> Unit = {}
+    var onRunFinished: (SyncRun) -> Unit = {}
+
     override suspend fun placedTracks(deviceId: String) = placed.values.filter { it.deviceId == deviceId }
 
     override suspend fun savePlaced(row: PlacedTrack) {
@@ -162,12 +167,17 @@ class InMemoryStore : SyncStore {
         return saved.runId
     }
 
+    // Room の suspend 関数と同じく、更新の後に取り消されていれば CancellationException を投げる
     override suspend fun finishRun(row: SyncRun) {
         runRows[runRows.indexOfFirst { it.runId == row.runId }] = row
+        onRunFinished(row)
+        currentCoroutineContext().ensureActive()
     }
 
     override suspend fun addIssues(rows: List<RunIssue>) {
         issueRows += rows
+        onIssuesAdded()
+        currentCoroutineContext().ensureActive()
     }
 
     override suspend fun issues(runId: Long) = issueRows.filter { it.runId == runId }
@@ -241,6 +251,7 @@ class FakeMediaStore : MediaStoreFiles {
 
     var failInsert = false
     var failAppend = false
+    var failTruncate = false
     var readBackSizeDelta = 0L
     var readBackRelativePath: String? = null
     var diskFullAtTotalBytes: Long? = null
@@ -280,6 +291,7 @@ class FakeMediaStore : MediaStoreFiles {
     override fun open(uri: String, mode: OpenMode): MediaSink? {
         val entry = entries[uri] ?: return null
         if (mode == OpenMode.Append && failAppend) return null
+        if (mode == OpenMode.Truncate && failTruncate) return null
         if (mode == OpenMode.Truncate) entry.data = ByteArrayOutputStream()
         return object : MediaSink {
             override fun write(buffer: ByteArray, length: Int) {
@@ -303,17 +315,17 @@ class FakeMediaStore : MediaStoreFiles {
         return StoredFile(uri, entry.displayName, readBackRelativePath ?: entry.relativePath, entry.data.size() + readBackSizeDelta, 0)
     }
 
-    override fun delete(uri: String): DeleteOutcome {
+    override fun delete(uri: String) {
         if (uri in deniedDeletes) throw SecurityException("権限がない")
         deleted += uri
-        return if (entries.remove(uri) != null) DeleteOutcome.Deleted else DeleteOutcome.Missing
+        entries.remove(uri)
     }
 
     override fun ownedTrackPaths() = entries.values.filter { !it.playlist }.mapTo(HashSet()) { stored(it).pathUnderRoot(ROOT) }
 
     override fun ownedPendingPlaylistUris() = entries.values.filter { it.playlist && it.pending }.map { it.uri }
 
-    override fun listOwned() = entries.values.filter { !it.pending }.map(::stored)
+    override fun listUnderRoot() = entries.values.filter { !it.pending }.map(::stored)
 
     private fun stored(entry: Entry) = StoredFile(entry.uri, entry.displayName, entry.relativePath, entry.data.size().toLong(), 0)
 }
@@ -361,6 +373,9 @@ class FakeApi(val name: String) : SyncApi {
     var progressResult: ApiResult<Unit> = ApiResult.Ok(Unit)
     var playlistsResult: ApiResult<String> = ApiResult.Ok("""{"playlists":[]}""")
     var trackScript: (TrackRequest) -> TrackScript = { TrackScript.Fail(ApiFailure.FileMissing) }
+
+    /** P4 を受けた直後に呼ぶ。取り消しの再現用。 */
+    var onReport: () -> Unit = {}
 
     var digestCalls = 0
     var manifestCalls = 0
@@ -417,6 +432,7 @@ class FakeApi(val name: String) : SyncApi {
 
     override suspend fun report(body: String): ApiResult<Unit> {
         reports += body
+        onReport()
         return reportResult
     }
 
@@ -469,6 +485,8 @@ class Harness(val trigger: SyncTrigger = SyncTrigger.Manual) {
     var freeBytes: Long? = Long.MAX_VALUE / 4
     var manualActive = false
     var stopCause = StopCause.UserCancel
+    var failOnFinished = false
+    var isPlayable: (ManifestTrack) -> Boolean = { true }
     val progress = MutableStateFlow<SyncProgress?>(null)
 
     init {
@@ -511,6 +529,7 @@ class Harness(val trigger: SyncTrigger = SyncTrigger.Manual) {
         onFinished = { run, progress, trigger ->
             finished += Triple(run, progress, trigger)
             events += "finished"
+            check(!failOnFinished) { "終了の通知で例外" }
         },
         log = SyncLogger { logs += it },
         now = { clock },
@@ -518,6 +537,7 @@ class Harness(val trigger: SyncTrigger = SyncTrigger.Manual) {
         stopCause = { stopCause },
         gate = gate,
         wait = { waits += it },
+        isPlayable = { isPlayable(it) },
     )
 
     suspend fun run(

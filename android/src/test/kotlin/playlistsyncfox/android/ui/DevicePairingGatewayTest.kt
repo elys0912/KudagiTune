@@ -17,6 +17,7 @@ import playlistsyncfox.android.InMemoryStore
 import playlistsyncfox.android.net.PairingClient
 import playlistsyncfox.android.sync.KeyVault
 import playlistsyncfox.android.sync.PairingKeeper
+import playlistsyncfox.android.sync.SyncValues
 import playlistsyncfox.android.vault.DeviceCrypto
 import playlistsyncfox.shared.auth.PairingOutcome
 import playlistsyncfox.shared.auth.PairingState
@@ -157,7 +158,7 @@ class DevicePairingGatewayTest {
 
         val row = assertNotNull(rig.store.pairingRow)
         assertEquals(completed.deviceId, row.deviceId)
-        assertEquals(completed.deviceId, rig.store.settings["device_id"])
+        assertEquals(completed.deviceId, rig.store.settings[SyncValues.DEVICE_ID_KEY])
         assertEquals(PC_ID, row.pcId)
         assertEquals("11".repeat(32), row.spkiHash)
         assertEquals("psfox-k3-${row.deviceId}", row.keyAlias)

@@ -82,7 +82,8 @@ class LibraryWatcher(
     private val onOverflow: () -> Unit,
 ) {
     fun start(): Job = scope.launch {
-        val dir = xmlPath.parent
+        // 相対パス（W5 の入力）は親が無い。現在のフォルダを基にした絶対パスにして、フォルダを求める
+        val dir = xmlPath.toAbsolutePath().parent
         val xmlName = xmlPath.fileName.toString()
         var lost = false
         while (isActive) {

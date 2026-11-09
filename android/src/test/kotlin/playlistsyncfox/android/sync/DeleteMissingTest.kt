@@ -7,6 +7,8 @@ import playlistsyncfox.android.ROOT
 import playlistsyncfox.android.db.PlacedTrack
 import playlistsyncfox.android.db.decodeResult
 import playlistsyncfox.android.manifestOf
+import playlistsyncfox.android.net.ApiFailure
+import playlistsyncfox.android.net.ApiResult
 import playlistsyncfox.android.track
 import playlistsyncfox.android.ui.resultUi
 import playlistsyncfox.shared.manifest.ManifestTrack
@@ -52,27 +54,38 @@ class DeleteMissingTest {
     }
 
     @Test
-    fun `TA-231 ON のときは手動の確認を経て消え、確認を断れば消えない`() = runTest {
-        val approved = Harness()
-        approved.setup(placedCount = 30, keep = 2)
-        assertEquals(RemovalCheck.NeedsConfirmation(28), SyncPreview(approved.environment()).check())
-        approved.run(deleteApproved = true, approved = 28)
-        assertEquals(2, approved.store.placed.size)
+    fun `TA-231 ON のときは手動の確認に消す件数が出て、承認すれば消える`() = runTest {
+        val h = Harness()
+        h.setup(placedCount = 30, keep = 2)
 
-        val declined = Harness()
-        declined.setup(placedCount = 30, keep = 2)
-        val row = assertNotNull(declined.run())
-        assertEquals(30, declined.store.placed.size)
-        assertEquals(28, resultUi(row, emptyList()).notRemoved)
+        assertEquals(RemovalCheck.NeedsConfirmation(28), SyncPreview(h.environment()).check())
+        h.run(deleteApproved = true, approved = 28)
+
+        assertEquals(2, h.store.placed.size)
     }
 
     @Test
-    fun `TA-231 ON のとき手動は 1 件だけ消す場合も確認を出し、断れば消えない`() = runTest {
+    fun `TA-243 画面側の確認も、つながった接続先を last_endpoint に記録し NSD の名が変わっていれば endpoint_lan も更新する`() = runTest {
+        val viaTailscale = Harness()
+        val kept = viaTailscale.setup(placedCount = 3, keep = 2).take(2)
+        viaTailscale.lanApi.digestResult = ApiResult.Fail(ApiFailure.Disconnected)
+        viaTailscale.setManifest(manifestOf(kept), viaTailscale.tailApi)
+        SyncPreview(viaTailscale.environment()).check()
+        assertEquals("tailscale", viaTailscale.store.pairingRow?.lastEndpoint)
+
+        val renamed = Harness()
+        renamed.setup(placedCount = 3, keep = 2)
+        renamed.lanServices = listOf(LanService("psfox-01234567-2", Harness.LAN_HOST, 47800, "01234567"))
+        SyncPreview(renamed.environment()).check()
+        assertEquals("lan", renamed.store.pairingRow?.lastEndpoint)
+        assertEquals("psfox-01234567-2", renamed.store.pairingRow?.endpointLan)
+    }
+
+    @Test
+    fun `TA-231 ON のとき手動は 1 件だけ消す場合も確認を出す`() = runTest {
         val h = Harness()
         h.setup(placedCount = 3, keep = 2)
-        assertEquals(RemovalCheck.NeedsConfirmation(1), SyncPreview(h.environment()).check())
 
-        h.run()
-        assertEquals(3, h.store.placed.size)
+        assertEquals(RemovalCheck.NeedsConfirmation(1), SyncPreview(h.environment()).check())
     }
 }

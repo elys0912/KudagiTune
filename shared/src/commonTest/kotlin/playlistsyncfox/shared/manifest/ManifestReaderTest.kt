@@ -44,6 +44,10 @@ class ManifestReaderTest {
             .replace("{\"format_version\"", "{\"future\":{\"a\":[1,2]},\"format_version\"")
             .replace("\"tracks\":[{", "\"tracks\":[{\"unknown_key\":\"x\",\"content_hash\":\"abc\",")
 
+        // 置換が当たらないと、未知のキーを足さないまま通ってしまう
+        assertTrue(text.contains("\"future\""))
+        assertTrue(text.contains("unknown_key"))
+
         val read = loaded(text).manifest
 
         assertEquals(original.tracks, read.tracks.map { it.copy(contentHash = null) })
@@ -79,6 +83,26 @@ class ManifestReaderTest {
     }
 
     @Test
+    fun `TS-04 プレイリストの persistent_id が小文字なら壊れたとして persistent_id の書式の理由を返す`() {
+        val playlistId = "D000000000000001"
+        val base = writeManifest(sampleManifest(listOf(track(idA)), listOf(playlist(playlistId, trackIds = listOf(idA)))))
+
+        val broken = assertIs<Broken>(read(base.replace(playlistId, playlistId.lowercase())))
+
+        assertTrue(broken.reason.contains("persistent_id"))
+    }
+
+    @Test
+    fun `TS-04 未解決のプレイリストの persistent_id が 15 桁なら壊れたとして persistent_id の書式の理由を返す`() {
+        val unresolvedId = "C000000000000001"
+        val original = sampleManifest().copy(unresolvedPlaylists = listOf(UnresolvedPlaylist(unresolvedId, "Old")))
+
+        val broken = assertIs<Broken>(read(writeManifest(original).replace(unresolvedId, unresolvedId.dropLast(1))))
+
+        assertTrue(broken.reason.contains("persistent_id"))
+    }
+
+    @Test
     fun `TS-05 同じ ID の曲が 3 件あると最初の 1 件だけ残り落とした件数は 2 になる`() {
         val first = track(idA, name = "first")
         val dup = sampleManifest(listOf(first, track(idA, name = "second"), track(idA, name = "third")))
@@ -87,6 +111,32 @@ class ManifestReaderTest {
 
         assertEquals(listOf(first), result.manifest.tracks)
         assertEquals(2, result.duplicatesDropped)
+    }
+
+    @Test
+    fun `TS-161 同じ ID のプレイリストが 2 件あると最初の 1 件だけ残り曲の落とした件数は変わらない`() {
+        val first = playlist("D000000000000001", "first", listOf(idA))
+        val dup = sampleManifest(listOf(track(idA)), listOf(first, playlist("D000000000000001", "second")))
+
+        val result = loaded(writeManifest(dup))
+
+        assertEquals(listOf(first), result.manifest.playlists)
+        assertEquals(0, result.duplicatesDropped)
+    }
+
+    @Test
+    fun `TS-161 同じ ID の未解決のプレイリストが 2 件あると最初の 1 件だけ残る`() {
+        val first = UnresolvedPlaylist("C000000000000001", "first")
+        val dup = sampleManifest().copy(unresolvedPlaylists = listOf(first, UnresolvedPlaylist("C000000000000001", "second")))
+
+        assertEquals(listOf(first), loaded(writeManifest(dup)).manifest.unresolvedPlaylists)
+    }
+
+    @Test
+    fun `TS-180 空文字と JSON でない本文と最上位が配列の本文は壊れたになる`() {
+        for (text in listOf("", "not json", "[]")) {
+            assertIs<Broken>(read(text), "本文: $text")
+        }
     }
 
     @Test
@@ -116,6 +166,19 @@ class ManifestReaderTest {
         val text = writeManifest(sampleManifest(listOf(track(idA, size = 4242)))).replace("\"size\":4242,", "")
 
         assertTrue(assertIs<Broken>(read(text)).reason.isNotEmpty())
+    }
+
+    @Test
+    fun `TS-181 size が Long の範囲を超える曲と track_number が Int の範囲を超える曲は例外を投げず壊れたになる`() {
+        val base = writeManifest(sampleManifest(listOf(track(idA, size = 4242).copy(trackNumber = 7))))
+        val outOfRange = listOf(
+            base.replace("\"size\":4242", "\"size\":9223372036854775808"),
+            base.replace("\"track_number\":7", "\"track_number\":2147483648"),
+        )
+
+        for (text in outOfRange) {
+            assertTrue(assertIs<Broken>(read(text)).reason.isNotEmpty(), "本文: $text")
+        }
     }
 
     @Test

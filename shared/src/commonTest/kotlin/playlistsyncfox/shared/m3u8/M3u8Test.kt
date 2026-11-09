@@ -61,14 +61,14 @@ class M3u8Test {
     fun `TS-68 シャープで始まる名前と行区切り文字を含む名前でも m3u8 にそれらの行は出ない`() {
         val tracks = listOf(
             track(a, name = "#title", artist = "#artist", album = "#album"),
-            track(b, name = "x\u0085y z w"),
+            track(b, name = "x\u0085y\u2028z\u2029w"),
         )
         val paths = resolveTrackPaths(tracks, emptyList(), emptySet(), V24, V23)
 
         val text = buildM3u8(playlist(pid('P'), trackIds = listOf(a, b)), paths)
 
         assertEquals("#EXTM3U\n_artist/_album/_title.mp3\nAr/Al/xyzw.mp3\n", text)
-        assertFalse(text.contains('\u0085') || text.contains(' ') || text.contains(' '))
+        assertFalse(text.contains('\u0085') || text.contains('\u2028') || text.contains('\u2029'))
     }
 
     @Test

@@ -13,6 +13,7 @@ import playlistsyncfox.itunes.library.UnidentifiedTrack
 import playlistsyncfox.itunes.location.LocationFailure
 import playlistsyncfox.itunes.location.TrackLocation
 import playlistsyncfox.itunes.location.decodeFileUrl
+import playlistsyncfox.shared.manifest.isPersistentId
 import java.io.ByteArrayInputStream
 import java.time.Instant
 import java.time.format.DateTimeParseException
@@ -26,8 +27,6 @@ private val trackKeys = setOf(
     "Persistent ID", "Track Type", "Location", "Total Time", "Name", "Artist", "Album",
     "Album Artist", "Track Number", "Disc Number", "Kind", "Protected",
 )
-
-private val persistentIdPattern = Regex("[0-9A-F]{16}")
 
 private const val FILE_TRACK_TYPE = "File"
 
@@ -64,6 +63,9 @@ private fun newStreamReader(xml: ByteArray): XMLStreamReader {
 
 private class PlistLibraryReader(private val xml: XMLStreamReader) {
     private var malformedEntries = 0
+    private var duplicatePersistentIds = 0
+    private var droppedTrackRefs = 0
+    private val locationFailures = HashMap<LocationFailure, Int>()
     private var libraryPersistentId: String? = null
     private var applicationVersion: String? = null
     private var xmlDate: Instant? = null
@@ -81,6 +83,13 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
         val trackIds: List<Long>,
     )
 
+    /** 曲の解決の結果。[refsByTrackId] は、プレイリストの `Track ID` から曲への参照を引く表。 */
+    private class ResolvedTracks(
+        val tracks: List<LibraryTrack>,
+        val unidentifiedTracks: List<UnidentifiedTrack>,
+        val refsByTrackId: Map<String, TrackRef>,
+    )
+
     fun read(): LibraryReadResult {
         readTopLevel()
         if (!tracksFound || !playlistsFound) throw StructureException()
@@ -89,16 +98,22 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
 
     private fun readTopLevel() {
         // DOCTYPE やコメントを読み飛ばして、最初の要素へ進む
-        do { val event = xml.next() } while (event != START_ELEMENT)
+        while (xml.eventType != START_ELEMENT) xml.next()
         if (xml.localName != "plist") throw StructureException()
         if (xml.nextTag() != START_ELEMENT || xml.localName != "dict") throw StructureException()
 
         eachEntry { key ->
             when {
-                key == "Tracks" && xml.localName == "dict" -> { tracksFound = true; readTracks() }
-                key == "Playlists" && xml.localName == "array" -> { playlistsFound = true; readPlaylists() }
-                key == "Library Persistent ID" -> libraryPersistentId = text(readValue())?.uppercase()
-                key == "Application Version" -> applicationVersion = text(readValue())
+                key == "Tracks" && xml.localName == "dict" -> {
+                    tracksFound = true
+                    readTracks()
+                }
+                key == "Playlists" && xml.localName == "array" -> {
+                    playlistsFound = true
+                    readPlaylists()
+                }
+                key == "Library Persistent ID" -> libraryPersistentId = textOrCountMalformed(readValue())?.uppercase()
+                key == "Application Version" -> applicationVersion = textOrCountMalformed(readValue())
                 key == "Date" -> xmlDate = (readValue() as? Value.Date)?.value
                 else -> skipElement()
             }
@@ -146,12 +161,15 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
 
         eachEntry { key ->
             when (key) {
-                "Playlist Persistent ID" -> persistentId = text(readValue())?.uppercase()
-                "Name" -> name = text(readValue())
-                "Parent Persistent ID" -> parentPersistentId = text(readValue())?.uppercase()
-                "Master" -> isMaster = flag(readValue())
-                "Folder" -> isFolder = flag(readValue())
-                "Distinguished Kind" -> { hasDistinguishedKind = true; skipElement() }
+                "Playlist Persistent ID" -> persistentId = textOrCountMalformed(readValue())?.uppercase()
+                "Name" -> name = textOrCountMalformed(readValue())
+                "Parent Persistent ID" -> parentPersistentId = textOrCountMalformed(readValue())?.uppercase()
+                "Master" -> isMaster = flagOrCountMalformed(readValue())
+                "Folder" -> isFolder = flagOrCountMalformed(readValue())
+                "Distinguished Kind" -> {
+                    hasDistinguishedKind = true
+                    skipElement()
+                }
                 "Playlist Items" -> {
                     if (xml.localName == "array") {
                         trackIds = readPlaylistItems()
@@ -184,7 +202,8 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
 
             var trackId: Long? = null
             eachEntry { key ->
-                if (key == "Track ID") trackId = integer(readValue()) else skipElement()
+                // 値が不正でも、ここでは数えない。Track ID を取れない項目として、下で 1 回だけ数える
+                if (key == "Track ID") trackId = (readValue() as? Value.Integer)?.value else skipElement()
             }
             val found = trackId
             if (found != null) trackIds += found else malformedEntries++
@@ -194,51 +213,16 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
 
     /** `Track ID` を `Persistent ID` に置き換える。文書の最後まで読んだ後でないと対応が揃わない。 */
     private fun resolve(): LibraryReadResult {
-        val tracks = mutableListOf<LibraryTrack>()
-        val unidentifiedTracks = mutableListOf<UnidentifiedTrack>()
-        val seenPersistentIds = HashSet<String>()
-        val refsByTrackId = HashMap<String, TrackRef>()
-        val locationFailures = HashMap<LocationFailure, Int>()
-        var duplicatePersistentIds = 0
-
-        for ((trackId, values) in rawTracks) {
-            val persistentId = text(values["Persistent ID"])?.uppercase()?.takeIf { persistentIdPattern.matches(it) }
-            if (persistentId == null) {
-                refsByTrackId[trackId] = TrackRef.Unidentified(unidentifiedTracks.size)
-                unidentifiedTracks += UnidentifiedTrack(name = text(values["Name"]), artist = text(values["Artist"]))
-                continue
-            }
-            if (!seenPersistentIds.add(persistentId)) {
-                duplicatePersistentIds++
-                continue
-            }
-
-            val track = buildTrack(persistentId, values)
-            (track.location as? TrackLocation.Undecodable)?.let { locationFailures.merge(it.failure, 1, Int::plus) }
-            refsByTrackId[trackId] = TrackRef.Identified(persistentId)
-            tracks += track
-        }
-
-        var droppedTrackRefs = 0
-        val playlists = mutableListOf<LibraryPlaylist>()
-        for (raw in rawPlaylists) {
-            if (raw.persistentId == null) {
-                malformedEntries++
-                continue
-            }
-            val items = raw.trackIds.mapNotNull { id ->
-                refsByTrackId[id.toString()] ?: run { droppedTrackRefs++; null }
-            }
-            playlists += LibraryPlaylist(raw.persistentId, raw.name ?: "", raw.parentPersistentId, raw.kind, items)
-        }
+        val resolvedTracks = resolveTracks()
+        val playlists = resolvePlaylists(resolvedTracks.refsByTrackId)
 
         return LibraryReadResult(
             libraryPersistentId = libraryPersistentId,
-            tracks = tracks,
-            unidentifiedTracks = unidentifiedTracks,
+            tracks = resolvedTracks.tracks,
+            unidentifiedTracks = resolvedTracks.unidentifiedTracks,
             playlists = playlists,
             diagnostics = ReadDiagnostics(
-                trackCount = tracks.size,
+                trackCount = resolvedTracks.tracks.size,
                 playlistCount = playlists.size,
                 droppedTrackRefs = droppedTrackRefs,
                 duplicatePersistentIds = duplicatePersistentIds,
@@ -250,9 +234,54 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
         )
     }
 
+    private fun resolveTracks(): ResolvedTracks {
+        val tracks = mutableListOf<LibraryTrack>()
+        val unidentifiedTracks = mutableListOf<UnidentifiedTrack>()
+        val seenPersistentIds = HashSet<String>()
+        val refsByTrackId = HashMap<String, TrackRef>()
+
+        for ((trackId, values) in rawTracks) {
+            val persistentId = textOrCountMalformed(values["Persistent ID"])?.uppercase()?.takeIf(::isPersistentId)
+            if (persistentId == null) {
+                refsByTrackId[trackId] = TrackRef.Unidentified(unidentifiedTracks.size)
+                unidentifiedTracks += UnidentifiedTrack(name = textOrCountMalformed(values["Name"]), artist = textOrCountMalformed(values["Artist"]))
+                continue
+            }
+            // 落とした重複の Track ID も、残した曲への参照として扱う
+            refsByTrackId[trackId] = TrackRef.Identified(persistentId)
+            if (!seenPersistentIds.add(persistentId)) {
+                duplicatePersistentIds++
+                continue
+            }
+
+            val track = buildTrack(persistentId, values)
+            (track.location as? TrackLocation.Undecodable)?.let { locationFailures.merge(it.failure, 1, Int::plus) }
+            tracks += track
+        }
+
+        return ResolvedTracks(tracks, unidentifiedTracks, refsByTrackId)
+    }
+
+    private fun resolvePlaylists(refsByTrackId: Map<String, TrackRef>): List<LibraryPlaylist> {
+        val playlists = mutableListOf<LibraryPlaylist>()
+        for (raw in rawPlaylists) {
+            if (raw.persistentId == null || !isPersistentId(raw.persistentId)) {
+                malformedEntries++
+                continue
+            }
+            val items = raw.trackIds.mapNotNull { id ->
+                val ref = refsByTrackId[id.toString()]
+                if (ref == null) droppedTrackRefs++
+                ref
+            }
+            playlists += LibraryPlaylist(raw.persistentId, raw.name ?: "", raw.parentPersistentId, raw.kind, items)
+        }
+        return playlists
+    }
+
     private fun buildTrack(persistentId: String, values: Map<String, Value>): LibraryTrack {
-        val trackType = text(values["Track Type"])
-        val rawLocation = text(values["Location"])
+        val trackType = textOrCountMalformed(values["Track Type"])
+        val rawLocation = textOrCountMalformed(values["Location"])
         val location = if (rawLocation == null || trackType != FILE_TRACK_TYPE) {
             TrackLocation.Absent
         } else {
@@ -262,15 +291,15 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
             persistentId = persistentId,
             location = location,
             trackType = trackType,
-            name = text(values["Name"]),
-            artist = text(values["Artist"]),
-            album = text(values["Album"]),
-            albumArtist = text(values["Album Artist"]),
-            trackNumber = integer(values["Track Number"]),
-            discNumber = integer(values["Disc Number"]),
-            totalTimeMs = integer(values["Total Time"]),
-            kind = text(values["Kind"]),
-            isProtected = flag(values["Protected"]),
+            name = textOrCountMalformed(values["Name"]),
+            artist = textOrCountMalformed(values["Artist"]),
+            album = textOrCountMalformed(values["Album"]),
+            albumArtist = textOrCountMalformed(values["Album Artist"]),
+            trackNumber = integerOrCountMalformed(values["Track Number"]),
+            discNumber = integerOrCountMalformed(values["Disc Number"]),
+            totalTimeMs = integerOrCountMalformed(values["Total Time"]),
+            kind = textOrCountMalformed(values["Kind"]),
+            isProtected = flagOrCountMalformed(values["Protected"]),
         )
     }
 
@@ -290,9 +319,20 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
         "string" -> Value.Text(xml.elementText)
         "integer" -> Value.Integer(xml.elementText.trim().toLongOrNull())
         "date" -> Value.Date(parseInstant(xml.elementText.trim()))
-        "true" -> { xml.elementText; Value.Bool(true) }
-        "false" -> { xml.elementText; Value.Bool(false) }
-        else -> { skipElement(); Value.Other }
+        "true" -> {
+            // 終了要素まで読み進める
+            xml.elementText
+            Value.Bool(true)
+        }
+        "false" -> {
+            // 終了要素まで読み進める
+            xml.elementText
+            Value.Bool(false)
+        }
+        else -> {
+            skipElement()
+            Value.Other
+        }
     }
 
     /** 開始の要素に居る状態から、対応する終了の要素まで深さを数えて読み捨てる。 */
@@ -313,21 +353,36 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
             null
         }
 
-    private fun text(value: Value?): String? = when (value) {
+    /** 文字列の値を返す。キーが無ければ null。型が違うときは [malformedEntries] に数えて null を返す。 */
+    private fun textOrCountMalformed(value: Value?): String? = when (value) {
         null -> null
         is Value.Text -> value.value
-        else -> { malformedEntries++; null }
+        else -> {
+            malformedEntries++
+            null
+        }
     }
 
-    private fun integer(value: Value?): Long? = when (value) {
+    /** 整数の値を返す。キーが無ければ null。型が違う、または整数に読めないときは [malformedEntries] に数えて null を返す。 */
+    private fun integerOrCountMalformed(value: Value?): Long? = when (value) {
         null -> null
-        is Value.Integer -> value.value ?: run { malformedEntries++; null }
-        else -> { malformedEntries++; null }
+        is Value.Integer -> {
+            if (value.value == null) malformedEntries++
+            value.value
+        }
+        else -> {
+            malformedEntries++
+            null
+        }
     }
 
-    private fun flag(value: Value?): Boolean = when (value) {
+    /** 真偽の値を返す。キーが無ければ false。型が違うときは [malformedEntries] に数えて false を返す。 */
+    private fun flagOrCountMalformed(value: Value?): Boolean = when (value) {
         null -> false
         is Value.Bool -> value.value
-        else -> { malformedEntries++; false }
+        else -> {
+            malformedEntries++
+            false
+        }
     }
 }

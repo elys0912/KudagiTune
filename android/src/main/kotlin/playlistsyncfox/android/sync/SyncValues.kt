@@ -57,6 +57,9 @@ object SyncValues {
     /** V53 P3 の応答の待ち（仮。C-13 で計る）。 */
     const val DIGEST_RESPONSE_WAIT_MS = 60_000L
 
+    /** T7 のキー：この端末の ID。ペアリングの前に作り、解除の後も残る。 */
+    const val DEVICE_ID_KEY = "device_id"
+
     /** T7 のキー：保存先のボリューム名（D16）。無ければ本体。 */
     const val STORAGE_VOLUME_KEY = "storage_volume"
 
@@ -68,6 +71,9 @@ object SyncValues {
 
     /** T7 のキー：保存先の切り替えの取り直しが完了で終わっていない間 `true`（D16）。 */
     const val RELOCATING_KEY = "relocating"
+
+    /** T7 の真偽の値を ON と読む文字列（OFF は `false`、行が無いときも OFF）。 */
+    const val SETTING_ON = "true"
 
     /** 本体の MediaStore のボリューム名（`MediaStore.VOLUME_EXTERNAL_PRIMARY`）。 */
     const val VOLUME_PRIMARY = "external_primary"

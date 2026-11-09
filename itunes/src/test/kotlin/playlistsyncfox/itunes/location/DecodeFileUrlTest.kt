@@ -39,6 +39,12 @@ class DecodeFileUrlTest {
     }
 
     @Test
+    fun `TS-168 共有名が空のネットワークのパスを復号すると、解決できない接続先になる`() {
+        assertEquals(undecodable(LocationFailure.UnresolvableHost), decodeFileUrl("file://nas.example.invalid//a.mp3"))
+        assertEquals(undecodable(LocationFailure.UnresolvableHost), decodeFileUrl("file://nas.example.invalid/"))
+    }
+
+    @Test
     fun `NUL を含むパスを復号すると、制御文字になる`() {
         assertEquals(undecodable(LocationFailure.ControlCharacter), decodeFileUrl("file://localhost/C:/Music/a%00b.mp3"))
     }

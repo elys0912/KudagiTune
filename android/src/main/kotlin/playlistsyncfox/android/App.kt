@@ -22,17 +22,17 @@ import playlistsyncfox.android.storage.StorageVolumes
 import playlistsyncfox.android.sync.CatalogResult
 import playlistsyncfox.android.sync.PairingKeeper
 import playlistsyncfox.android.sync.PlaylistCatalog
-import playlistsyncfox.android.sync.StartBlock
-import playlistsyncfox.android.sync.SyncValues
-import playlistsyncfox.android.sync.startBlock
 import playlistsyncfox.android.sync.RemovalCheck
+import playlistsyncfox.android.sync.StartBlock
 import playlistsyncfox.android.sync.StopCause
-import playlistsyncfox.android.sync.SyncPreview
-import playlistsyncfox.android.sync.WorkerHooks
 import playlistsyncfox.android.sync.SyncEnvironment
 import playlistsyncfox.android.sync.SyncEnvironmentFactory
+import playlistsyncfox.android.sync.SyncPreview
 import playlistsyncfox.android.sync.SyncScheduler
 import playlistsyncfox.android.sync.SyncServices
+import playlistsyncfox.android.sync.SyncValues
+import playlistsyncfox.android.sync.WorkerHooks
+import playlistsyncfox.android.sync.startBlock
 import playlistsyncfox.android.ui.DevicePairingGateway
 import playlistsyncfox.android.ui.PairingGateway
 import playlistsyncfox.android.vault.DeviceCrypto
@@ -58,7 +58,7 @@ class AppGraph(val application: Application) {
         Room.databaseBuilder(app, AppDatabase::class.java, "playlist-sync-fox.db").addMigrations(MIGRATION_1_2).build().syncDao(),
     )
     val volumes = StorageVolumes(app)
-    val log = AppLog(File(app.filesDir, "logs"), enabled = { true }, now = System::currentTimeMillis)
+    val log = AppLog(File(app.filesDir, "logs"), now = System::currentTimeMillis)
     val discovery = PcDiscovery(app)
     val scheduler = SyncScheduler(WorkManager.getInstance(app), store)
 
@@ -85,7 +85,16 @@ class AppGraph(val application: Application) {
     /** 保存先のボリューム名。T7 に無ければ本体。 */
     suspend fun storageVolume(): String = store.setting(SyncValues.STORAGE_VOLUME_KEY) ?: SyncValues.VOLUME_PRIMARY
 
+    /** 整理（S5）に使う書き込み役。ペアリングの解除の後も整理できるよう、T4 が無ければ T7 の `device_id` で作る。 */
+    suspend fun cleanupWriter(): MediaWriter {
+        val deviceId = store.pairing()?.deviceId ?: store.setting(SyncValues.DEVICE_ID_KEY).orEmpty()
+        return mediaWriter(app, storageVolume(), deviceId)
+    }
+
     fun environmentFactory() = SyncEnvironmentFactory { context, hooks -> environment(context, hooks) }
+
+    private fun mediaWriter(context: Context, volume: String, deviceId: String) =
+        MediaWriter(store, ResolverMediaStoreFiles(context, volume), deviceId, System::currentTimeMillis)
 
     private fun environment(context: Context, hooks: WorkerHooks): SyncEnvironment {
         val pairing = runBlocking(Dispatchers.IO) { store.pairing() }
@@ -94,11 +103,11 @@ class AppGraph(val application: Application) {
         val volume = runBlocking(Dispatchers.IO) { storageVolume() }
         return SyncEnvironment(
             store = store,
-            writer = MediaWriter(store, ResolverMediaStoreFiles(context, volume), pairing?.deviceId.orEmpty(), System::currentTimeMillis),
+            writer = mediaWriter(context, volume, pairing?.deviceId.orEmpty()),
             apis = apis,
             lan = NsdLanResolver(discovery),
             aliasExists = { vault.exists(it) },
-            deleteMissing = runBlocking(Dispatchers.IO) { store.setting(SyncValues.DELETE_MISSING_KEY) } == "true",
+            deleteMissing = runBlocking(Dispatchers.IO) { store.setting(SyncValues.DELETE_MISSING_KEY) } == SyncValues.SETTING_ON,
             volume = volume,
             volumeAvailable = volume == SyncValues.VOLUME_PRIMARY || volume in volumes.mounted(),
             freeBytes = { volumes.freeBytes(volume) },

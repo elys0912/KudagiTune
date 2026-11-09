@@ -37,7 +37,7 @@ class DpapiCipher : SecretCipher {
 
     override fun decrypt(encrypted: ByteArray): ByteArray = try {
         Crypt32Util.cryptUnprotectData(encrypted, ENTROPY, 0, null)
-    } catch (e: RuntimeException) {
+    } catch (_: RuntimeException) {
         throw SecretStoreException("DPAPI の復号に失敗した")
     }
 
@@ -53,7 +53,9 @@ private class SecretsFile(
 )
 
 private const val DEVICE_PREFIX = "device/"
-private const val TLS_KEY = "tls-key"
+
+/** K2（サーバーの秘密鍵）の名前。TlsIdentity も同じ名前で読み書きする。 */
+internal const val TLS_KEY = "tls-key"
 
 /**
  * `secrets.bin`：K1 の表と K2 の秘密鍵を 1 つの JSON にして暗号化した 1 つのバイト列（X5-2）。
@@ -74,26 +76,21 @@ class FileSecretStore(private val file: Path, private val cipher: SecretCipher) 
 
     @Synchronized
     override fun write(name: String, value: ByteArray) {
-        val encoded = base64.encodeToString(value)
-        val content = load()
-        save(
-            if (name == TLS_KEY) {
-                SecretsFile(content.devices, encoded)
-            } else {
-                SecretsFile(content.devices + (name.removePrefix(DEVICE_PREFIX) to encoded), content.tlsKey)
-            },
-        )
+        save(load().replacing(name, base64.encodeToString(value)))
     }
 
     @Synchronized
     override fun delete(name: String) {
         val content = load()
-        val next = if (name == TLS_KEY) {
-            SecretsFile(content.devices, null)
-        } else {
-            SecretsFile(content.devices - name.removePrefix(DEVICE_PREFIX), content.tlsKey)
-        }
+        val next = content.replacing(name, null)
         if (next.devices != content.devices || next.tlsKey != content.tlsKey) save(next)
+    }
+
+    /** [name] の項目を [encoded] に置き換えた内容。[encoded] が null なら項目を除く。`tls-key` 以外は端末の鍵として扱う。 */
+    private fun SecretsFile.replacing(name: String, encoded: String?): SecretsFile {
+        if (name == TLS_KEY) return SecretsFile(devices, encoded)
+        val deviceId = name.removePrefix(DEVICE_PREFIX)
+        return SecretsFile(if (encoded == null) devices - deviceId else devices + (deviceId to encoded), tlsKey)
     }
 
     private fun load(): SecretsFile {

@@ -38,27 +38,39 @@ class ProgressTest {
     }
 
     @Test
+    fun `TA-104 開始の直後の待ちの間は最初の進捗で待ちを終え、finished が先に届いていれば S4 へ進む`() {
+        assertEquals(ProgressNav.Started, progressNav(SyncProgress(SyncStage.Connecting), awaitingStart = true))
+        assertEquals(ProgressNav.ToResult, progressNav(SyncProgress(SyncStage.Finished), awaitingStart = true))
+    }
+
+    @Test
+    fun `TA-104 押した時点から残っている前の完了は、待ちの間に S4 へ進む判定に使わない`() {
+        val stale = SyncProgress(SyncStage.Finished)
+
+        assertEquals(ProgressNav.Stay, progressNav(stale, awaitingStart = true, staleFinished = stale))
+        assertEquals(ProgressNav.ToResult, progressNav(SyncProgress(SyncStage.Finished), awaitingStart = true, staleFinished = stale))
+        assertEquals(ProgressNav.Started, progressNav(SyncProgress(SyncStage.Connecting), awaitingStart = true, staleFinished = stale))
+    }
+
+    @Test
     fun `TA-105 near_limit が真のときだけ注記が出る`() {
         assertNotNull(progressUi(SyncProgress(SyncStage.Transfer, nearLimit = true)).nearLimitNote)
         assertNull(progressUi(SyncProgress(SyncStage.Transfer, nearLimit = false)).nearLimitNote)
     }
 
     @Test
-    fun `TA-105 曲名は transfer のときだけ出し、容量不足の不足分と E2 の案内はそのまま渡す`() {
-        val transfer = progressUi(SyncProgress(SyncStage.Transfer, currentTitle = "Song 1"))
-        val diff = progressUi(SyncProgress(SyncStage.Diff, currentTitle = "Song 1"))
+    fun `TA-105 容量不足の不足分と E2 の案内はそのまま渡す`() {
         val finished = progressUi(SyncProgress(SyncStage.Finished, shortageBytes = 100, errorDetail = ErrorDetail.ClockSkew))
 
-        assertEquals("Song 1", transfer.currentTitle)
-        assertNull(diff.currentTitle)
         assertEquals(100, finished.shortageBytes)
-        assertEquals("端末と PC の時刻がずれています", finished.notice?.title)
+        assertEquals(noticeOf(ErrorDetail.ClockSkew).title, finished.notice?.title)
     }
 }
 
 private fun resultJson(
     removalSkipped: Boolean = false,
     detail: ErrorDetail? = null,
+    manifestVersionMismatch: Boolean = false,
 ) = encodeResult(
     SyncResult(
         startedAt = "2026-11-07T00:00:00.000Z",
@@ -79,6 +91,7 @@ private fun resultJson(
         removalSkipped = removalSkipped,
         keyMismatch = null,
         errorDetail = detail,
+        manifestVersionMismatch = manifestVersionMismatch,
     ),
 )
 
@@ -128,6 +141,25 @@ class TrackRowUiTest {
     }
 }
 
+class FormatBytesTest {
+    @Test
+    fun `TA-266 1 KiB 未満は B、1 KiB から KiB、1 MiB から MiB で、小数 1 桁に丸める`() {
+        assertEquals("0 B", formatBytes(0))
+        assertEquals("1023 B", formatBytes(1023))
+        assertEquals("1.0 KiB", formatBytes(1024))
+        assertEquals("1.0 MiB", formatBytes(1L shl 20))
+        assertEquals("1.0 GiB", formatBytes(1L shl 30))
+    }
+
+    @Test
+    fun `TA-266 小数 1 桁に丸めて 1024 になる値は、上の単位で出す`() {
+        assertEquals("1023.9 KiB", formatBytes(1048524))
+        assertEquals("1.0 MiB", formatBytes(1048525))
+        assertEquals("1.0 MiB", formatBytes((1L shl 20) - 1))
+        assertEquals("1.0 GiB", formatBytes((1L shl 30) - 1))
+    }
+}
+
 class ResultUiTest {
     @Test
     fun `TA-106 一覧は V21 件なら全件、1 件超えると V21 件と、ほか 1 件にする`() {
@@ -171,6 +203,15 @@ class ResultUiTest {
     }
 
     @Test
+    fun `TA-251 マニフェストの版違いで止まった行だけ、版を合わせる案内を出す`() {
+        val mismatch = resultUi(finishedRun(1, result = SyncRun.RESULT_FAILED, json = resultJson(manifestVersionMismatch = true)), emptyList())
+        val other = resultUi(finishedRun(1, result = SyncRun.RESULT_FAILED, json = resultJson()), emptyList())
+
+        assertEquals("PC と端末のアプリの版を合わせてください", mismatch.versionMismatchNote)
+        assertNull(other.versionMismatchNote)
+    }
+
+    @Test
     fun `TA-107 強制終了の跡の行は件数と容量を出さず、結果の区分だけを出す`() {
         val trace = finishedRun(1, result = SyncRun.RESULT_INTERRUPTED, json = null)
 
@@ -205,6 +246,16 @@ class ResultUiTest {
         assertEquals("証明書の変更", label(ErrorDetail.PinMismatch))
         assertEquals("一時的な拒否", label(ErrorDetail.RateLimited))
         assertEquals("署名の不一致", label(ErrorDetail.NoDetail))
+    }
+
+    @Test
+    fun `X7-2 E2 の原因欄も error_detail ごとの語で出し、時計のずれを再ペアリングの案内にしない`() {
+        fun cause(detail: ErrorDetail?) =
+            resultUi(finishedRun(1, result = SyncRun.RESULT_FAILED, errorKind = "E2", json = resultJson(detail = detail)), emptyList()).errorWord
+
+        ErrorDetail.entries.forEach { assertEquals(noticeOf(it).title, cause(it), it.name) }
+        // error_detail を持たない行は E の番号の語
+        assertEquals("ペアリングのやり直しが必要です", cause(null))
     }
 
     @Test

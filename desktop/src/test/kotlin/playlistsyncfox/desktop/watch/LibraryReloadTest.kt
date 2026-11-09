@@ -6,10 +6,14 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
+import playlistsyncfox.desktop.DesktopValues
 import playlistsyncfox.desktop.EMPTY_LIBRARY_XML
 import playlistsyncfox.desktop.MutableClock
 import playlistsyncfox.desktop.T0
 import playlistsyncfox.desktop.emptyLibrary
+import playlistsyncfox.desktop.settings.AppLog
+import playlistsyncfox.desktop.settings.LogLevel
 import java.io.IOException
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
@@ -28,6 +32,7 @@ class LibraryReloadTest {
     private val dir: Path = createTempDirectory("psfox-watch")
     private val xml: Path = dir.resolve("iTunes Music Library.xml").also { it.writeText(EMPTY_LIBRARY_XML) }
     private val clock = MutableClock(T0)
+    private val log = AppLog(dir.resolve("logs"), clock)
 
     private val stable = StabilityWaiter({ FileStamp(1, 1) })
 
@@ -58,7 +63,7 @@ class LibraryReloadTest {
     fun `TD-38 読み取りの最中に通知が来ると、読み終えた後に 1 回多く読む`() = runTest {
         var reads = 0
         lateinit var refresher: LibraryRefresher
-        val loader = LibraryLoader(xml) {
+        val loader = LibraryLoader(xml, log) {
             reads++
             if (reads == 1) refresher.notifyChanged()
             XML_BYTES
@@ -75,7 +80,7 @@ class LibraryReloadTest {
     @Test
     fun `TD-39 失敗が V6 の回数続くと回数どおりで止まり、諦めた状態になる`() = runTest {
         var reads = 0
-        val loader = LibraryLoader(xml) {
+        val loader = LibraryLoader(xml, log) {
             reads++
             throw IOException("読めない")
         }
@@ -92,7 +97,7 @@ class LibraryReloadTest {
     @Test
     fun `TD-40 ファイルが無い読み取りが V6 の間隔の後に成功すると正常になる`() = runTest {
         var reads = 0
-        val loader = LibraryLoader(xml) {
+        val loader = LibraryLoader(xml, log) {
             if (++reads == 1) throw NoSuchFileException("無い")
             XML_BYTES
         }
@@ -110,7 +115,7 @@ class LibraryReloadTest {
         val holder = holder()
         val old = Instant.parse("2026-01-01T00:00:00Z")
         holder.apply(LoadOutcome.Loaded(emptyLibrary(), old))
-        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml) { reads++; XML_BYTES }, stable, holder, { old.plusSeconds(10) })
+        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { reads++; XML_BYTES }, stable, holder, { old.plusSeconds(10) })
 
         refresher.refreshForRequest()
 
@@ -123,7 +128,7 @@ class LibraryReloadTest {
         val holder = holder()
         val old = Instant.parse("2026-01-01T00:00:00Z")
         holder.apply(LoadOutcome.Loaded(emptyLibrary(), old))
-        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml) { reads++; XML_BYTES }, stable, holder, { old })
+        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { reads++; XML_BYTES }, stable, holder, { old })
 
         refresher.refreshForRequest()
 
@@ -131,9 +136,158 @@ class LibraryReloadTest {
     }
 
     @Test
+    fun `TD-95 要求の時に XML が無ければ、1 回だけ待って、読み直さずに読めない状態にして戻る`() = runTest {
+        var reads = 0
+        val holder = holder()
+        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { reads++; XML_BYTES }, stable, holder, { null })
+
+        refresher.refreshForRequest()
+
+        assertEquals(DesktopValues.XML_MISSING_GRACE.toMillis(), currentTime)
+        assertEquals(0, reads)
+        assertEquals(XmlStatus.Unreadable(hasResult = false), holder.status.value)
+    }
+
+    @Test
+    fun `TD-95 要求の時の欠けが待っている間に戻れば、そのまま読み直して応える`() = runTest {
+        var reads = 0
+        var checks = 0
+        val holder = holder()
+        val old = Instant.parse("2026-01-01T00:00:00Z")
+        holder.apply(LoadOutcome.Loaded(emptyLibrary(), old))
+        // 最初の確認だけ XML が無い（置き換えの途中）
+        val modifiedNow: () -> Instant? = { if (checks++ == 0) null else old.plusSeconds(10) }
+        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { reads++; XML_BYTES }, stable, holder, modifiedNow)
+
+        refresher.refreshForRequest()
+
+        assertEquals(1, reads)
+        assertEquals(XmlStatus.Normal, holder.status.value)
+    }
+
+    @Test
+    fun `TD-95 要求が XML の無いまま戻っても、監視の待ちは続き、XML が戻れば読み直す`() = runTest {
+        var reads = 0
+        var present = false
+        val holder = holder()
+        val waiter = StabilityWaiter({ if (present) FileStamp(1, 1) else null })
+        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { reads++; XML_BYTES }, waiter, holder, { if (present) T0 else null })
+        refresher.notifyChanged()
+
+        refresher.refreshForRequest()
+        assertEquals(XmlStatus.Unreadable(hasResult = false), holder.status.value)
+
+        present = true
+        advanceTimeBy(10_000)
+        runCurrent()
+
+        assertEquals(1, reads)
+        assertEquals(XmlStatus.Normal, holder.status.value)
+    }
+
+    @Test
+    fun `TD-96 読めない状態の間は、更新日時が保持値と同じでも要求のたびに読み直す`() = runTest {
+        var reads = 0
+        val holder = holder()
+        val old = Instant.parse("2026-01-01T00:00:00Z")
+        holder.apply(LoadOutcome.Loaded(emptyLibrary(), old))
+        holder.apply(LoadOutcome.GaveUp)
+        val loader = LibraryLoader(xml, log) {
+            reads++
+            throw IOException("読めない")
+        }
+        val refresher = LibraryRefresher(backgroundScope, loader, stable, holder, { old })
+
+        repeat(2) { refresher.refreshForRequest() }
+
+        // 読み直しが諦めに終わっても、次の要求でまた読む。1 回の読み直しは V6 の回数
+        assertEquals(2 * DesktopValues.LOAD_ATTEMPTS, reads)
+    }
+
+    @Test
+    fun `TD-102 場所の切り替えで停止した世代の要求が、XML の無い短い待ちの後に戻っても、読めない状態にしない`() = runTest {
+        val holder = holder()
+        holder.apply(LoadOutcome.Loaded(emptyLibrary(), T0))
+        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { XML_BYTES }, stable, holder, { null })
+
+        val request = async { refresher.refreshForRequest() }
+        runCurrent()
+        refresher.stop()
+        request.await()
+
+        assertEquals(XmlStatus.Normal, holder.status.value)
+    }
+
+    @Test
+    fun `TD-103 場所の切り替えで停止した世代の読み取りが、切り替えの後に終わっても、結果を holder に入れない`() = runTest {
+        var reads = 0
+        val holder = holder()
+        lateinit var refresher: LibraryRefresher
+        val loader = LibraryLoader(xml, log) {
+            reads++
+            refresher.stop()
+            XML_BYTES
+        }
+        refresher = LibraryRefresher(backgroundScope, loader, stable, holder, { null })
+
+        refresher.start()
+        runCurrent()
+
+        assertEquals(1, reads)
+        assertEquals(null, holder.held.value)
+        assertEquals(XmlStatus.Unchecked, holder.status.value)
+    }
+
+    @Test
+    fun `TD-104 停止した XmlWatch への要求は、待たずに戻り、読み直さない`() = runTest {
+        val holder = holder()
+        val watch = XmlWatch(backgroundScope, xml, holder, { events(null, hang = true) }, log)
+        watch.stop()
+
+        // 戻らなければ、仮想時間の 1 秒で時間切れになる
+        withTimeout(1_000) { watch.refreshForRequest() }
+
+        assertEquals(null, holder.held.value)
+    }
+
+    @Test
+    fun `TD-94 読めたときは、読んだ件数の診断を 1 行ログに書く`() = runTest {
+        LibraryLoader(xml, log) { XML_BYTES }.load()
+
+        val messages = log.lines.value.map { it.message }
+        assertEquals(1, messages.size)
+        assertTrue(messages.single().startsWith("XML を読んだ tracks=0 playlists=0 "))
+    }
+
+    @Test
+    fun `TD-94 読み取りの失敗と読み直しと諦めを、回数つきでログに書く`() = runTest {
+        LibraryLoader(xml, log) { throw IOException("読めない") }.load()
+
+        assertEquals(
+            listOf(
+                "XML を読めない attempt=1/3 reason=IOException",
+                "XML を読み直す attempt=2/3",
+                "XML を読めない attempt=2/3 reason=IOException",
+                "XML を読み直す attempt=3/3",
+                "XML を読めない attempt=3/3 reason=IOException",
+                "XML を読めず諦めた attempts=3 path=$xml",
+            ),
+            log.lines.value.map { it.message },
+        )
+        assertEquals(LogLevel.Error, log.lines.value.last().level)
+    }
+
+    @Test
+    fun `TD-94 構文の不正は、失敗の理由としてログに書く`() = runTest {
+        LibraryLoader(xml, log) { "<plist><dict>".encodeToByteArray() }.load()
+
+        assertEquals("XML を読めない attempt=1/3 reason=InvalidSyntax", log.lines.value.first().message)
+    }
+
+    @Test
     fun `TD-48 短い間に同じファイルの通知が続けて届いても、読み直しは 1 回`() = runTest {
         var reads = 0
-        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml) { reads++; XML_BYTES }, stable, holder(), { null })
+        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { reads++; XML_BYTES }, stable, holder(), { null })
 
         repeat(3) { refresher.notifyChanged() }
         advanceTimeBy(10_000)
@@ -146,7 +300,7 @@ class LibraryReloadTest {
     fun `TD-49 要求の時に読み直しが進行中なら、待って同じ結果を使い二重に読まない`() = runTest {
         var reads = 0
         val holder = holder()
-        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml) { reads++; XML_BYTES }, stable, holder, { T0 })
+        val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { reads++; XML_BYTES }, stable, holder, { T0 })
 
         val first = async { refresher.refreshForRequest() }
         val second = async { refresher.refreshForRequest() }
@@ -199,6 +353,20 @@ class LibraryReloadTest {
         runCurrent()
 
         assertEquals(1, changed)
+    }
+
+    @Test
+    fun `TD-105 XML の場所が相対パスでも、現在のフォルダを基にした絶対パスのフォルダを監視する`() = runTest {
+        val opened = mutableListOf<Path>()
+        val opener = DirectoryEventsOpener { dir ->
+            opened.add(dir)
+            events(null, hang = true)
+        }
+
+        LibraryWatcher(backgroundScope, Path.of("lib.xml"), opener, {}, {}).start()
+        runCurrent()
+
+        assertEquals(listOf(Path.of("").toAbsolutePath()), opened)
     }
 
     @Test

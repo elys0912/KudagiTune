@@ -26,6 +26,23 @@ class PlaylistTreeTest {
     }
 
     @Test
+    fun `TD-80 フォルダの中のフォルダは入れ子の children になり、一番下の葉が曲数を持つ`() {
+        val tree = buildPlaylistTree(
+            listOf(
+                playlist("F1", kind = folder, tracks = 0),
+                playlist("F2", parent = "F1", kind = folder, tracks = 0),
+                playlist("L1", parent = "F2", tracks = 2),
+            ),
+        )
+
+        val outer = tree.single()
+        assertEquals(listOf("F2"), outer.children!!.map { it.id })
+        val inner = outer.children!!.single()
+        assertEquals(listOf("L1"), inner.children!!.map { it.id })
+        assertEquals(2, inner.children!!.single().trackCount)
+    }
+
+    @Test
     fun `TD-80 組み込みの一覧は木に出さず、親が一覧に無い子は最上位に出る`() {
         val tree = buildPlaylistTree(
             listOf(

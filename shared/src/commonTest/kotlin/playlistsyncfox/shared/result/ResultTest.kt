@@ -2,6 +2,8 @@ package playlistsyncfox.shared.result
 
 import playlistsyncfox.shared.manifest.ExcludedReason
 import playlistsyncfox.shared.manifest.ExcludedTrack
+import playlistsyncfox.shared.pid
+import playlistsyncfox.shared.track
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -129,6 +131,30 @@ class ResultTest {
     @Test
     fun `TS-147 エラーなしの停止だけの結果は内訳に何も載らない`() {
         assertTrue(breakdown(syncResult(SyncOutcome.Failed).errors).isEmpty())
+    }
+
+    @Test
+    fun `TS-166 保護付きの曲は曲名と種類と拡張子を保ち理由を Protected にして写す`() {
+        val protectedTrack = track(pid('A'), name = "曲", extension = "m4p").copy(kind = "Protected AAC")
+
+        assertEquals(
+            listOf(UnplayableTrack("曲", "Protected AAC", "m4p", UnplayableReason.Protected)),
+            toUnplayable(listOf(protectedTrack), emptyList()),
+        )
+    }
+
+    @Test
+    fun `TS-166 再生できない形式の曲は理由を UnsupportedFormat にして保護付きの後ろに写す`() {
+        val protectedTrack = track(pid('A'), name = "保護", extension = "m4p")
+        val unsupportedTrack = track(pid('B'), name = "形式", extension = "aiff").copy(kind = "AIFF")
+
+        assertEquals(
+            listOf(
+                UnplayableTrack("保護", null, "m4p", UnplayableReason.Protected),
+                UnplayableTrack("形式", "AIFF", "aiff", UnplayableReason.UnsupportedFormat),
+            ),
+            toUnplayable(listOf(protectedTrack), listOf(unsupportedTrack)),
+        )
     }
 
     @Test

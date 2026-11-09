@@ -72,6 +72,8 @@ private class StoredResult(
     @SerialName("removal_skipped") val removalSkipped: Boolean,
     @SerialName("key_mismatch") val keyMismatch: Boolean? = null,
     @SerialName("error_detail") val errorDetail: String? = null,
+    // 版違いの印（X6-9）。この項目を持たない既存の行は偽として読む
+    @SerialName("manifest_version_mismatch") val manifestVersionMismatch: Boolean = false,
 )
 
 fun encodeResult(result: SyncResult): String = storedJson.encodeToString(StoredResult.serializer(), result.toStored())
@@ -112,6 +114,7 @@ private fun SyncResult.toStored() = StoredResult(
     removalSkipped = removalSkipped,
     keyMismatch = keyMismatch,
     errorDetail = errorDetail?.let(::detailText),
+    manifestVersionMismatch = manifestVersionMismatch,
 )
 
 private fun StoredResult.toResult() = SyncResult(
@@ -133,6 +136,7 @@ private fun StoredResult.toResult() = SyncResult(
     removalSkipped = removalSkipped,
     keyMismatch = keyMismatch,
     errorDetail = errorDetail?.let(::detailOf),
+    manifestVersionMismatch = manifestVersionMismatch,
 )
 
 /** `detail` なしの 401 は空文字で持つ。 */

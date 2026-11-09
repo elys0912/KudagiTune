@@ -68,13 +68,13 @@ class PsfoxClient(
             contentType(ContentType.Application.Json)
             setBody(body)
         }) { response ->
-            if (response.status.value == 200) Ok(decodeBody(response)) else failure(response, false)
+            if (response.status.value == 200) ApiResult.Ok(decodeBody(response)) else failure(response, false)
         }
     }
 
     override suspend fun playlists(): ApiResult<String> =
         send(HttpMethod.Get, "/v1/playlists", byteArrayOf(), Timeouts.Body) { response ->
-            if (response.status.value == 200) Ok(decodeBody(response)) else failure(response, false)
+            if (response.status.value == 200) ApiResult.Ok(decodeBody(response)) else failure(response, false)
         }
 
     override suspend fun <T> track(
@@ -94,7 +94,7 @@ class PsfoxClient(
                 206 -> {
                     val start = response.headers[HttpHeaders.ContentRange]?.let { rangeStart.find(it) }?.groupValues?.get(1)?.toLongOrNull()
                     // 送った位置と違えば書き込まずに取り直す
-                    if (rangeFrom == 0L || start != rangeFrom) return@send Fail(ApiFailure.RangeMismatch)
+                    if (rangeFrom == 0L || start != rangeFrom) return@send ApiResult.Fail(ApiFailure.RangeMismatch)
                     start
                 }
                 else -> return@send failure(response, true)
@@ -109,7 +109,7 @@ class PsfoxClient(
                     throw SourceDisconnectedException(e)
                 }
             }
-            Ok(
+            ApiResult.Ok(
                 guarded { block(
                     TrackResponse(
                         startAt = startAt,
@@ -127,7 +127,7 @@ class PsfoxClient(
             contentType(ContentType.Application.Json)
             setBody(bytes)
         }) { response ->
-            if (response.status.value == 204 || response.status.value == 200) Ok(Unit) else failure(response, false)
+            if (response.status.value == 204 || response.status.value == 200) ApiResult.Ok(Unit) else failure(response, false)
         }
     }
 
@@ -137,7 +137,7 @@ class PsfoxClient(
             contentType(ContentType.Application.Json)
             setBody(bytes)
         }) { response ->
-            if (response.status.value == 204 || response.status.value == 200) Ok(Unit) else failure(response, false)
+            if (response.status.value == 204 || response.status.value == 200) ApiResult.Ok(Unit) else failure(response, false)
         }
     }
 
@@ -173,7 +173,7 @@ class PsfoxClient(
             throw e
         } catch (_: Exception) {
             // Keystore の鍵が使えない（失効、端末の変更）。例外の中身は出さず、鍵の不一致として扱う（X6-6）
-            return Fail(ApiFailure.Rejected(ErrorDetail.NoDetail, keyMismatch = true))
+            return ApiResult.Fail(ApiFailure.Rejected(detail = ErrorDetail.NoDetail, keyMismatch = true))
         }
 
         return try {
@@ -201,27 +201,24 @@ class PsfoxClient(
             // 受け手（書き込み）の失敗は通信の切断ではない。そのまま呼び出し元へ返す
             throw e.original
         } catch (e: HttpRequestTimeoutException) {
-            Fail(ApiFailure.Disconnected)
+            ApiResult.Fail(ApiFailure.Disconnected)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             // 不一致で切った接続は、フラグで他の切断と分ける
-            Fail(if (pinMismatched()) ApiFailure.PinMismatch else ApiFailure.Disconnected)
+            ApiResult.Fail(if (pinMismatched()) ApiFailure.PinMismatch else ApiFailure.Disconnected)
         }
     }
 
     /** X6-5 の対応表。[isTrack] は 404 が E5（曲なし）か、ルート不明（E なし）かの区別。 */
-    private suspend fun failure(response: HttpResponse, isTrack: Boolean): ApiResult.Fail = Fail(
+    private suspend fun failure(response: HttpResponse, isTrack: Boolean): ApiResult.Fail = ApiResult.Fail(
         when (response.status.value) {
             401 -> {
                 val detail = errorDetail(response)
-                Rejected(
-                    detail = detail ?: ErrorDetail.NoDetail,
-                    keyMismatch = detail == null,
-                )
+                ApiFailure.Rejected(detail = detail ?: ErrorDetail.NoDetail, keyMismatch = detail == null)
             }
-            403 -> ApiFailure.Rejected(null, keyMismatch = false)
-            429 -> ApiFailure.Rejected(ErrorDetail.RateLimited, keyMismatch = false)
+            403 -> ApiFailure.Rejected(detail = null, keyMismatch = false)
+            429 -> ApiFailure.Rejected(detail = ErrorDetail.RateLimited, keyMismatch = false)
             503 -> ApiFailure.XmlUnavailable
             409 -> ApiFailure.Stale
             416 -> ApiFailure.RangeNotSatisfiable
@@ -230,8 +227,6 @@ class PsfoxClient(
         },
     )
 
-    private fun Rejected(detail: ErrorDetail, keyMismatch: Boolean) = ApiFailure.Rejected(detail, keyMismatch)
-
     /** `{"error":"E2","detail":"clock_skew"}` の detail。無い、知らない語は null。 */
     private suspend fun errorDetail(response: HttpResponse): ErrorDetail? = try {
         when (json.parseToJsonElement(response.bodyAsText()).jsonObject["detail"]?.jsonPrimitive?.content) {
@@ -239,6 +234,8 @@ class PsfoxClient(
             "replay" -> ErrorDetail.Replay
             else -> null
         }
+    } catch (e: CancellationException) {
+        throw e
     } catch (_: Exception) {
         null
     }
@@ -253,12 +250,10 @@ class PsfoxClient(
     }
 
     private suspend fun <T> parse(response: HttpResponse, read: (kotlinx.serialization.json.JsonElement) -> T): ApiResult<T> = try {
-        Ok(read(json.parseToJsonElement(response.bodyAsText())))
+        ApiResult.Ok(read(json.parseToJsonElement(response.bodyAsText())))
+    } catch (e: CancellationException) {
+        throw e
     } catch (_: Exception) {
-        Fail(ApiFailure.ServerFault)
+        ApiResult.Fail(ApiFailure.ServerFault)
     }
-
-    private fun <T> Ok(value: T): ApiResult<T> = ApiResult.Ok(value)
-
-    private fun Fail(failure: ApiFailure): ApiResult.Fail = ApiResult.Fail(failure)
 }

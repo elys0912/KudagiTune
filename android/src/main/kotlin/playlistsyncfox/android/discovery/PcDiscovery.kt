@@ -69,6 +69,7 @@ class PcDiscovery(context: Context) {
             acquire()
         }
 
+        // NSD のコールバックのスレッドと解決のコルーチンが触る。更新と送信を found のロックの内で行い、送る一覧を最新に保つ
         val found = LinkedHashMap<String, DiscoveredPc>()
         val queue = Channel<NsdServiceInfo>(Channel.UNLIMITED)
 
@@ -76,8 +77,10 @@ class PcDiscovery(context: Context) {
         launch {
             for (info in queue) {
                 val resolved = withTimeoutOrNull(RESOLVE_WAIT_MS) { resolve(nsd, info) } ?: continue
-                selectDiscovered(resolved, onlyPairingOpen)?.let { found[it.serviceName] = it }
-                trySend(found.values.toList())
+                synchronized(found) {
+                    selectDiscovered(resolved, onlyPairingOpen)?.let { found[it.serviceName] = it }
+                    trySend(found.values.toList())
+                }
             }
         }
 
@@ -87,8 +90,10 @@ class PcDiscovery(context: Context) {
             }
 
             override fun onServiceLost(serviceInfo: NsdServiceInfo) {
-                found.remove(serviceInfo.serviceName)
-                trySend(found.values.toList())
+                synchronized(found) {
+                    found.remove(serviceInfo.serviceName)
+                    trySend(found.values.toList())
+                }
             }
 
             override fun onDiscoveryStarted(serviceType: String) = Unit
@@ -135,6 +140,11 @@ class PcDiscovery(context: Context) {
     private companion object {
         const val SERVICE_TYPE = "_psfox._tcp."
         const val LOCK_TAG = "playlist-sync-fox-nsd"
+
+        /**
+         * 1 件の解決（`resolveService`）を待つ上限。超えたら捨てて次の件へ進む（X7-2-1 の手順 3）。
+         * 設計書に V 番号は無く、実装で置いた値。
+         */
         const val RESOLVE_WAIT_MS = 5_000L
     }
 }
@@ -156,7 +166,16 @@ class NsdLanResolver(private val discovery: PcDiscovery) : LanResolver {
     }
 
     private companion object {
+        /**
+         * [NsdLanResolver.discover] 全体の待ちの上限。呼び出し側の V14（`SyncValues.NSD_RESOLVE_WAIT_MS`、3 秒）より短くする。
+         * V14 が先に切れると呼び出し側は結果を受け取れず、それまでに見つけた PC も使えない。設計書に値の定めは無く、実装で置いた値。
+         */
         const val WINDOW_MS = 2_500L
+
+        /**
+         * 1 台目が見つかってから、同時に出ている別の PC を待つ時間。[WINDOW_MS] の内で数える。
+         * 設計書に値の定めは無く、実装で置いた値。
+         */
         const val SETTLE_MS = 300L
     }
 }

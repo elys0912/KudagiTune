@@ -1,7 +1,13 @@
 package playlistsyncfox.android.log
 
 import java.io.File
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executor
+import java.util.concurrent.TimeUnit
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -14,7 +20,7 @@ private fun tempDir(): File = createTempDirectory("applog").toFile().also { it.d
 
 class AppLogTest {
     private fun log(dir: File, maxBytes: Long = AppLog.MAX_FILE_BYTES) =
-        AppLog(dir, enabled = { true }, now = { 0L }, maxBytes = maxBytes, executor = direct)
+        AppLog(dir, now = { 0L }, maxBytes = maxBytes, executor = direct)
 
     @Test
     fun `TA-115 上限を超えて書くと世代が送られ、3 世代を超えて残らない`() {
@@ -90,6 +96,98 @@ class AppLogTest {
     }
 
     @Test
+    fun `TA-253 ファイルに保存する本文は残っている全世代の全行を古い順に出し、閲覧の 500 行の切り詰めを受けない`() {
+        val dir = tempDir()
+        val log = log(dir, maxBytes = 12_000)
+        repeat(1_200) { log.log(LogLevel.Info, "m", "行 %04d".format(it)) }
+
+        val lines = log.exportText().lines().dropLast(1)
+
+        val kept = dir.listFiles()!!.sumOf { it.readLines().size }
+        assertEquals(kept, lines.size)
+        assertTrue(lines.size > AppLog.MAX_VIEW_LINES, "閲覧の上限より多い")
+        // 最古の行から最新の行まで、欠けも入れ替わりも無い
+        val numbers = lines.map { it.substringAfter("行 ").take(4).toInt() }
+        assertEquals((numbers.first()..1_199).toList(), numbers)
+        assertTrue(log.exportText().endsWith("\n"))
+    }
+
+    @Test
+    fun `TA-253 ログがまだ無いときの保存の本文は空`() {
+        assertEquals("", log(tempDir()).exportText())
+    }
+
+    @Test
+    fun `TA-253 保存の本文の読み取りは、先に投げた書き込みが済んでから行う`() {
+        val queued = ConcurrentLinkedQueue<Runnable>()
+        // 書き込み 3 件と読み取り 1 件が並ぶまで、何も実行しない executor
+        val submitted = CountDownLatch(4)
+        val deferred = Executor { task ->
+            queued.add(task)
+            submitted.countDown()
+        }
+        val log = AppLog(tempDir(), now = { 0L }, executor = deferred)
+        repeat(3) { log.log(LogLevel.Info, "m", "行 $it") }
+        val text = CompletableFuture.supplyAsync { log.exportText() }
+
+        assertTrue(submitted.await(5, TimeUnit.SECONDS), "読み取りも executor に投げる")
+        queued.forEach { it.run() }
+
+        assertEquals(3, text.get(5, TimeUnit.SECONDS).lines().dropLast(1).size)
+    }
+
+    @Test
+    fun `TA-118 閲覧の読み取りは、先に投げた書き込みが済んでから行う`() {
+        val queued = ConcurrentLinkedQueue<Runnable>()
+        // 書き込み 3 件と読み取り 1 件が並ぶまで、何も実行しない executor
+        val submitted = CountDownLatch(4)
+        val deferred = Executor { task ->
+            queued.add(task)
+            submitted.countDown()
+        }
+        val log = AppLog(tempDir(), now = { 0L }, executor = deferred)
+        repeat(3) { log.log(LogLevel.Info, "m", "行 $it") }
+        val lines = CompletableFuture.supplyAsync { log.tail() }
+
+        assertTrue(submitted.await(5, TimeUnit.SECONDS), "読み取りも executor に投げる")
+        queued.forEach { it.run() }
+
+        assertEquals(3, lines.get(5, TimeUnit.SECONDS).size)
+    }
+
+    @Test
+    fun `X7-5 保存の既定の名前は端末の地方時の日時を 0 埋めで含む`() {
+        val zone = ZoneId.of("Asia/Tokyo")
+        // 2026-01-02T03:04:05+09:00
+        val millis = ZonedDateTime.of(2026, 1, 2, 3, 4, 5, 0, zone).toInstant().toEpochMilli()
+
+        assertEquals("kudagitune-log-20260102-030405.txt", logFileName(millis, zone))
+    }
+
+    @Test
+    fun `TA-258 消去すると全世代が消え、消した旨の 1 行だけが新しい世代に残る`() {
+        val dir = tempDir()
+        val log = log(dir, maxBytes = 200)
+        repeat(40) { log.log(LogLevel.Info, "sync", "メッセージ $it") }
+        assertEquals(setOf("app.log", "app.log.1", "app.log.2"), dir.list()!!.toSet())
+
+        log.clear()
+
+        assertEquals(setOf("app.log"), dir.list()!!.toSet())
+        assertTrue(log.tail().single().contains("ログを消去した"))
+    }
+
+    @Test
+    fun `TA-136 消去すると画面の欄も消え、消した旨の 1 行だけが残る`() {
+        val log = log(tempDir())
+        repeat(3) { log.log(LogLevel.Info, "sync", "メッセージ $it") }
+
+        log.clear()
+
+        assertTrue(log.recent.value.single().message.contains("ログを消去した"))
+    }
+
+    @Test
     fun `TA-136 画面の欄は直近 200 行までで 1 行超えると古い行から消える`() {
         val log = log(tempDir())
 
@@ -101,18 +199,6 @@ class AppLogTest {
         assertEquals(AppLog.SCREEN_LINES, log.recent.value.size)
         assertEquals("行 1", log.recent.value.first().message)
         assertEquals("行 ${AppLog.SCREEN_LINES}", log.recent.value.last().message)
-    }
-
-    @Test
-    fun `TA-136 ログが無効なら画面の欄にもファイルにも入らない`() {
-        val dir = tempDir()
-
-        val log = AppLog(dir, enabled = { false }, now = { 0L }, executor = direct)
-
-        log.log(LogLevel.Error, "m", "入らない行")
-
-        assertTrue(log.recent.value.isEmpty())
-        assertFalse(File(dir, "app.log").exists())
     }
 
     @Test

@@ -1,9 +1,11 @@
 package playlistsyncfox.shared.m3u8
 
 import playlistsyncfox.shared.manifest.ManifestPlaylist
+import playlistsyncfox.shared.path.UNTITLED
 import playlistsyncfox.shared.path.sanitizeElement
 import playlistsyncfox.shared.path.suffixOf
 import playlistsyncfox.shared.path.truncateToBytes
+import playlistsyncfox.shared.path.utf8Length
 
 private const val M3U8_EXTENSION = ".m3u8"
 
@@ -33,16 +35,16 @@ fun buildPlaylistFileName(
     maxBytes: Int,
 ): Map<String, String> {
     fun fileName(playlist: ManifestPlaylist, suffix: String): String {
-        val stemBytes = maxBytes - M3U8_EXTENSION.length - suffix.encodeToByteArray().size
-        val stem = truncateToBytes(sanitizeElement(playlist.name, "Untitled"), stemBytes, "Untitled")
+        val stemBytes = maxBytes - utf8Length(M3U8_EXTENSION) - utf8Length(suffix)
+        val stem = truncateToBytes(sanitizeElement(playlist.name, UNTITLED), stemBytes, UNTITLED)
 
         return stem + suffix + M3U8_EXTENSION
     }
 
     val plainNames = playlists.associate { it.persistentId to fileName(it, "") }
-    val sharedNames = plainNames.values.groupingBy { it.lowercase() }.eachCount()
+    val collidingPlainNames = collidingNames(plainNames.values)
     val withSuffix = playlists.associate { playlist ->
-        val isShared = sharedNames.getValue(plainNames.getValue(playlist.persistentId).lowercase()) > 1
+        val isShared = plainNames.getValue(playlist.persistentId).lowercase() in collidingPlainNames
         val hasNoName = sanitizeElement(playlist.name, "").isEmpty()
         val suffix = if (isShared || hasNoName) suffixOf(playlist.persistentId.take(suffixLength)) else ""
 
@@ -50,12 +52,16 @@ fun buildPlaylistFileName(
     }
 
     // 接尾辞を付けても重なるものは、接尾辞を全文にする
-    val stillShared = withSuffix.values.groupingBy { it.lowercase() }.eachCount()
+    val collidingSuffixedNames = collidingNames(withSuffix.values)
 
     return playlists.associate { playlist ->
         val name = withSuffix.getValue(playlist.persistentId)
-        val isStillShared = stillShared.getValue(name.lowercase()) > 1
+        val isStillShared = name.lowercase() in collidingSuffixedNames
 
         playlist.persistentId to if (isStillShared) fileName(playlist, suffixOf(playlist.persistentId)) else name
     }
 }
+
+/** 大文字小文字を区別せず、2 つ以上が重なる名前を小文字にして返す。 */
+private fun collidingNames(names: Collection<String>): Set<String> =
+    names.groupingBy { it.lowercase() }.eachCount().filterValues { it > 1 }.keys

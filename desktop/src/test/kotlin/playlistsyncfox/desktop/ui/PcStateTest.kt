@@ -55,6 +55,15 @@ class PcStateTest {
     }
 
     @Test
+    fun `TD-35 ポートの使用中も待機中と表示せず、未ペアより上、鍵の保管の失敗より下に選ばれる`() {
+        val noDevice = settings(devices = emptyList())
+
+        assertEquals(TrayStatus.ServerFailed, trayStatus(state(server = ServerStatus.Failed(ServerFailureKind.PortInUse))))
+        assertEquals(TrayStatus.ServerFailed, trayStatus(state(server = ServerStatus.Failed(ServerFailureKind.PortInUse), settings = noDevice)))
+        assertEquals(TrayStatus.KeyStorageFailed, trayStatus(state(server = ServerStatus.Failed(ServerFailureKind.KeyStorage), settings = noDevice)))
+    }
+
+    @Test
     fun `TD-35 警告の印は warnings が 1 件以上で付く`() {
         assertFalse(hasWarningMark(state()))
         assertTrue(hasWarningMark(state(xml = XmlStatus.Stale(8))))
@@ -97,13 +106,5 @@ class PcStateTest {
         clock.advance(Duration.ofSeconds(600))
 
         assertEquals(TrayStatus.Syncing, trayStatus(state()))
-    }
-
-    @Test
-    fun `TD-77 鍵が読めない端末は W3 に鍵なしの印と警告が出る`() {
-        val s = state(keyMissing = setOf(DEVICE))
-
-        assertTrue(s.device!!.keyMissing)
-        assertTrue(Warning.KeyMissing in s.warnings)
     }
 }

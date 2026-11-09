@@ -1,13 +1,12 @@
 package playlistsyncfox.shared.manifest
 
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
 
 sealed interface ManifestReadResult {
-    /** [duplicatesDropped] は、同じ `persistent_id` の曲を落とした件数。 */
+    /** [duplicatesDropped] は、同じ `persistent_id` の曲を落とした件数。プレイリストの重複は数えない。 */
     data class Loaded(val manifest: Manifest, val duplicatesDropped: Int) : ManifestReadResult
 
     /** 版が合わない。E8 ではなく、端末は更新の案内を出す。 */
@@ -16,22 +15,21 @@ sealed interface ManifestReadResult {
     data class Broken(val reason: String) : ManifestReadResult
 }
 
-// 未知のキーは読み捨てる。空の項目は null にして、JSON には書かない。
-private val manifestJson = Json {
+// 境界（マニフェスト、P1・P3・P7・P8 の本文）の JSON の設定。未知のキーは読み捨てる。空の項目は null にして、JSON には書かない。
+// 境界の読み取りは IllegalArgumentException で捕まえる。デコードは、JSON の不正を SerializationException で、型として不正な値を IllegalArgumentException で投げる（前者は後者の子）。
+internal val boundaryJson = Json {
     ignoreUnknownKeys = true
     explicitNulls = false
 }
 
-private val persistentIdPattern = Regex("[0-9A-F]{16}")
-
 private val supportedFormatVersions = MANIFEST_FORMAT_VERSION..MANIFEST_FORMAT_VERSION
 
-fun writeManifest(manifest: Manifest): String = manifestJson.encodeToString(Manifest.serializer(), manifest)
+fun writeManifest(manifest: Manifest): String = boundaryJson.encodeToString(Manifest.serializer(), manifest)
 
 fun readManifest(text: String): ManifestReadResult {
     val root = try {
-        manifestJson.parseToJsonElement(text)
-    } catch (e: SerializationException) {
+        boundaryJson.parseToJsonElement(text)
+    } catch (e: IllegalArgumentException) {
         return ManifestReadResult.Broken(firstLine(e))
     }
 
@@ -41,13 +39,14 @@ fun readManifest(text: String): ManifestReadResult {
     if (version !in supportedFormatVersions) return ManifestReadResult.VersionMismatch(version)
 
     val manifest = try {
-        manifestJson.decodeFromJsonElement(Manifest.serializer(), root)
-    } catch (e: SerializationException) {
+        boundaryJson.decodeFromJsonElement(Manifest.serializer(), root)
+    } catch (e: IllegalArgumentException) {
         return ManifestReadResult.Broken(firstLine(e))
     }
 
     validateIds(manifest)?.let { return ManifestReadResult.Broken(it) }
 
+    // 3 つの一覧とも、同じ ID は最初の 1 件を残す。重複が残ると、digest が並びに依存し、m3u8 の名前も 1 件消える
     val uniqueTracks = manifest.tracks.distinctBy { it.persistentId }
     val knownIds = uniqueTracks.mapTo(HashSet()) { it.persistentId }
     if (manifest.playlists.any { playlist -> playlist.trackIds.any { it !in knownIds } }) {
@@ -55,7 +54,11 @@ fun readManifest(text: String): ManifestReadResult {
     }
 
     return ManifestReadResult.Loaded(
-        manifest.copy(tracks = uniqueTracks),
+        manifest.copy(
+            tracks = uniqueTracks,
+            playlists = manifest.playlists.distinctBy { it.persistentId },
+            unresolvedPlaylists = manifest.unresolvedPlaylists.distinctBy { it.persistentId },
+        ),
         duplicatesDropped = manifest.tracks.size - uniqueTracks.size,
     )
 }
@@ -68,5 +71,5 @@ private fun validateIds(manifest: Manifest): String? {
         manifest.playlists.map { it.persistentId } +
         manifest.unresolvedPlaylists.map { it.persistentId }
 
-    return if (ids.all { persistentIdPattern.matches(it) }) null else "persistent_id が大文字 16 桁の 16 進ではない"
+    return if (ids.all(::isPersistentId)) null else "persistent_id が大文字 16 桁の 16 進ではない"
 }

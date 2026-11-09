@@ -14,8 +14,6 @@ class StoredFile(
     val dateModified: Long,
 )
 
-enum class DeleteOutcome { Deleted, Missing }
-
 /** 書き込み中の容量不足（`IOException` のうち空きの不足）。 */
 class OutOfSpaceException : IOException("空き容量が足りない")
 
@@ -48,8 +46,8 @@ interface MediaStoreFiles {
     /** `IS_PENDING`＝0 にして `DISPLAY_NAME`、`RELATIVE_PATH`、`SIZE`、`DATE_MODIFIED` を読み戻す。行が無ければ null。 */
     fun publish(uri: String): StoredFile?
 
-    /** 行を消す。権限が無ければ [SecurityException]。 */
-    fun delete(uri: String): DeleteOutcome
+    /** 行を消す。行が既に無くても何もしない。権限が無ければ [SecurityException]。 */
+    fun delete(uri: String)
 
     /** 自分が持ち主で `Music/<V22>/` の下にある行（pending を含む）の、`Music/<V22>/` を除いた相対パス。 */
     fun ownedTrackPaths(): Set<String>
@@ -57,8 +55,11 @@ interface MediaStoreFiles {
     /** 自分の pending の m3u8 の URI。 */
     fun ownedPendingPlaylistUris(): List<String>
 
-    /** 自分が持ち主で `Music/<V22>/` の下にある曲と m3u8（pending でないもの）。 */
-    fun listOwned(): List<StoredFile>
+    /**
+     * `Music/<V22>/` の下にある曲と m3u8（pending でないもの）。持ち主で絞らない（X6-2）。
+     * 入れ直しで持ち主が外れた行も入る。消すときに利用者の同意が要る行は、呼び出し側が OS の削除の確認で扱う。
+     */
+    fun listUnderRoot(): List<StoredFile>
 }
 
 /** `Music/<V22>/` を除いた相対パス（フォルダ部分とファイル名をつなげたもの）。 */

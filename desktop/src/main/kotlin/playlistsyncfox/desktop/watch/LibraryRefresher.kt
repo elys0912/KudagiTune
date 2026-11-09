@@ -2,7 +2,9 @@ package playlistsyncfox.desktop.watch
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import playlistsyncfox.desktop.DesktopValues
 import java.time.Instant
 
 /**
@@ -23,6 +25,7 @@ class LibraryRefresher(
     private var phase = Phase.Idle
     private var rereadRequested = false
     private var running: CompletableDeferred<Unit>? = null
+    private var stopped = false
 
     /** 起動のとき。安定待ちは省く。 */
     fun start() {
@@ -40,22 +43,48 @@ class LibraryRefresher(
         }
     }
 
+    /** 場所の切り替えで世代を捨てるとき。この後は holder に書かない（読み取りの最中だった結果も捨てる）。 */
+    fun stop() = synchronized(lock) { stopped = true }
+
     /** 取りこぼし（OVERFLOW）の後。更新日時を取り直し、保持値と違えば読み直す。 */
     fun checkModified() {
         if (xmlModifiedNow() != holder.held.value?.xmlModified) notifyChanged()
     }
 
-    /** P1・P3 の要求の時。更新日時が保持値と違えば、読み直してから戻る。 */
+    /**
+     * P1・P3・P7 の要求の時。XML が無ければ待たずに「読めない」にして戻る（呼び出し側が E4 で応える。X2-1）。
+     * 「読めない」の間は更新日時に関わらず読み直す（X2-3）。それ以外は更新日時が保持値と違えば読み直してから戻る。
+     */
     suspend fun refreshForRequest() {
+        if (!existsAfterGrace()) {
+            applyUnlessStopped(LoadOutcome.GaveUp)
+            return
+        }
+
         val cycle = synchronized(lock) {
             when {
                 phase != Phase.Idle -> running
-                xmlModifiedNow() != holder.held.value?.xmlModified -> startCycle(waitForStability = true)
+                needsReload() -> startCycle(waitForStability = true)
                 else -> null
             }
         }
         cycle?.await()
     }
+
+    // 置き換えの数ミリ秒の欠けを吸収するため、無いときだけ 1 回短く待って確かめ直す
+    private suspend fun existsAfterGrace(): Boolean {
+        if (xmlModifiedNow() != null) return true
+        delay(DesktopValues.XML_MISSING_GRACE.toMillis())
+        return xmlModifiedNow() != null
+    }
+
+    // 停止した世代の結果は古い場所のものなので捨てる。stop と同じ lock の中で書くため、stop の後に書き込みは起きない
+    private fun applyUnlessStopped(outcome: LoadOutcome) = synchronized(lock) {
+        if (!stopped) holder.apply(outcome)
+    }
+
+    private fun needsReload(): Boolean =
+        holder.status.value is XmlStatus.Unreadable || xmlModifiedNow() != holder.held.value?.xmlModified
 
     // 読み取りの最中に通知があれば、安定待ちに戻ってもう 1 回読む
     private fun rereadAfterPass(): Boolean = synchronized(lock) {
@@ -69,22 +98,23 @@ class LibraryRefresher(
         running = done
         phase = if (waitForStability) Phase.Waiting else Phase.Loading
         rereadRequested = false
-        scope.launch {
-            try {
-                var wait = waitForStability
-                do {
-                    if (wait) waiter.awaitStable()
-                    synchronized(lock) {
-                        phase = Phase.Loading
-                        rereadRequested = false
-                    }
-                    holder.apply(loader.load())
-                    wait = true
-                } while (rereadAfterPass())
-            } finally {
-                synchronized(lock) { phase = Phase.Idle }
-                done.complete(Unit)
-            }
+        val cycle = scope.launch {
+            var wait = waitForStability
+            do {
+                if (wait) waiter.awaitStable()
+                synchronized(lock) {
+                    phase = Phase.Loading
+                    rereadRequested = false
+                }
+                applyUnlessStopped(loader.load())
+                wait = true
+            } while (rereadAfterPass())
+        }
+        // 停止済みの scope では本体が走らずに終わるため、本体の finally ではなく完了の通知で待ちを解く
+        cycle.invokeOnCompletion {
+            // 通知より先に次の周が始まっていたら、その周の phase は書き換えない
+            synchronized(lock) { if (running === done) phase = Phase.Idle }
+            done.complete(Unit)
         }
         return done
     }

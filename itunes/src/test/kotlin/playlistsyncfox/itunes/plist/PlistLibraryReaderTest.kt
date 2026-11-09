@@ -1,5 +1,6 @@
 package playlistsyncfox.itunes.plist
 
+import org.junit.jupiter.api.Tag
 import playlistsyncfox.itunes.library.LibraryPlaylist
 import playlistsyncfox.itunes.library.LibraryReadError
 import playlistsyncfox.itunes.library.LibraryReadOutcome
@@ -15,6 +16,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.measureTime
@@ -82,6 +84,30 @@ private val standardTracks = fileTrack(1, ID_A, "a") + fileTrack(2, ID_B, "b")
 
 private val standardPlaylists =
     playlist(PLAYLIST_ID, "一覧", items(2, 1, 2)) + playlist(MASTER_ID, "ライブラリ", bool("Master", true), items(1, 2))
+
+// NFD（「ほ」＋結合の濁点）の名前。パスを正規化しないことを確かめるために使う
+private const val NFD_NAME = "ほ\u3099"
+
+// iTunes 12.x の実物の形を写した文書。DOCTYPE、CRLF、組み込みのプレイリスト、NFD のパス、文字参照、文書の先頭の項目を持つ
+private fun realLibraryDocument(): String {
+    val tracks = fileTrack(1, ID_A, "a", bool("Protected", false)).replace(
+        "file://localhost/C:/Music/a.mp3", "file://localhost/C:/Music/$NFD_NAME.mp3",
+    ) +
+        track(2, int("Track ID", "2"), str("Persistent ID", ID_B), str("Track Type", "File"), str("Name", "R &#38; B")) +
+        fileTrack(3, ID_C, "c", bool("Protected", false))
+    val builtIns = playlist(MASTER_ID, "ライブラリ", bool("Master", true), "<key>Visible</key><false/>", items(1, 2, 3)) +
+        listOf(4, 2, 3, 10, 5, 65, 66, 67, 26).joinToString("") {
+            playlist("00000000000000$it".takeLast(16), "組み込み $it", int("Distinguished Kind", "$it"), items(1))
+        } +
+        playlist("3333333333333333", "スマート組み込み", int("Distinguished Kind", "4"), "<key>Smart Info</key><data>AQID</data>")
+    val header = """<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">""" + "\r\n"
+    return document(
+        tracks, builtIns + playlist(PLAYLIST_ID, "普通", items(1)) + playlist("4444444444444444", "空の普通の一覧"),
+        header = header,
+        top = "<key>Application Version</key><string>12.13.7.1</string>" +
+            "<key>Date</key><date>2026-11-06T01:02:03Z</date>" + str("Library Persistent ID", "9f8e7d6c5b4a3921"),
+    ).replace("\n", "\r\n")
+}
 
 class PlistLibraryReaderTest {
     @Test
@@ -153,7 +179,7 @@ class PlistLibraryReaderTest {
         assertEquals(listOf(UnidentifiedTrack(name = "名無しの ID", artist = null)), result.unidentifiedTracks)
         val withoutLocation = result.tracks.single { it.persistentId == ID_B }
         assertEquals(TrackLocation.Absent, withoutLocation.location)
-        assertEquals(null, withoutLocation.name)
+        assertNull(withoutLocation.name)
         assertEquals(LibraryPlaylist(PLAYLIST_ID, "", null, PlaylistKind.Normal, emptyList()), result.playlists.single())
     }
 
@@ -205,6 +231,16 @@ class PlistLibraryReaderTest {
     }
 
     @Test
+    fun `TS-170 重複で落としたトラックを参照する並びを読むと、残したトラックへの参照として扱う`() {
+        val tracks = fileTrack(1, ID_A, "先") + fileTrack(2, ID_A, "後")
+
+        val result = read(document(tracks, playlist(PLAYLIST_ID, "一覧", items(1, 2))))
+
+        assertEquals(listOf(TrackRef.Identified(ID_A), TrackRef.Identified(ID_A)), result.playlists.single().items)
+        assertEquals(0, result.diagnostics.droppedTrackRefs)
+    }
+
+    @Test
     fun `同じ曲を 2 回含む並びを読むと、2 回とも残る`() {
         val result = read(document(standardTracks, playlist(PLAYLIST_ID, "一覧", items(1, 2, 1))))
 
@@ -223,37 +259,64 @@ class PlistLibraryReaderTest {
     }
 
     @Test
-    fun `実物の形を写した文書を読むと、普通の一覧だけが除外の印なしで残り、NFD のパスは変わらない`() {
-        val nfdName = "ほ\u3099"
-        val tracks = fileTrack(1, ID_A, "a", bool("Protected", false)).replace(
-            "file://localhost/C:/Music/a.mp3", "file://localhost/C:/Music/$nfdName.mp3",
-        ) +
-            track(2, int("Track ID", "2"), str("Persistent ID", ID_B), str("Track Type", "File"), str("Name", "R &#38; B")) +
-            fileTrack(3, ID_C, "c", bool("Protected", false))
-        val builtIns = playlist(MASTER_ID, "ライブラリ", bool("Master", true), "<key>Visible</key><false/>", items(1, 2, 3)) +
-            listOf(4, 2, 3, 10, 5, 65, 66, 67, 26).joinToString("") {
-                playlist("00000000000000$it".takeLast(16), "組み込み $it", int("Distinguished Kind", "$it"), items(1))
-            } +
-            playlist("3333333333333333", "スマート組み込み", int("Distinguished Kind", "4"), "<key>Smart Info</key><data>AQID</data>")
-        val header = """<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">""" + "\r\n"
-        val xml = document(
-            tracks, builtIns + playlist(PLAYLIST_ID, "普通", items(1)) + playlist("4444444444444444", "空の普通の一覧"),
-            header = header,
-            top = "<key>Application Version</key><string>12.13.7.1</string>" +
-                "<key>Date</key><date>2026-11-06T01:02:03Z</date>" + str("Library Persistent ID", "9f8e7d6c5b4a3921"),
-        ).replace("\n", "\r\n")
+    fun `TS-86 実物の形を写した文書を読むと、Library Persistent ID が大文字で取れる`() {
+        assertEquals("9F8E7D6C5B4A3921", read(realLibraryDocument()).libraryPersistentId)
+    }
 
-        val result = read(xml)
+    @Test
+    fun `TS-86 実物の形を写した文書を読むと、普通の一覧だけが除外の印なしで残る`() {
+        val result = read(realLibraryDocument())
 
-        assertEquals("9F8E7D6C5B4A3921", result.libraryPersistentId)
         assertEquals(
             listOf("普通", "空の普通の一覧"),
             result.playlists.filter { it.kind == PlaylistKind.Normal }.map { it.name },
         )
-        assertEquals(TrackLocation.Found("C:\\Music\\$nfdName.mp3"), result.tracks.first().location)
+    }
+
+    @Test
+    fun `TS-86 実物の形を写した文書を読むと、NFD のパスは変わらない`() {
+        val result = read(realLibraryDocument())
+
+        assertEquals(TrackLocation.Found("C:\\Music\\$NFD_NAME.mp3"), result.tracks.first().location)
+    }
+
+    @Test
+    fun `TS-86 実物の形を写した文書を読むと、名前の文字参照が戻る`() {
+        val result = read(realLibraryDocument())
+
         assertEquals("R & B", result.tracks.single { it.persistentId == ID_B }.name)
-        assertEquals("12.13.7.1", result.diagnostics.applicationVersion)
-        assertEquals(Instant.parse("2026-11-06T01:02:03Z"), result.diagnostics.xmlDate)
+    }
+
+    @Test
+    fun `TS-86 実物の形を写した文書を読むと、Application Version が診断に入る`() {
+        assertEquals("12.13.7.1", read(realLibraryDocument()).diagnostics.applicationVersion)
+    }
+
+    @Test
+    fun `TS-86 実物の形を写した文書を読むと、Date が診断に入る`() {
+        assertEquals(Instant.parse("2026-11-06T01:02:03Z"), read(realLibraryDocument()).diagnostics.xmlDate)
+    }
+
+    @Test
+    fun `TS-178 Folder が真のプレイリストを読むと、Folder の除外の印が付く`() {
+        val folder = playlist(PLAYLIST_ID, "フォルダ", bool("Folder", true))
+
+        val result = read(document(standardTracks, folder))
+
+        assertEquals(PlaylistKind.Excluded(PlaylistExclusion.Folder), result.playlists.single().kind)
+    }
+
+    @Test
+    fun `TS-179 除外の条件が重なるプレイリストを読むと、Master、Distinguished Kind、Folder の順に優先して印が付く`() {
+        val allThree = playlist(PLAYLIST_ID, "三つ", bool("Master", true), int("Distinguished Kind", "4"), bool("Folder", true))
+        val kindAndFolder = playlist(MASTER_ID, "種別とフォルダ", int("Distinguished Kind", "4"), bool("Folder", true))
+
+        val result = read(document(standardTracks, allThree + kindAndFolder))
+
+        assertEquals(
+            listOf(PlaylistKind.Excluded(PlaylistExclusion.Master), PlaylistKind.Excluded(PlaylistExclusion.DistinguishedKind)),
+            result.playlists.map { it.kind },
+        )
     }
 
     @Test
@@ -276,12 +339,80 @@ class PlistLibraryReaderTest {
     }
 
     @Test
+    fun `TS-167 Track Type が File でないトラックを読むと、Location があっても場所なしになる`() {
+        val tracks = track(
+            1,
+            int("Track ID", "1"),
+            str("Persistent ID", ID_A),
+            str("Track Type", "URL"),
+            str("Location", "file://localhost/C:/Music/a.mp3"),
+        )
+
+        val track = read(document(tracks, playlist(PLAYLIST_ID, "一覧"))).tracks.single()
+
+        assertEquals(TrackLocation.Absent, track.location)
+        assertEquals("URL", track.trackType)
+    }
+
+    @Test
+    fun `TS-169 Playlist Persistent ID が無いプレイリストを読むと、落として不正な項目に数える`() {
+        val playlists = playlist(null, "ID なし", items(1)) + playlist(PLAYLIST_ID, "一覧")
+
+        val result = read(document(standardTracks, playlists))
+
+        assertEquals(listOf("一覧"), result.playlists.map { it.name })
+        assertEquals(1, result.diagnostics.malformedEntries)
+    }
+
+    @Test
+    fun `TS-169 Playlist Persistent ID が 15 桁と 17 桁と非 16 進のプレイリストを読むと、落として不正な項目に数える`() {
+        val playlists = playlist("111111111111111", "十五") +
+            playlist("11111111111111111", "十七") +
+            playlist("G111111111111111", "非十六進") +
+            playlist(PLAYLIST_ID, "一覧")
+
+        val result = read(document(standardTracks, playlists))
+
+        assertEquals(listOf("一覧"), result.playlists.map { it.name })
+        assertEquals(3, result.diagnostics.malformedEntries)
+        assertEquals(1, result.diagnostics.playlistCount)
+    }
+
+    @Test
+    fun `TS-169 Playlist Persistent ID が小文字の 16 桁のプレイリストを読むと、大文字に揃う`() {
+        val result = read(document(standardTracks, playlist("abcdef0123456789", "一覧")))
+
+        assertEquals("ABCDEF0123456789", result.playlists.single().persistentId)
+    }
+
+    @Test
+    fun `TS-171 Track ID が整数でない並びの要素を読むと、不正な項目を 1 回だけ数える`() {
+        val brokenItem = "<key>Playlist Items</key><array><dict><key>Track ID</key><integer>x</integer></dict></array>"
+
+        val result = read(document(standardTracks, playlist(PLAYLIST_ID, "一覧", brokenItem)))
+
+        assertTrue(result.playlists.single().items.isEmpty())
+        assertEquals(1, result.diagnostics.malformedEntries)
+    }
+
+    @Test
+    fun `TS-172 重複で落としたトラックと ID 無しのトラックと ID の無いプレイリストを含む文書を読むと、診断の件数は残した分だけになる`() {
+        val tracks = fileTrack(1, ID_A, "先") + fileTrack(2, ID_A, "後") + fileTrack(3, null, "ID 無し") + fileTrack(4, ID_B, "b")
+        val playlists = playlist(null, "ID なし") + playlist(PLAYLIST_ID, "一覧")
+
+        val diagnostics = read(document(tracks, playlists)).diagnostics
+
+        assertEquals(2, diagnostics.trackCount)
+        assertEquals(1, diagnostics.playlistCount)
+    }
+
+    @Test
     fun `integer が 64 ビットを超えるとき、その項目は空になる`() {
         val tracks = fileTrack(1, ID_A, "a", int("Total Time", "9223372036854775808"), int("Track Number", "7"))
 
         val track = read(document(tracks, playlist(PLAYLIST_ID, "一覧"))).tracks.single()
 
-        assertEquals(null, track.totalTimeMs)
+        assertNull(track.totalTimeMs)
         assertEquals(7, track.trackNumber)
     }
 
@@ -289,7 +420,7 @@ class PlistLibraryReaderTest {
     fun `date が日付でないとき、その項目は空になる`() {
         val xml = document(standardTracks, playlist(PLAYLIST_ID, "一覧"), top = "<key>Date</key><date>日付ではない</date>")
 
-        assertEquals(null, read(xml).diagnostics.xmlDate)
+        assertNull(read(xml).diagnostics.xmlDate)
     }
 
     @Test
@@ -385,6 +516,8 @@ class PlistLibraryReaderTest {
         assertEquals(mapOf(LocationFailure.InvalidFormat to 1), result.diagnostics.locationFailures)
     }
 
+    // 壁時計のしきい値を持つため、通常の test から外す。`./gradlew :itunes:performanceTest` で回す
+    @Tag("performance")
     @Test
     fun `数万トラックとプレイリスト数百本の文書を読むと、目標の時間内に完了する`() {
         val trackCount = 30_000
@@ -400,7 +533,7 @@ class PlistLibraryReaderTest {
 
         val elapsed = measureTime { read(xml) }
 
-        // 目標は 5 秒（V7）。CI の環境差に余裕を持たせて 2 倍
+        // 目標は 5 秒（V7）。手元の機械差に余裕を持たせて 2 倍
         assertTrue(elapsed < 10.seconds, "所要: $elapsed")
     }
 }

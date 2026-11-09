@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>playlist-sync-fox 設計の視覚資料</title>
+<title>KudagiTune 設計の視覚資料</title>
 <style>
   body { font-family: "Yu Gothic", "Meiryo", sans-serif; color: #222; line-height: 1.6; margin: 0; padding: 16px; }
   main { max-width: 1100px; margin: 0 auto; }
@@ -41,7 +41,7 @@
 <body>
 <main>
 
-<h1>playlist-sync-fox 設計の視覚資料</h1>
+<h1>KudagiTune 設計の視覚資料</h1>
 <p class="meta">概要設計（第 2 稿）、基本設計・詳細設計（第 5 稿）、テスト計画（第 3 稿）まで区切り（2026-11-06。review-13 を反映）</p>
 <p class="lead">iTunes（12.x）のプレイリストを曲ごと Android へ。PC → 端末の一方向。</p>
 
@@ -73,7 +73,7 @@ desktop ──▶ itunes ──▶ shared ◀── android
 <table>
   <tr><th>方式</th><th>端末がつなぐ先</th><th>発見の仕方</th><th>備考</th></tr>
   <tr><td>同一 LAN の Wi-Fi</td><td>PC の host:port</td><td>mDNS（PC が広告）／NSD（端末が発見）。自動で見つかる</td><td>3 方式とも 1 つの TCP に揃える</td></tr>
-  <tr><td>Tailscale</td><td>PC の host:port</td><td>MagicDNS 名を端末に手入力（PC の画面に表示される）</td><td>外出先からの同期に使う。名前が引けることは確認済み（2026-11-05）</td></tr>
+  <tr><td>Tailscale</td><td>PC の host:port</td><td>Tailscale のアプリで PC の名前を見て、MagicDNS 名を端末に手入力（PC は名前を取得せず、画面にも出さない）</td><td>外出先からの同期に使う。名前が引けることは確認済み（2026-11-05）</td></tr>
   <tr><td>USB テザリング</td><td>PC の host:port</td><td>mDNS で見つかる。見つからなければ PC の画面の IP（例：192.0.2.10）を手入力</td><td>LAN と同じ経路。adb は使わない</td></tr>
 </table>
 
@@ -156,14 +156,14 @@ Music/
 </pre>
 <div class="band">消すのは、このアプリが置いた曲だけ。利用者が別に入れた曲には触れない。入れ直した後は、以前の曲を「自分が置いた」と扱わない。</div>
 
-<h2>7. 決めたこと D1〜D14</h2>
+<h2>7. 決めたこと D1〜D22</h2>
 <table>
   <tr><th>ID</th><th>項目</th><th>決めたこと</th></tr>
   <tr><td class="num">D1</td><td>対応するライブラリ</td><td>最初の版は iTunes 12.x だけ。入口は <code>iTunes Music Library.xml</code> で、COM は使わない。Apple Music アプリ（Windows）は書き出しの機能が無い見込みのため保留（Q11）</td></tr>
   <tr><td class="num">D2</td><td>同期の向き</td><td>PC から端末への一方向のみ。再生回数と評価の書き戻しはしない</td></tr>
   <tr><td class="num">D3</td><td>端末側の反映</td><td>m3u8 を正とし、MediaStore へは端末の索引で反映する</td></tr>
   <tr><td class="num">D4</td><td>言語</td><td>Kotlin。共有部分は Kotlin Multiplatform</td></tr>
-  <tr><td class="num">D5</td><td>名前と置き場</td><td>仮名は playlist-sync-fox。設計は portfolio の notes、repo 作成時に docs/ へ移す</td></tr>
+  <tr><td class="num">D5</td><td>名前と置き場</td><td>仮名は playlist-sync-fox（正式名は 2026-11-09 に KudagiTune に決定）。設計は portfolio の notes、repo 作成時に docs/ へ移す</td></tr>
   <tr><td class="num">D6</td><td>役割</td><td>PC がサーバー、端末がクライアント（pull）。同期するときだけ接続する</td></tr>
   <tr><td class="num">D7</td><td>接続方式</td><td>LAN の Wi-Fi、Tailscale、USB の 3 方式を 1 つのサーバーへの TCP に揃える。USB は USB テザリング。adb は同梱しない</td></tr>
   <tr><td class="num">D8</td><td>認証</td><td>初回に PC が出すペアリングコードを端末へ入力。鍵と PC の証明書を端末が保存（trust on first use）。LAN の中でも鍵なしでは配信しない</td></tr>
@@ -173,13 +173,21 @@ Music/
   <tr><td class="num">D12</td><td>配布</td><td>最初は GitHub で公開（repo は最初 private、公開前に public）。配布物は Releases。Play ストアは将来</td></tr>
   <tr><td class="num">D13</td><td>自動起動</td><td>従量制でないネットワークにつながっている間、周期で起動。ペアリング済みの PC に届かなければ何もせず終わる。SSID は見ない</td></tr>
   <tr><td class="num">D14</td><td>入れ直しの後</td><td>以前に置いた曲を「自分が置いた」と扱わない。消すときだけ利用者の同意の画面を出す</td></tr>
+  <tr><td class="num">D15</td><td>プレイリストの選択</td><td>選択は端末が持つ。PC はプレイリストの一覧を返すだけで、選択を保存しない。選択が空のときは同期を始めず、選ぶ画面へ案内する</td></tr>
+  <tr><td class="num">D16</td><td>保存先</td><td>端末の設定で、本体か SD を全体で 1 つ選ぶ（既定は本体）。SD が見つからないときは同期を始めず案内する。切り替えたときは新しい場所へ全曲を取り直し、古い場所の曲は設定の「以前の場所の曲を消す」（件数の表示と確認つき）でだけ消す</td></tr>
+  <tr><td class="num">D17</td><td>PC の画面</td><td>ペアリング、状態の表示、XML の場所の指定だけにする。ライセンスの表示とログイン時起動の切り替えは必要な設定として残す</td></tr>
+  <tr><td class="num">D18</td><td>用語</td><td>PC の証明書の公開鍵のハッシュを「確認コード」（旧称「指紋」）、利用者が入力する 6 桁を「ペアリングコード」と呼び分ける</td></tr>
+  <tr><td class="num">D19</td><td>端末から消す曲</td><td>端末の設定に「PC に無い曲を端末から消す」を置く。既定は OFF。OFF のときは消さず、手動の確認も出さず、結果に消さなかった件数を残す。ON のとき手動は 1 件でも確認する</td></tr>
+  <tr><td class="num">D20</td><td>見た目</td><td>PC と端末の画面は VS Code の Dark+／Light+ に寄せた配色にし、ライトとダークは OS の設定に従う</td></tr>
+  <tr><td class="num">D21</td><td>流れるログ</td><td>PC の窓の下と、端末の進み具合の画面の下に、新しい行が下に流れるログの欄を置く。欄はアプリの起動の後の行をメモリで持ち、ファイルのログとは別に持つ</td></tr>
+  <tr><td class="num">D22</td><td>進み具合の表示</td><td>端末の進み具合の画面は、曲ごとの行と全体の棒を出す。PC は全体の割合と、送っている曲の棒を出す。端末が進み具合を PC へ知らせる</td></tr>
 </table>
 
 <h2>8. 残る論点</h2>
 <p class="legend"><span class="s-decided">決定</span><span class="s-temp">暫定採用</span><span class="s-open">未決・保留</span></p>
 <table>
   <tr><th>Q</th><th>題</th><th>状態</th><th>結論（決まった段階）</th></tr>
-  <tr><td class="num">Q1</td><td>正式名</td><td class="s-open">未決</td><td>未決のまま</td></tr>
+  <tr><td class="num">Q1</td><td>正式名</td><td class="s-decided">決定</td><td>KudagiTune（2026-11-09 先生。管狐と itune を重ねた名。識別子は変えない）</td></tr>
   <tr><td class="num">Q2</td><td>USB の方式</td><td class="s-decided">決定（D7）</td><td>USB テザリング（概要設計）</td></tr>
   <tr><td class="num">Q3</td><td>形式の変換</td><td class="s-decided">決定（D10）</td><td>変換なし（概要設計）</td></tr>
   <tr><td class="num">Q4</td><td>MediaStore への反映の仕方</td><td class="s-temp">暫定（実機の確認待ち）</td><td>m3u8 を <code>MediaStore.Files</code> に置き、索引に任せる（基本設計）。実機は C-2</td></tr>
@@ -187,11 +195,14 @@ Music/
   <tr><td class="num">Q6</td><td>同期の自動起動の条件</td><td class="s-decided">決定（D13）</td><td>概要設計</td></tr>
   <tr><td class="num">Q7</td><td>端末側の保存先</td><td class="s-decided">決定</td><td><code>Music/&lt;アプリ名&gt;/&lt;アーティスト&gt;/&lt;アルバム&gt;/</code> と名前の規則（基本設計 B3-1）</td></tr>
   <tr><td class="num">Q8</td><td>複数の端末</td><td class="s-decided">決定（D11）</td><td>概要設計</td></tr>
-  <tr><td class="num">Q9</td><td>複数の PC</td><td class="s-open">未決</td><td>未決のまま。library_id の確認で備える</td></tr>
+  <tr><td class="num">Q9</td><td>複数の PC</td><td class="s-decided">決定</td><td>最初の版は 1 台の PC で確定（2026-11-09 先生）。端末は library_id の確認で別の PC への付け替えを見分け、消す同期を確認なしに進めない</td></tr>
   <tr><td class="num">Q10</td><td>変更の検知</td><td class="s-decided">決定</td><td>サイズと更新日時（実ファイルの値）。ハッシュは使わない（基本設計）</td></tr>
   <tr><td class="num">Q11</td><td>Apple Music アプリのライブラリの読み方</td><td class="s-decided">決定（D1：保留）</td><td>保留のまま（D1、T11）</td></tr>
   <tr><td class="num">Q12</td><td>配布の形</td><td class="s-decided">決定（細部は未決）</td><td>jpackage の zip と署名つき APK を Releases に置く。公開は手動（基本設計）</td></tr>
-  <tr><td class="num">Q13</td><td>MagicDNS 名の取得方法</td><td class="s-open">未決</td><td>実装時に決める。取れないときは Tailscale の管理画面で調べた名前を入力する（説明書）</td></tr>
+  <tr><td class="num">Q13</td><td>MagicDNS 名の取得方法</td><td class="s-decided">決定</td><td>PC は MagicDNS 名を取得しない（2026-11-09 先生）。Tailscale のアプリで PC の名前を見て、端末に入力する（説明書）</td></tr>
+  <tr><td class="num">Q14</td><td>書体の同梱</td><td class="s-decided">決定</td><td>同梱せず OS の既定（2026-11-09 先生）</td></tr>
+  <tr><td class="num">Q15</td><td>ホームの同期ボタンの文言</td><td class="s-decided">決定</td><td>「同期」（2026-11-09 先生）</td></tr>
+  <tr><td class="num">Q16</td><td>設計とコードの食い違い 6 件</td><td class="s-decided">決定</td><td>解除は確認なし、ログのフォルダの項目は置かない、窓は 1 枚、iTunes の設定名は日英併記、等幅と窓の上は OS の既定（2026-11-09 先生）</td></tr>
 </table>
 <p class="meta">実機の確認は basic-design-b4b.md の C-1〜C-17（実装の後）。</p>
 

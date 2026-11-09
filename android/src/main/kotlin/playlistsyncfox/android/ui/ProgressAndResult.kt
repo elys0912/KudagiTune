@@ -15,16 +15,21 @@ import java.time.format.DateTimeFormatter
 
 // S3 同期の進み具合（X7-1-4）と S4 結果（X7-1-5）。
 
-enum class ProgressNav { Stay, ToResult, ToHome }
+enum class ProgressNav { Stay, Started, ToResult, ToHome }
 
 /**
  * S3 の次の遷移。`finished` で S4 へ。同期が動いていなければ S1 へ戻る（通知の古いタップへの備え）。
- * [awaitingStart] は、この画面から開始した直後で、ワーカーの最初の進捗を待っている間。
+ * [awaitingStart] は、この画面から開始した直後で、ワーカーの最初の進捗を待っている間。最初の進捗が届いたら [ProgressNav.Started]（待ちを終える）。
+ * [staleFinished] と同じ（同一の）進捗は、前の実行の完了として、進捗が無いものと同じに扱う。
  */
-fun progressNav(progress: SyncProgress?, awaitingStart: Boolean): ProgressNav = when {
-    progress?.stage == SyncStage.Finished -> ProgressNav.ToResult
-    progress == null && !awaitingStart -> ProgressNav.ToHome
-    else -> ProgressNav.Stay
+fun progressNav(progress: SyncProgress?, awaitingStart: Boolean, staleFinished: SyncProgress? = null): ProgressNav {
+    val observed = progress.takeUnless { it === staleFinished }
+    return when {
+        observed?.stage == SyncStage.Finished -> ProgressNav.ToResult
+        observed == null && !awaitingStart -> ProgressNav.ToHome
+        observed != null && awaitingStart -> ProgressNav.Started
+        else -> ProgressNav.Stay
+    }
 }
 
 data class ProgressUiState(
@@ -33,7 +38,6 @@ data class ProgressUiState(
     val totalCount: Int,
     val doneBytes: Long,
     val totalBytes: Long,
-    val currentTitle: String?,
     /** 容量不足の不足分。`ACTION_MANAGE_STORAGE` の案内を添える。 */
     val shortageBytes: Long?,
     val nearLimitNote: String?,
@@ -107,7 +111,6 @@ fun progressUi(progress: SyncProgress) = ProgressUiState(
     totalCount = progress.totalCount,
     doneBytes = progress.doneBytes,
     totalBytes = progress.totalBytes,
-    currentTitle = progress.currentTitle.takeIf { progress.stage == SyncStage.Transfer },
     shortageBytes = progress.shortageBytes,
     nearLimitNote = "実行時間の上限が近づいています。残りは次の同期で続けます".takeIf { progress.nearLimit },
     notice = progress.errorDetail?.let(::noticeOf),
@@ -134,6 +137,8 @@ data class ResultUiState(
     /** E2 の表示語（`error_detail` から選ぶ）。 */
     val noticeLabel: String?,
     val removalNote: String?,
+    /** マニフェストの版違いで止まったときの案内（X6-9）。それ以外は null。 */
+    val versionMismatchNote: String?,
     /** 消さなかった件数（差分の「消す」のうち実行しなかった分）。0 なら出さない。 */
     val notRemoved: Int,
     val excluded: IssueList,
@@ -146,11 +151,12 @@ data class ResultUiState(
 /** V21 結果の一覧の表示件数の上限。 */
 const val ISSUE_LIMIT = 100
 
-private fun issueList(lines: List<IssueLine>, limit: Int) = IssueList(lines.take(limit), (lines.size - limit).coerceAtLeast(0))
+private fun issueList(lines: List<IssueLine>) = IssueList(lines.take(ISSUE_LIMIT), (lines.size - ISSUE_LIMIT).coerceAtLeast(0))
 
-fun resultUi(run: SyncRun, issues: List<RunIssue>, limit: Int = ISSUE_LIMIT): ResultUiState {
+fun resultUi(run: SyncRun, issues: List<RunIssue>): ResultUiState {
     val stored = run.resultJson?.takeIf { it.isNotEmpty() }?.let { runCatching { decodeResult(it) }.getOrNull() }
-    val e2Detail = stored?.errorDetail.takeIf { run.errorKind == "E2" }
+    // E2 は原因欄も詳細も `error_detail` の語で出す（S3 と同じ関数）。`error_detail` が無い行は E の番号の語
+    val e2Notice = stored?.errorDetail.takeIf { run.errorKind == "E2" }?.let(::noticeOf)
     return ResultUiState(
         runId = run.runId,
         word = resultWord(if (run.endedAt == null) SyncRun.RESULT_INTERRUPTED else run.result),
@@ -158,21 +164,20 @@ fun resultUi(run: SyncRun, issues: List<RunIssue>, limit: Int = ISSUE_LIMIT): Re
         atMillis = run.endedAt ?: run.startedAt,
         counts = ResultUiState.Counts(run.added, run.replaced, run.removed, run.failed).takeIf { stored != null },
         bytes = run.bytesTransferred.takeIf { stored != null },
-        errorWord = errorWord(run.errorKind),
-        noticeLabel = e2Detail?.let { noticeOf(it).label },
+        errorWord = e2Notice?.title ?: errorWord(run.errorKind),
+        noticeLabel = e2Notice?.label,
         removalNote = removalNote(run.trigger).takeIf { stored?.removalSkipped == true },
+        versionMismatchNote = VERSION_MISMATCH_NOTICE.takeIf { stored?.manifestVersionMismatch == true },
         notRemoved = if (stored == null) 0 else (stored.counts.toRemove - run.removed).coerceAtLeast(0),
         excluded = issueList(
             issues.filter { it.kind == RunIssue.KIND_EXCLUDED }
                 .map { IssueLine(it.title, listOfNotNull(it.artist, reasonWord(it.reason).takeIf(String::isNotEmpty)).joinToString(" / ")) },
-            limit,
         ),
         unplayable = issueList(
             issues.filter { it.kind == RunIssue.KIND_UNPLAYABLE }
                 .map { IssueLine(it.title, listOfNotNull(it.format, reasonWord(it.reason).takeIf(String::isNotEmpty)).joinToString(" / ")) },
-            limit,
         ),
-        failed = issueList(issues.filter { it.kind == RunIssue.KIND_FAILED }.map { IssueLine(it.title, it.errorKind.orEmpty()) }, limit),
+        failed = issueList(issues.filter { it.kind == RunIssue.KIND_FAILED }.map { IssueLine(it.title, it.errorKind.orEmpty()) }),
     )
 }
 
@@ -183,17 +188,17 @@ private fun removalNote(trigger: String) =
 /** 過去の実行の一覧の 1 行。 */
 data class PastRun(val runId: Long, val word: String, val atMillis: Long)
 
-data class ResultScreen(val current: ResultUiState?, val past: List<PastRun>)
+data class ResultScreenState(val current: ResultUiState?, val past: List<PastRun>)
 
 /**
  * S4 の読み込み。[runId] が null なら既定（最後の同期の行）、あれば過去の実行からその行の T3 と T6。
  */
-suspend fun loadResult(store: SyncStore, runId: Long?, syncing: Boolean): ResultScreen {
+suspend fun loadResult(store: SyncStore, runId: Long?, syncing: Boolean): ResultScreenState {
     val runs = store.runs()
     val target = if (runId != null) runs.firstOrNull { it.runId == runId } else latestRun(runs, syncing)?.run
-    return ResultScreen(
+    return ResultScreenState(
         current = target?.let { resultUi(it, store.issues(it.runId)) },
-        past = runs.filter { it.endedAt != null }.map { PastRun(it.runId, resultWord(it.result), it.endedAt!!) },
+        past = runs.mapNotNull { run -> run.endedAt?.let { PastRun(run.runId, resultWord(run.result), it) } },
     )
 }
 

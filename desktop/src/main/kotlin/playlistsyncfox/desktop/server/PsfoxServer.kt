@@ -30,6 +30,7 @@ import io.ktor.util.AttributeKey
 import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.readByteArray
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import playlistsyncfox.desktop.DesktopValues
@@ -47,6 +48,7 @@ import playlistsyncfox.shared.auth.encodeBase64Url
 import playlistsyncfox.shared.auth.verifyRequest
 import playlistsyncfox.shared.crypto.CryptoProvider
 import playlistsyncfox.shared.manifest.PlaylistIdsResult
+import playlistsyncfox.shared.manifest.isPersistentId
 import playlistsyncfox.shared.manifest.parsePlaylistIds
 import playlistsyncfox.shared.manifest.writeManifest
 import playlistsyncfox.shared.manifest.writePlaylistTree
@@ -80,7 +82,6 @@ private val BodyKey = AttributeKey<ByteArray>("psfox.body")
 private val DeviceKey = AttributeKey<String>("psfox.device")
 
 private val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
-private val persistentIdPattern = Regex("[0-9A-F]{16}")
 private val uuidPattern = Regex("[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 private val timestampPattern = Regex("[0-9]{1,18}")
 private val failureKeyPattern = Regex("E[1-9]")
@@ -121,17 +122,17 @@ fun Application.psfoxModule(env: ServerEnv) {
     routing {
         post(PATH_MANIFEST) {
             val ids = selectedIds(call) ?: return@post
-            val manifest = env.manifests.forManifest(ids) ?: return@post call.fail(HttpStatusCode.ServiceUnavailable, 4)
+            val manifest = env.manifests.forManifest(ids) ?: return@post call.fail(HttpStatusCode.ServiceUnavailable, ERROR_XML_UNREADABLE)
             call.respondText(writeManifest(manifest), ContentType.Application.Json)
             env.log.info("server", "P1 を返した tracks=${manifest.tracks.size}")
         }
         post(PATH_DIGEST) {
             val ids = selectedIds(call) ?: return@post
-            val digest = env.manifests.forDigest(ids) ?: return@post call.fail(HttpStatusCode.ServiceUnavailable, 4)
+            val digest = env.manifests.forDigest(ids) ?: return@post call.fail(HttpStatusCode.ServiceUnavailable, ERROR_XML_UNREADABLE)
             call.respondText(json.encodeToString(DigestResponse.serializer(), DigestResponse(digest)), ContentType.Application.Json)
         }
         get(PATH_PLAYLISTS) {
-            val tree = env.manifests.forPlaylists() ?: return@get call.fail(HttpStatusCode.ServiceUnavailable, 4)
+            val tree = env.manifests.forPlaylists() ?: return@get call.fail(HttpStatusCode.ServiceUnavailable, ERROR_XML_UNREADABLE)
             call.respondText(writePlaylistTree(tree), ContentType.Application.Json)
         }
         get("$PATH_TRACKS{id}") { sendTrack(env, call) }
@@ -140,6 +141,32 @@ fun Application.psfoxModule(env: ServerEnv) {
         post(PATH_PAIRING_START) { pairingStart(env, call) }
         post(PATH_PAIRING_CONFIRM) { pairingConfirm(env, call) }
     }
+}
+
+/** 要求の宛先の種別。署名が要るかと、既知かどうかを決める。 */
+private enum class RouteKind { Signed, Pairing, Unknown }
+
+private fun routeKindOf(path: String): RouteKind = when {
+    path == PATH_PAIRING_START || path == PATH_PAIRING_CONFIRM -> RouteKind.Pairing
+    path == PATH_MANIFEST || path == PATH_DIGEST || path == PATH_PLAYLISTS || path == PATH_REPORTS || path == PATH_PROGRESS -> RouteKind.Signed
+    path.startsWith(PATH_TRACKS) && path.length > PATH_TRACKS.length && '/' !in path.substring(PATH_TRACKS.length) -> RouteKind.Signed
+    else -> RouteKind.Unknown
+}
+
+/** 検査 4 を通った、署名つき要求のヘッダ 4 種。[timestamp] は数値、[nonce] は復号済み、[signature] は送られた文字列のまま。 */
+private class ParsedSignatureHeaders(val deviceId: String, val timestamp: Long, val nonce: ByteArray, val signature: String)
+
+/** 検査 4：ヘッダ 4 種の書式。1 つでも欠けるか書式が違えば null。 */
+private fun parseSignatureHeaders(call: ApplicationCall): ParsedSignatureHeaders? {
+    val deviceId = call.request.header(SignatureHeaderNames.DEVICE)
+    val timestamp = call.request.header(SignatureHeaderNames.TIMESTAMP)
+    val nonce = call.request.header(SignatureHeaderNames.NONCE)?.let(::decodeBase64Url)
+    val signature = call.request.header(SignatureHeaderNames.SIGNATURE)
+    if (deviceId == null || !uuidPattern.matches(deviceId)) return null
+    if (timestamp == null || !timestampPattern.matches(timestamp)) return null
+    if (nonce == null || nonce.size != NONCE_BYTES) return null
+    if (signature == null || decodeBase64Url(signature)?.size != SIGNATURE_BYTES) return null
+    return ParsedSignatureHeaders(deviceId, timestamp.toLong(), nonce, signature)
 }
 
 /** 検査 1〜7（P1〜P4、P7、P8）と、P5・P6 の前段。通ればルートへ進めるため真を返す。 */
@@ -154,39 +181,28 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
 
     // 2. 既知のルート
     val path = call.request.path()
-    val needsSignature = when {
-        path == PATH_PAIRING_START || path == PATH_PAIRING_CONFIRM -> false
-        path == PATH_MANIFEST || path == PATH_DIGEST || path == PATH_PLAYLISTS || path == PATH_REPORTS || path == PATH_PROGRESS -> true
-        path.startsWith(PATH_TRACKS) && path.length > PATH_TRACKS.length && '/' !in path.substring(PATH_TRACKS.length) -> true
-        else -> {
-            call.respond(HttpStatusCode.NotFound)
-            return false
-        }
+    val routeKind = routeKindOf(path)
+    if (routeKind == RouteKind.Unknown) {
+        call.respond(HttpStatusCode.NotFound)
+        return false
     }
 
     // 3. 署名失敗の待ち
     val address = env.clientAddress(call)
     if (env.failures.isBlocked(address)) {
-        call.fail(HttpStatusCode.TooManyRequests, 2)
+        call.fail(HttpStatusCode.TooManyRequests, ERROR_AUTH_REJECTED)
         return false
     }
 
-    if (!needsSignature) {
+    if (routeKind == RouteKind.Pairing) {
         // P5 の連続は署名の失敗と同じ数に入れる。P6 は数えず、P5 の連続を途切れさせる
         if (path == PATH_PAIRING_START) env.failures.recordPairingStart(address) else env.failures.recordPairingConfirm(address)
         return true
     }
 
     // 4. ヘッダ 4 種の書式
-    val deviceId = call.request.header(SignatureHeaderNames.DEVICE)
-    val timestamp = call.request.header(SignatureHeaderNames.TIMESTAMP)
-    val nonce = call.request.header(SignatureHeaderNames.NONCE)?.let(::decodeBase64Url)
-    val signature = call.request.header(SignatureHeaderNames.SIGNATURE)
-    val malformed = deviceId == null || !uuidPattern.matches(deviceId) ||
-        timestamp == null || !timestampPattern.matches(timestamp) ||
-        nonce == null || nonce.size != NONCE_BYTES ||
-        signature == null || decodeBase64Url(signature)?.size != SIGNATURE_BYTES
-    if (malformed) {
+    val headers = parseSignatureHeaders(call)
+    if (headers == null) {
         call.respond(HttpStatusCode.BadRequest)
         return false
     }
@@ -195,13 +211,13 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
     val request = SignedRequest(
         method = call.request.httpMethod.value,
         pathAndQuery = call.request.uri,
-        timestamp = timestamp!!.toLong(),
-        nonce = nonce!!,
-        deviceId = deviceId!!,
+        timestamp = headers.timestamp,
+        nonce = headers.nonce,
+        deviceId = headers.deviceId,
         body = body,
     )
     val result = verifyRequest(
-        env.crypto, request, signature!!,
+        env.crypto, request, headers.signature,
         now = env.clock.instant().epochSecond,
         serverStartedAt = env.serverStartedAt.epochSecond,
         findKey = env.keyRing::find,
@@ -209,22 +225,47 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
     )
     if (result is AuthResult.Failure) {
         env.failures.recordFailure(address)
-        env.log.warn("server", "署名の検証に失敗 device=$deviceId detail=${result.reason.detail ?: "none"}", 2)
-        call.fail(HttpStatusCode.Unauthorized, 2, result.reason.detail)
+        env.log.warn("server", "署名の検証に失敗 device=${headers.deviceId} detail=${result.reason.detail ?: "none"}", ERROR_AUTH_REJECTED)
+        call.fail(HttpStatusCode.Unauthorized, ERROR_AUTH_REJECTED, result.reason.detail)
         return false
     }
     env.failures.recordSuccess(address)
     env.activity.signedRequest()
-    call.attributes.put(DeviceKey, deviceId)
+    call.attributes.put(DeviceKey, headers.deviceId)
     return true
 }
 
 private const val NONCE_BYTES = 16
 private const val SIGNATURE_BYTES = 32
 
+// 応答の本文 `{"error":"E<n>"}` の番号。HTTP の状態との対応は B4-4 の 8
+
+/** E2：署名・ペアリングの不一致（401）、ペアリングの拒否（403）、署名失敗の待ち（429）。 */
+private const val ERROR_AUTH_REJECTED = 2
+
+/** E4：XML を読めずマニフェストを作れない、または曲の表が空（503）。 */
+private const val ERROR_XML_UNREADABLE = 4
+
+/** E5：マニフェストに無い ID、またはファイルが無い（404）。 */
+private const val ERROR_TRACK_NOT_FOUND = 5
+
+/** E8：`size`・`modified_at` が P1 の値と合わない（409）。 */
+private const val ERROR_TRACK_CHANGED = 8
+
 private fun decodeBase64Url(text: String): ByteArray? = try {
     Base64.getUrlDecoder().decode(text)
 } catch (_: IllegalArgumentException) {
+    null
+}
+
+/** 検査 1 で読んだ本文を文字列にしたもの。 */
+private fun ApplicationCall.bodyText(): String = attributes[BodyKey].decodeToString()
+
+/** 本文を JSON として読む。読めなければ 400 を返して null。本文の中身は応答にもログにも出さない。 */
+private suspend fun <T> decodeBody(call: ApplicationCall, serializer: KSerializer<T>): T? = try {
+    json.decodeFromString(serializer, call.bodyText())
+} catch (_: SerializationException) {
+    call.respond(HttpStatusCode.BadRequest)
     null
 }
 
@@ -233,7 +274,7 @@ private suspend fun ApplicationCall.fail(status: HttpStatusCode, errorNumber: In
 
 /** P1・P3 の本文（選んだ ID の配列）の検査。署名の検証の後に、境界で行う。誤りは 400 で、本文の中身は応答にもログにも出さない。 */
 private suspend fun selectedIds(call: ApplicationCall): List<String>? =
-    when (val parsed = parsePlaylistIds(call.attributes[BodyKey].decodeToString(), DesktopValues.MAX_PLAYLIST_IDS)) {
+    when (val parsed = parsePlaylistIds(call.bodyText(), DesktopValues.MAX_PLAYLIST_IDS)) {
         is PlaylistIdsResult.Ids -> parsed.ids
         PlaylistIdsResult.Invalid -> {
             call.respond(HttpStatusCode.BadRequest)
@@ -244,19 +285,19 @@ private suspend fun selectedIds(call: ApplicationCall): List<String>? =
 /** P2（X5-1 の「P2 の検査」）。 */
 private suspend fun sendTrack(env: ServerEnv, call: ApplicationCall) {
     val id = call.request.path().removePrefix(PATH_TRACKS)
-    if (!persistentIdPattern.matches(id)) return call.respond(HttpStatusCode.BadRequest)
+    if (!isPersistentId(id)) return call.respond(HttpStatusCode.BadRequest)
 
     env.activity.trackRequestStarted()
     try {
-        val table = env.tracks.snapshot() ?: return call.fail(HttpStatusCode.ServiceUnavailable, 4)
-        val entry = table[id] ?: return call.fail(HttpStatusCode.NotFound, 5)
+        val table = env.tracks.snapshot() ?: return call.fail(HttpStatusCode.ServiceUnavailable, ERROR_XML_UNREADABLE)
+        val entry = table[id] ?: return call.fail(HttpStatusCode.NotFound, ERROR_TRACK_NOT_FOUND)
 
         val query = call.request.queryParameters
         if (query["size"]?.toLongOrNull() != entry.size || query["modified_at"]?.toLongOrNull() != entry.modifiedAt) {
-            return call.fail(HttpStatusCode.Conflict, 8)
+            return call.fail(HttpStatusCode.Conflict, ERROR_TRACK_CHANGED)
         }
-        if (!Files.isRegularFile(entry.path)) return call.fail(HttpStatusCode.NotFound, 5)
-        if (Files.size(entry.path) != entry.size) return call.fail(HttpStatusCode.Conflict, 8)
+        if (!Files.isRegularFile(entry.path)) return call.fail(HttpStatusCode.NotFound, ERROR_TRACK_NOT_FOUND)
+        if (Files.size(entry.path) != entry.size) return call.fail(HttpStatusCode.Conflict, ERROR_TRACK_CHANGED)
 
         val start = call.request.header(HttpHeaders.Range)?.let { rangeFromPattern.matchEntire(it)?.groupValues?.get(1)?.toLongOrNull() }
         if (start != null && start >= entry.size) return call.respond(HttpStatusCode.RequestedRangeNotSatisfiable)
@@ -282,11 +323,7 @@ private suspend fun sendTrack(env: ServerEnv, call: ApplicationCall) {
 
 /** P4。必須項目の欠けと型の違いは 400（E なし）で保存しない。保存済みより古い報告は上書きせず 204。 */
 private suspend fun saveReport(env: ServerEnv, call: ApplicationCall) {
-    val report = try {
-        json.decodeFromString(LastSync.serializer(), call.attributes[BodyKey].decodeToString())
-    } catch (_: SerializationException) {
-        return call.respond(HttpStatusCode.BadRequest)
-    }
+    val report = decodeBody(call, LastSync.serializer()) ?: return
     val startedAt = parseReportTime(report.startedAt)
     if (startedAt == null || parseReportTime(report.finishedAt) == null ||
         report.failureCounts.keys.any { !failureKeyPattern.matches(it) }
@@ -310,7 +347,7 @@ private suspend fun saveReport(env: ServerEnv, call: ApplicationCall) {
 
 /** P8（B4-4 の 5b）。境界で検査し、メモリの [ProgressBoard] に置く。保存しない。 */
 private suspend fun saveProgress(env: ServerEnv, call: ApplicationCall) {
-    val report = readProgressReport(call.attributes[BodyKey].decodeToString()) ?: return call.respond(HttpStatusCode.BadRequest)
+    val report = readProgressReport(call.bodyText()) ?: return call.respond(HttpStatusCode.BadRequest)
     env.progress.update(report)
     call.respond(HttpStatusCode.NoContent)
 }
@@ -328,11 +365,7 @@ private fun parseReportTime(text: String): Instant? =
 
 /** P5。失敗の順と本文は X4-2-2。 */
 private suspend fun pairingStart(env: ServerEnv, call: ApplicationCall) {
-    val request = try {
-        json.decodeFromString(PairingStartRequest.serializer(), call.attributes[BodyKey].decodeToString())
-    } catch (_: SerializationException) {
-        return call.respond(HttpStatusCode.BadRequest)
-    }
+    val request = decodeBody(call, PairingStartRequest.serializer()) ?: return
     val x = decodeBase64Url(request.x)
     if (x == null || !uuidPattern.matches(request.deviceId)) return call.respond(HttpStatusCode.BadRequest)
 
@@ -347,11 +380,7 @@ private suspend fun pairingStart(env: ServerEnv, call: ApplicationCall) {
 
 /** P6。成功の応答の前に、K1 の保存と `devices` への追加を済ませる（shared が保存を呼んでから MAC_p を返す）。 */
 private suspend fun pairingConfirm(env: ServerEnv, call: ApplicationCall) {
-    val request = try {
-        json.decodeFromString(PairingConfirmRequest.serializer(), call.attributes[BodyKey].decodeToString())
-    } catch (_: SerializationException) {
-        return call.respond(HttpStatusCode.BadRequest)
-    }
+    val request = decodeBody(call, PairingConfirmRequest.serializer()) ?: return
     val macD = decodeBase64Url(request.macD)
     if (macD == null || !uuidPattern.matches(request.deviceId)) return call.respond(HttpStatusCode.BadRequest)
 
@@ -368,7 +397,12 @@ private suspend fun pairingConfirm(env: ServerEnv, call: ApplicationCall) {
 }
 
 private suspend fun respondPairingFailure(env: ServerEnv, call: ApplicationCall, failure: PairingFailure) {
-    env.log.warn("pairing", "ペアリングの要求を断った reason=${failure.name}", 2.takeIf { failure.detail != null || failure == PairingFailure.MacMismatch })
+    // E2 の応答になる失敗（403 の 3 種と P6 の MAC の不一致）だけ、ログにも E の番号を付ける
+    val isLoggedWithErrorNumber = failure.detail != null || failure == PairingFailure.MacMismatch
+    env.log.warn("pairing", "ペアリングの要求を断った reason=${failure.name}", ERROR_AUTH_REJECTED.takeIf { isLoggedWithErrorNumber })
+
+    // 400 と 500 は E の本文を持たない
     val status = HttpStatusCode.fromValue(failure.status)
-    if (failure.status == 400 || failure.status == 500) call.respond(status) else call.fail(status, 2, failure.detail)
+    val hasNoErrorBody = failure.status == HttpStatusCode.BadRequest.value || failure.status == HttpStatusCode.InternalServerError.value
+    if (hasNoErrorBody) call.respond(status) else call.fail(status, ERROR_AUTH_REJECTED, failure.detail)
 }

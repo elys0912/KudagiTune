@@ -1,11 +1,14 @@
 package playlistsyncfox.android.log
 
-import playlistsyncfox.android.sync.SyncLogger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import playlistsyncfox.android.sync.SyncLogger
 import java.io.File
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 
@@ -20,7 +23,6 @@ data class LogEntry(val at: Long, val level: LogLevel, val module: String, val m
  */
 class AppLog(
     private val dir: File,
-    private val enabled: () -> Boolean,
     private val now: () -> Long,
     private val maxBytes: Long = MAX_FILE_BYTES,
     private val executor: Executor = Executors.newSingleThreadExecutor(),
@@ -31,7 +33,6 @@ class AppLog(
     val recent: StateFlow<List<LogEntry>> = screenLines
 
     fun log(level: LogLevel, module: String, message: String, errorNumber: Int? = null) {
-        if (!enabled()) return
         val at = now()
         val text = clean(message)
         val line = listOf(Instant.ofEpochMilli(at).toString(), level.text, module, text, errorNumber?.let { "E$it" }.orEmpty())
@@ -48,8 +49,14 @@ class AppLog(
         override fun failure(text: String, errorNumber: Int) = log(LogLevel.Warn, "sync", text, errorNumber)
     }
 
-    /** 古い世代から新しい世代の順で、末尾の [maxLines] 行まで（閲覧と共有で共通。V51）。 */
-    fun tail(maxLines: Int = MAX_VIEW_LINES): List<String> {
+    /**
+     * 古い世代から新しい世代の順で、末尾の [maxLines] 行まで（閲覧と共有で共通。V51）。
+     * 世代送りの途中のファイルを読まないよう、読み取りは書き込みと同じ executor で行い、結果を待つ。呼び出しは IO のスレッドから。
+     */
+    fun tail(maxLines: Int = MAX_VIEW_LINES): List<String> =
+        CompletableFuture.supplyAsync({ readTail(maxLines) }, executor).join()
+
+    private fun readTail(maxLines: Int): List<String> {
         val collected = ArrayDeque<String>()
         for (file in generationFiles()) {
             if (!file.exists()) continue
@@ -59,10 +66,21 @@ class AppLog(
         return collected.takeLast(maxLines)
     }
 
+    /**
+     * ファイルに保存する本文（X7-5）。全世代の全行を古い順に並べる。閲覧と共有の行数の切り詰め（V51）は受けない。
+     * 世代送りの途中のファイルを読まないよう、読み取りは書き込みと同じ executor で行い、結果を待つ。呼び出しは IO のスレッドから。
+     */
+    fun exportText(): String = CompletableFuture.supplyAsync({ readAllGenerations() }, executor).join()
+
+    private fun readAllGenerations(): String =
+        generationFiles().asReversed().filter { it.exists() }.flatMap { it.readLines() }.joinToString("") { "$it\n" }
+
     fun sizeBytes(): Long = generationFiles().filter { it.exists() }.sumOf { it.length() }
 
-    /** 全世代を消し、消した旨を新しい世代に書く。 */
+    /** 全世代と画面の欄を消し、消した旨を新しい世代と画面の欄に書く。 */
     fun clear() {
+        // 呼んだ後の行は、ファイルでも消去の後に書かれる。画面の欄も呼んだ時点で空にして、その順に合わせる
+        screenLines.value = emptyList()
         executor.execute {
             runCatching { generationFiles().forEach { it.delete() } }
             log(LogLevel.Info, "log", "ログを消去した")
@@ -105,6 +123,12 @@ class AppLog(
         const val SCREEN_LINES = 200
     }
 }
+
+private val exportTimeFormat = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+
+/** 「ファイルに保存する」の既定の名前（端末の地方時）。例：`kudagitune-log-20261109-153045.txt`。 */
+fun logFileName(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String =
+    "kudagitune-log-${exportTimeFormat.format(Instant.ofEpochMilli(epochMillis).atZone(zone))}.txt"
 
 // 鍵、ペアリングコード、曲のパス、署名の値、MAC、IP は書かない（N1-6）。呼び出し側が誤って渡しても行に出さない
 private val SECRET_PATTERNS = listOf(

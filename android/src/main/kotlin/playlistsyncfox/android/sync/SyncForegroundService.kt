@@ -34,11 +34,6 @@ class SyncForegroundService : Service() {
             return START_NOT_STICKY
         }
         if (job?.isActive == true) return START_NOT_STICKY
-        val factory = SyncServices.factory
-        if (factory == null) {
-            stopSelf(startId)
-            return START_NOT_STICKY
-        }
 
         SyncNotifications.ensureChannels(this)
         val cancel = PendingIntent.getService(
@@ -49,6 +44,13 @@ class SyncForegroundService : Service() {
             SyncNotifications.progress(this, SyncProgress(SyncStage.Connecting), cancel, open = null),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
         )
+
+        // startForegroundService の起動で startForeground を呼ばずに止めると、OS の時間切れの例外で落ちる。未設定の判定は前面へ上げた後に行う
+        if (!SyncServices.isReady) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        val factory = SyncServices.factory
 
         val input = RunInput(
             trigger = if (intent?.getStringExtra(SyncWorker.KEY_TRIGGER) == SyncWorker.TRIGGER_AUTO) SyncTrigger.Auto else SyncTrigger.Manual,
