@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import playlistsyncfox.android.db.SyncStore
 import playlistsyncfox.android.discovery.DiscoveredPc
 import playlistsyncfox.android.discovery.ManualCheck
+import playlistsyncfox.android.sync.PairingKeeper
 
 // S2 ペアリング（X7-1-3）。入力の検査と画面の段までを持ち、P5・P6 と鍵の取り込みは [PairingGateway] の先。
 
@@ -119,7 +120,7 @@ class PairingPresenter(
     }
 
     fun select(pc: DiscoveredPc) {
-        val target = PairingTarget(pc.host, pc.port, pc.serviceName, kind = "lan", savedValue = pc.serviceName)
+        val target = PairingTarget(pc.host, pc.port, pc.serviceName, kind = PairingKeeper.LAN, savedValue = pc.serviceName)
         mutableState.update { it.copy(stage = PairingStage.Target(target), manualError = null) }
     }
 

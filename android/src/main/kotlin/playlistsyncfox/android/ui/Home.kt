@@ -4,6 +4,7 @@ import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.WrittenPlaylist
 import playlistsyncfox.android.sync.ManualStart
+import playlistsyncfox.android.sync.PairingKeeper
 import playlistsyncfox.android.sync.RemovalCheck
 import playlistsyncfox.android.sync.StartBlock
 import playlistsyncfox.android.sync.SyncProgress
@@ -51,9 +52,9 @@ fun latestRun(runs: List<SyncRun>, syncing: Boolean): LastRun? {
 /** T4 の `last_endpoint` が指す方式の値。空なら「未接続」（J30）。 */
 fun endpointText(pairing: Pairing): String {
     val value = when (pairing.lastEndpoint) {
-        "lan" -> pairing.endpointLan
-        "tailscale" -> pairing.endpointTailscale
-        "usb" -> pairing.endpointUsb
+        PairingKeeper.LAN -> pairing.endpointLan
+        PairingKeeper.TAILSCALE -> pairing.endpointTailscale
+        PairingKeeper.USB -> pairing.endpointUsb
         else -> null
     }
     return value?.takeIf { it.isNotEmpty() } ?: "未接続"
