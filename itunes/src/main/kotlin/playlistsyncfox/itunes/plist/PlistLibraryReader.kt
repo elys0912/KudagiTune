@@ -96,8 +96,8 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
             when {
                 key == "Tracks" && xml.localName == "dict" -> { tracksFound = true; readTracks() }
                 key == "Playlists" && xml.localName == "array" -> { playlistsFound = true; readPlaylists() }
-                key == "Library Persistent ID" -> libraryPersistentId = text(readValue())?.uppercase()
-                key == "Application Version" -> applicationVersion = text(readValue())
+                key == "Library Persistent ID" -> libraryPersistentId = textOrCountMalformed(readValue())?.uppercase()
+                key == "Application Version" -> applicationVersion = textOrCountMalformed(readValue())
                 key == "Date" -> xmlDate = (readValue() as? Value.Date)?.value
                 else -> skipElement()
             }
@@ -145,11 +145,11 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
 
         eachEntry { key ->
             when (key) {
-                "Playlist Persistent ID" -> persistentId = text(readValue())?.uppercase()
-                "Name" -> name = text(readValue())
-                "Parent Persistent ID" -> parentPersistentId = text(readValue())?.uppercase()
-                "Master" -> isMaster = flag(readValue())
-                "Folder" -> isFolder = flag(readValue())
+                "Playlist Persistent ID" -> persistentId = textOrCountMalformed(readValue())?.uppercase()
+                "Name" -> name = textOrCountMalformed(readValue())
+                "Parent Persistent ID" -> parentPersistentId = textOrCountMalformed(readValue())?.uppercase()
+                "Master" -> isMaster = flagOrCountMalformed(readValue())
+                "Folder" -> isFolder = flagOrCountMalformed(readValue())
                 "Distinguished Kind" -> { hasDistinguishedKind = true; skipElement() }
                 "Playlist Items" -> {
                     if (xml.localName == "array") {
@@ -202,10 +202,10 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
         var duplicatePersistentIds = 0
 
         for ((trackId, values) in rawTracks) {
-            val persistentId = text(values["Persistent ID"])?.uppercase()?.takeIf(::isPersistentId)
+            val persistentId = textOrCountMalformed(values["Persistent ID"])?.uppercase()?.takeIf(::isPersistentId)
             if (persistentId == null) {
                 refsByTrackId[trackId] = TrackRef.Unidentified(unidentifiedTracks.size)
-                unidentifiedTracks += UnidentifiedTrack(name = text(values["Name"]), artist = text(values["Artist"]))
+                unidentifiedTracks += UnidentifiedTrack(name = textOrCountMalformed(values["Name"]), artist = textOrCountMalformed(values["Artist"]))
                 continue
             }
             // 落とした重複の Track ID も、残した曲への参照として扱う
@@ -228,7 +228,9 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
                 continue
             }
             val items = raw.trackIds.mapNotNull { id ->
-                refsByTrackId[id.toString()] ?: run { droppedTrackRefs++; null }
+                val ref = refsByTrackId[id.toString()]
+                if (ref == null) droppedTrackRefs++
+                ref
             }
             playlists += LibraryPlaylist(raw.persistentId, raw.name ?: "", raw.parentPersistentId, raw.kind, items)
         }
@@ -252,8 +254,8 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
     }
 
     private fun buildTrack(persistentId: String, values: Map<String, Value>): LibraryTrack {
-        val trackType = text(values["Track Type"])
-        val rawLocation = text(values["Location"])
+        val trackType = textOrCountMalformed(values["Track Type"])
+        val rawLocation = textOrCountMalformed(values["Location"])
         val location = if (rawLocation == null || trackType != FILE_TRACK_TYPE) {
             TrackLocation.Absent
         } else {
@@ -263,15 +265,15 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
             persistentId = persistentId,
             location = location,
             trackType = trackType,
-            name = text(values["Name"]),
-            artist = text(values["Artist"]),
-            album = text(values["Album"]),
-            albumArtist = text(values["Album Artist"]),
-            trackNumber = integer(values["Track Number"]),
-            discNumber = integer(values["Disc Number"]),
-            totalTimeMs = integer(values["Total Time"]),
-            kind = text(values["Kind"]),
-            isProtected = flag(values["Protected"]),
+            name = textOrCountMalformed(values["Name"]),
+            artist = textOrCountMalformed(values["Artist"]),
+            album = textOrCountMalformed(values["Album"]),
+            albumArtist = textOrCountMalformed(values["Album Artist"]),
+            trackNumber = integerOrCountMalformed(values["Track Number"]),
+            discNumber = integerOrCountMalformed(values["Disc Number"]),
+            totalTimeMs = integerOrCountMalformed(values["Total Time"]),
+            kind = textOrCountMalformed(values["Kind"]),
+            isProtected = flagOrCountMalformed(values["Protected"]),
         )
     }
 
@@ -314,21 +316,36 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
             null
         }
 
-    private fun text(value: Value?): String? = when (value) {
+    /** 文字列の値を返す。キーが無ければ null。型が違うときは [malformedEntries] に数えて null を返す。 */
+    private fun textOrCountMalformed(value: Value?): String? = when (value) {
         null -> null
         is Value.Text -> value.value
-        else -> { malformedEntries++; null }
+        else -> {
+            malformedEntries++
+            null
+        }
     }
 
-    private fun integer(value: Value?): Long? = when (value) {
+    /** 整数の値を返す。キーが無ければ null。型が違う、または整数に読めないときは [malformedEntries] に数えて null を返す。 */
+    private fun integerOrCountMalformed(value: Value?): Long? = when (value) {
         null -> null
-        is Value.Integer -> value.value ?: run { malformedEntries++; null }
-        else -> { malformedEntries++; null }
+        is Value.Integer -> {
+            if (value.value == null) malformedEntries++
+            value.value
+        }
+        else -> {
+            malformedEntries++
+            null
+        }
     }
 
-    private fun flag(value: Value?): Boolean = when (value) {
+    /** 真偽の値を返す。キーが無ければ false。型が違うときは [malformedEntries] に数えて false を返す。 */
+    private fun flagOrCountMalformed(value: Value?): Boolean = when (value) {
         null -> false
         is Value.Bool -> value.value
-        else -> { malformedEntries++; false }
+        else -> {
+            malformedEntries++
+            false
+        }
     }
 }
