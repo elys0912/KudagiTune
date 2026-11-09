@@ -187,22 +187,13 @@ class SyncRunner(private val env: SyncEnvironment) {
             }
 
             // 1. 始めの整理（端末内の処理だけ。抑止より前）
-            env.writer.collectExpired()
-            var runs = env.store.runs()
-            for (open in runs.filter { it.endedAt == null }) {
-                // 強制終了の跡。閉じた時刻は分からないので started_at と同じ値にし、再送しない
-                env.store.finishRun(open.copy(endedAt = open.startedAt, result = SyncRun.RESULT_INTERRUPTED, errorKind = null, reported = 1))
-            }
-            env.writer.deleteOrphanPendingPlaylists()
-            runs = env.store.runs()
+            val runs = tidyUp()
 
             // 2. 到達確認と自動の抑止
-            if (trigger == SyncTrigger.Auto) {
-                val reason = autoSuppression(runs, pairing.pairedAt, env.now())
-                if (reason != null) {
-                    env.log.line("自動の同期を抑止した：$reason")
-                    return null
-                }
+            val suppression = autoSuppressionMessage(runs)
+            if (suppression != null) {
+                env.log.line(suppression)
+                return null
             }
             if (!env.aliasExists(pairing.keyAlias)) {
                 // 署名の鍵が無い（端末の変更、OS の鍵の破棄）。P3 を送らず、再ペアリングへ誘導する
@@ -256,6 +247,25 @@ class SyncRunner(private val env: SyncEnvironment) {
                 if (recorded) throw e
                 closeAfterUnexpected(e)
             }
+        }
+
+        /** 始めの整理。期限切れの T5 の回収、強制終了の跡の行の完了、残った pending の m3u8 の削除。整理後の T3 の行（新しい順）を返す。 */
+        private suspend fun tidyUp(): List<SyncRun> {
+            env.writer.collectExpired()
+            for (open in env.store.runs().filter { it.endedAt == null }) {
+                // 強制終了の跡。閉じた時刻は分からないので started_at と同じ値にし、再送しない
+                env.store.finishRun(open.copy(endedAt = open.startedAt, result = SyncRun.RESULT_INTERRUPTED, errorKind = null, reported = 1))
+            }
+            env.writer.deleteOrphanPendingPlaylists()
+            return env.store.runs()
+        }
+
+        /** 到達確認の前に自動の同期を抑止するときの、診断のログの文。手動と、抑止に当たらない自動は null。 */
+        private fun autoSuppressionMessage(runs: List<SyncRun>): String? {
+            if (trigger != SyncTrigger.Auto) return null
+
+            val reason = autoSuppression(runs, pairing.pairedAt, env.now()) ?: return null
+            return "自動の同期を抑止した：$reason"
         }
 
         /**
