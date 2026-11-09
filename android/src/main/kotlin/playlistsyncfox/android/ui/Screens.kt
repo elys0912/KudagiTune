@@ -255,7 +255,7 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions, notification
     when (state.kind) {
         HomeKind.Syncing -> PrimaryAction("進行状況を見る", model::showProgress)
         HomeKind.Unpaired -> PrimaryAction("ペアリングする", actions.onSyncButton)
-        else -> PrimaryAction("同期する", actions.onSyncButton)
+        else -> PrimaryAction("同期", actions.onSyncButton)
     }
     ActionGrid(
         buildList {
