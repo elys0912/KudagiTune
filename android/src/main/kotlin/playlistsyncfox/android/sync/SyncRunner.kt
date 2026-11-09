@@ -427,7 +427,8 @@ class SyncRunner(private val env: SyncEnvironment) {
                         return stale
                     }
                 }
-                doneCount++
+                // 取り直しの曲は最初の差分で数え済み。数え直すと totalCount を超える
+                if (!retried) doneCount++
                 publish(SyncStage.Transfer, title = null)
             }
             return stale

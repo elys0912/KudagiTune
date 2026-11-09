@@ -630,6 +630,30 @@ class SyncRunnerTest {
     }
 
     @Test
+    fun `TA-058 E8 の取り直しでは曲を数え直さず、進行状態と P8 の done は total を超えない`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        val serve = h.lanApi.trackScript
+        var first = true
+        h.lanApi.trackScript = {
+            if (it.persistentId == id(2) && first) {
+                first = false
+                TrackScript.Fail(ApiFailure.Stale)
+            } else {
+                serve(it)
+            }
+        }
+
+        h.run()
+
+        val finalProgress = h.finished.single().second
+        assertEquals(3, finalProgress.totalCount)
+        assertEquals(3, finalProgress.doneCount)
+        val sent = h.lanApi.progressBodies.map { assertNotNull(readProgressReport(it)) }
+        assertTrue(sent.isNotEmpty() && sent.all { it.doneTracks <= it.totalTracks })
+    }
+
+    @Test
     fun `TA-072 取り直した差分の容量が空きと同値なら取得し 1 バイト足りなければ容量不足で止める`() = runTest {
         for ((shortBy, expectedRequests) in listOf(0L to 2, 1L to 1)) {
             val h = Harness()
