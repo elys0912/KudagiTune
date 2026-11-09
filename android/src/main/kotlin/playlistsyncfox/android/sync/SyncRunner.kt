@@ -463,6 +463,8 @@ class SyncRunner(private val env: SyncEnvironment) {
             var fromScratch = false
             // この曲にこの実行で受けた量のうち、終わった取得の分。切断からの再開や最初からの取り直しを挟んでも足し上げる（X6-6）
             var received = 0L
+            // 直前の取得で受けた量。最初の取得では null（X6-11）
+            var previousBytes: Long? = null
             updateRow(track.persistentId) { it.copy(state = TrackState.Transferring, receivedBytes = 0, errorNumber = null) }
             env.log.line("転送を始めた：$name")
 
@@ -517,8 +519,8 @@ class SyncRunner(private val env: SyncEnvironment) {
                         is TrackWriteResult.Failed -> return TrackStep.Failed(SyncError.WriteFailed(track.persistentId, name, result.step))
                         is TrackWriteResult.OutOfSpace -> return TrackStep.Stop(SyncError.InsufficientStorage(result.missingBytes, StoragePhase.Writing))
                         TrackWriteResult.NeedRestart -> fromScratch = true
-                        TrackWriteResult.Disconnected -> if (plan is WritePlan.Resume && tally.endedNormally && tally.bytes == 0L) {
-                            // 正常に閉じた短い本文を続きから取り直しても 1 バイトも増えない。この曲を E9 にして次へ進む（X6-11）
+                        TrackWriteResult.Disconnected -> if (isStalled(plan, tally, previousBytes)) {
+                            // 正常に閉じた短い本文を取り直しても、前の取得から増えない。この曲を E9 にして次へ進む（X6-11）
                             env.writer.discardPending(track.persistentId)
                             return TrackStep.Failed(SyncError.WriteFailed(track.persistentId, name, WriteStep.TempFileWrite))
                         }
@@ -527,6 +529,7 @@ class SyncRunner(private val env: SyncEnvironment) {
                 }
 
                 received += tally.bytes
+                previousBytes = tally.bytes
 
                 // E6（切断）と取り直し：同じ接続先に、V10 の回数まで再開する。超えたら同期全体を止める（行と T5 は残す）
                 failures++
@@ -535,6 +538,17 @@ class SyncRunner(private val env: SyncEnvironment) {
                 }
                 env.wait(SyncValues.RETRY_WAITS_MS[failures - 1])
             }
+        }
+
+        /**
+         * 正常に閉じた短い本文が、前の取得から増えていないか（X6-11）。
+         * 続きから受ける取得（再開）は、1 バイトも受けていないとき。
+         * 毎回最初から書き直す取得（置き換え、新規）は、前の取得の受け取り量以下のとき。最初の取得（[previousBytes] が null）は増えていないとは言えない。
+         */
+        private fun isStalled(plan: WritePlan, tally: BodyTally, previousBytes: Long?): Boolean = when {
+            !tally.endedNormally -> false
+            plan is WritePlan.Resume -> tally.bytes == 0L
+            else -> previousBytes != null && tally.bytes <= previousBytes
         }
 
         /** P1。切断は V10 の回数まで再試行する（曲の指定が無いので persistentId なし）。 */

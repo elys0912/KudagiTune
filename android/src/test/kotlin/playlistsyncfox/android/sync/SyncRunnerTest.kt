@@ -1363,6 +1363,27 @@ class SyncRunnerTest {
     }
 
     @Test
+    fun `TA-245 置き換えの曲も、正常に閉じた短い本文が前の取得から増えなければ、その曲を E9 にして次の曲へ進む`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        // 1 曲目は置き換え（size が違う）。置き換えは毎回最初から書き直す
+        h.seedPlaced(listOf(tracks[0]))
+        h.store.placed[id(1)] = h.store.placed.getValue(id(1)).copy(sourceSize = 1)
+        val serve = h.lanApi.trackScript
+        val short = Harness.contentOf(tracks[0]).copyOf(40)
+        h.lanApi.trackScript = { if (it.persistentId == id(1)) TrackScript.Body(short, startAt = it.rangeFrom) else serve(it) }
+
+        val row = assertNotNull(h.run())
+
+        assertEquals(listOf(0L, 0L), h.lanApi.trackRequests.filter { it.persistentId == id(1) }.map { it.rangeFrom })
+        assertEquals(listOf(2000L), h.waits)
+        assertEquals(SyncRun.RESULT_PARTIAL, row.result)
+        assertEquals("E9", row.errorKind)
+        assertEquals(PlacedTrack.STATE_PLACED, h.store.placed.getValue(id(2)).state)
+        assertEquals(PlacedTrack.STATE_PLACED, h.store.placed.getValue(id(3)).state)
+    }
+
+    @Test
     fun `X6-9 マニフェストの版違いで止めたとき結果に印を残し、壊れた本文では印を付けない`() = runTest {
         val mismatch = Harness()
         mismatch.lanApi.manifestResults.clear()
