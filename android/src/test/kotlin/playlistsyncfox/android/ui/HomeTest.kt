@@ -16,6 +16,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 private fun run(
@@ -47,17 +48,6 @@ class HomeStateTest {
         assertEquals(HomeKind.Done, done.kind)
         assertEquals("完了", done.last?.word)
         assertEquals(listOf(PlaylistRow("Mix", 12)), done.playlists)
-    }
-
-    @Test
-    fun `TA-250 同期ボタンで同期が始まるのは、ペアリング済みで選択があるときだけ`() {
-        val unpaired = homeState(null, emptyList(), emptyList(), selectedCount = 1, syncing = false)
-        val noSelection = homeState(pairing(), emptyList(), emptyList(), selectedCount = 0, syncing = false)
-        val selected = homeState(pairing(), emptyList(), emptyList(), selectedCount = 1, syncing = false)
-
-        assertFalse(unpaired.startsSync)
-        assertFalse(noSelection.startsSync)
-        assertTrue(selected.startsSync)
     }
 
     @Test
@@ -117,6 +107,13 @@ class ManualSyncFlowTest {
         var startResult = ManualStart.Started
         var checks = 0
         val starts = mutableListOf<Pair<Int?, Boolean>>()
+        var notificationAsks = 0
+        var notificationScreenShown = false
+
+        fun askNotification(): Boolean {
+            notificationAsks++
+            return notificationScreenShown
+        }
     }
 
     private fun flowOf(calls: Calls) = ManualSyncFlow(
@@ -222,6 +219,42 @@ class ManualSyncFlowTest {
     }
 
     @Test
+    fun `TA-250 同期が始まるときだけ通知の許可を求める`() = runTest {
+        val calls = Calls()
+
+        flowOf(calls).press(paired = true, askNotification = calls::askNotification)
+
+        assertEquals(1, calls.notificationAsks)
+        assertEquals(1, calls.starts.size)
+    }
+
+    @Test
+    fun `TA-250 未ペアリング・選択が空・保存先が無い・自動が実行中のときは通知の許可を求めない`() = runTest {
+        val unpaired = Calls()
+        flowOf(unpaired).press(paired = false, askNotification = unpaired::askNotification)
+
+        val noSelection = Calls().also { it.block = StartBlock.NoSelection }
+        flowOf(noSelection).press(paired = true, askNotification = noSelection::askNotification)
+
+        val storageMissing = Calls().also { it.block = StartBlock.StorageMissing }
+        flowOf(storageMissing).press(paired = true, askNotification = storageMissing::askNotification)
+
+        val autoRunning = Calls().also { it.autoRunning = true }
+        flowOf(autoRunning).press(paired = true, askNotification = autoRunning::askNotification)
+
+        assertEquals(listOf(0, 0, 0, 0), listOf(unpaired, noSelection, storageMissing, autoRunning).map { it.notificationAsks })
+    }
+
+    @Test
+    fun `TA-250 許可の画面を出したときは、確認も起動もせず許可の結果を待つ`() = runTest {
+        val calls = Calls().also { it.notificationScreenShown = true }
+
+        assertEquals(PressOutcome.AwaitingNotificationPermission, flowOf(calls).press(paired = true, askNotification = calls::askNotification))
+        assertEquals(0, calls.checks)
+        assertTrue(calls.starts.isEmpty())
+    }
+
+    @Test
     fun `TA-222 未ペアリングは選択が空でも S2 が先`() = runTest {
         val calls = Calls().also { it.block = StartBlock.NoSelection }
 
@@ -273,5 +306,33 @@ class StartManualSyncTest {
         }
 
         assertEquals(running, progress.value)
+    }
+}
+
+class StaleFinishedTest {
+    private val finished = SyncProgress(SyncStage.Finished)
+
+    @Test
+    fun `TA-104 押した時点の完了が同じまま残っているときは、その完了を返す`() {
+        assertSame(finished, staleFinished(atPress = finished, now = finished))
+    }
+
+    @Test
+    fun `TA-104 押した後に進捗が消えたか入れ替わったときは、前の完了として扱わない`() {
+        assertNull(staleFinished(atPress = finished, now = null))
+        assertNull(staleFinished(atPress = finished, now = SyncProgress(SyncStage.Connecting)))
+    }
+
+    @Test
+    fun `TA-104 内容が同じでも別の完了は、新しい実行の完了として扱う`() {
+        assertNull(staleFinished(atPress = finished, now = SyncProgress(SyncStage.Finished)))
+    }
+
+    @Test
+    fun `TA-104 押した時点で完了でなければ、何も無視しない`() {
+        val running = SyncProgress(SyncStage.Transfer)
+
+        assertNull(staleFinished(atPress = running, now = running))
+        assertNull(staleFinished(atPress = null, now = null))
     }
 }

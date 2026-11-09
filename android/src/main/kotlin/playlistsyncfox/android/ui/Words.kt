@@ -6,6 +6,7 @@ import playlistsyncfox.shared.result.ErrorDetail
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToLong
 
 // 画面に出す語（X7-1）。見た目は書かず、語だけを決める。
 
@@ -14,7 +15,7 @@ data class Notice(val title: String, val guidance: String, val label: String, va
 
 private const val REPAIR_GUIDE = "PC の画面の「端末」とこのアプリの設定の両方で解除してから、もう一度ペアリングしてください"
 
-// E の番号の語（[errorWord]）と、S6 の取得の失敗の語（[catalogWord]）で共通の文
+// E の番号の語（[errorWord]）、S6 の取得の失敗の語（[catalogWord]）、接続失敗の案内（[ConnectFailedNotice]）で共通の文
 private const val CONNECT_FAILED_WORD = "PC に接続できません"
 private const val REPAIR_NEEDED_WORD = "ペアリングのやり直しが必要です"
 private const val XML_UNAVAILABLE_WORD = "PC の iTunes ライブラリ（XML）を読めません"
@@ -32,7 +33,7 @@ fun noticeOf(detail: ErrorDetail): Notice = when (detail) {
 val PairingClosedNotice = Notice("PC にペアリングコードが表示されていません", "PC でペアリングコードを表示してから、やり直してください", "コード未表示", rePair = false)
 
 // S2 のペアリングの途中の失敗（[DevicePairingGateway] が失敗の段へ載せる）
-val ConnectFailedNotice = Notice("PC に接続できません", "アドレスが正しいか、PC でアプリが起動しているかを確認して、やり直してください", "接続失敗", rePair = false)
+val ConnectFailedNotice = Notice(CONNECT_FAILED_WORD, "アドレスが正しいか、PC でアプリが起動しているかを確認して、やり直してください", "接続失敗", rePair = false)
 val BadReplyNotice = Notice("PC からの応答を読み取れません", "やり直してください", "応答の形", rePair = false)
 val PcRefusedNotice = Notice("PC がペアリングを受け付けませんでした", "PC の画面を確認して、やり直してください", "PC の拒否", rePair = false)
 val BadProofNotice = Notice("PC の確認に失敗しました", "PC の画面の「端末」で解除してから、やり直してください", "確認の印", rePair = true)
@@ -74,13 +75,23 @@ fun reasonWord(reason: String?): String = when (reason) {
     else -> reason
 }
 
-/** 人が読む単位。 */
-fun formatBytes(bytes: Long): String = when {
-    bytes >= 1L shl 30 -> "%.1f GiB".format(bytes.toDouble() / (1L shl 30))
-    bytes >= 1L shl 20 -> "%.1f MiB".format(bytes.toDouble() / (1L shl 20))
-    bytes >= 1L shl 10 -> "%.1f KiB".format(bytes.toDouble() / (1L shl 10))
-    else -> "$bytes B"
+private val BYTE_UNITS = listOf("B", "KiB", "MiB", "GiB")
+private const val BYTE_UNIT_STEP = 1024.0
+
+/**
+ * 人が読む単位。小数 1 桁に丸めて 1024 に達するときは、上の単位で出す。例：1 MiB の 1 バイト手前は「1.0 MiB」（「1024.0 KiB」にしない）。
+ */
+fun formatBytes(bytes: Long): String {
+    var value = bytes.toDouble()
+    var unitIndex = 0
+    while (unitIndex < BYTE_UNITS.lastIndex && roundedToTenths(value) >= BYTE_UNIT_STEP) {
+        value /= BYTE_UNIT_STEP
+        unitIndex++
+    }
+    return if (unitIndex == 0) "$bytes B" else "%.1f %s".format(value, BYTE_UNITS[unitIndex])
 }
+
+private fun roundedToTenths(value: Double): Double = (value * 10).roundToLong() / 10.0
 
 private val dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 

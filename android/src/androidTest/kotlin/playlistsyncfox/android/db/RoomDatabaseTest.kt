@@ -12,6 +12,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import playlistsyncfox.android.sync.SyncValues
 import playlistsyncfox.shared.result.Capacity
 import playlistsyncfox.shared.result.Counts
 import playlistsyncfox.shared.result.SyncOutcome
@@ -160,7 +161,7 @@ class RoomDatabaseTest {
 
     @Test
     fun `TA-038 last_endpoint は成功した方式に更新され解除で T4 は消えても T7 の device_id は残る`() = runBlocking {
-        dao.putSetting(AppSetting("device_id", DEVICE))
+        dao.putSetting(AppSetting(SyncValues.DEVICE_ID_KEY, DEVICE))
         val pairing = Pairing(DEVICE, "pc", "pc.example.invalid", "psfox-01234567", null, null, null, "00".repeat(32), "alias", 1)
         dao.upsertPairing(pairing)
 
@@ -171,6 +172,6 @@ class RoomDatabaseTest {
         dao.deletePairing(DEVICE)
 
         assertNull(dao.pairing())
-        assertEquals(DEVICE, dao.setting("device_id"))
+        assertEquals(DEVICE, dao.setting(SyncValues.DEVICE_ID_KEY))
     }
 }

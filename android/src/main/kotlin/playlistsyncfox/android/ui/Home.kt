@@ -31,9 +31,6 @@ data class HomeUiState(
 ) {
     /** 同期ボタンの遷移先。未ペアリングだけ S2 で、同期中は S3 へ「進み具合を見る」。 */
     val syncButtonGoesToPairing get() = kind == HomeKind.Unpaired
-
-    /** 同期ボタンで同期が始まるか。未ペアリングは S2、選択が空は S6 へ進むだけで、始まらない（X7-3）。 */
-    val startsSync get() = !syncButtonGoesToPairing && selectedCount > 0
 }
 
 /** 同期が動いているか。`finished` を過ぎた状態は動いていない。 */
@@ -94,6 +91,9 @@ sealed interface PressOutcome {
 
     /** 保存先の SD が見つからない。同期を始めず案内する。本体へ切り替えない（D16）。 */
     data object StorageMissing : PressOutcome
+
+    /** 通知の許可の画面を出した。同期は許可の結果の後に、もう一度押す形で始める。 */
+    data object AwaitingNotificationPermission : PressOutcome
 }
 
 /**
@@ -106,7 +106,11 @@ class ManualSyncFlow(
     private val check: suspend () -> RemovalCheck,
     private val start: suspend (approvedCount: Int?, reachFailed: Boolean) -> ManualStart,
 ) {
-    suspend fun press(paired: Boolean): PressOutcome {
+    /**
+     * [askNotification] は通知の許可を求める。同期が始まると決まった後（選択があり、保存先がある）にだけ呼び、
+     * 許可の画面を出したときは true を返す（X7-3）。拒否でも同期は続ける。
+     */
+    suspend fun press(paired: Boolean, askNotification: () -> Boolean = { false }): PressOutcome {
         if (!paired) return PressOutcome.ToPairing
         // 実行中の自動があれば、確認を出さずに S3 へ入る。自動は自動のまま（J34）
         if (autoRunning()) return PressOutcome.ToProgress()
@@ -115,6 +119,7 @@ class ManualSyncFlow(
             StartBlock.StorageMissing -> return PressOutcome.StorageMissing
             null -> Unit
         }
+        if (askNotification()) return PressOutcome.AwaitingNotificationPermission
         return when (val result = check()) {
             RemovalCheck.Allowed -> started(null, reachFailed = false)
             is RemovalCheck.NeedsConfirmation -> PressOutcome.Confirm(result.toRemove)
@@ -145,3 +150,11 @@ suspend fun startManualSync(progress: MutableStateFlow<SyncProgress?>, start: su
     if (result == ManualStart.Started) progress.compareAndSet(before, null)
     return result
 }
+
+/**
+ * 同期ボタンを押した時点の進捗 [atPress] が、開始の処理の後（[now]）も同じ完了（`finished`）のまま残っているときに、その完了を返す。
+ * 自動が始まる直前だと進捗が消されず、S3 が前の実行の完了を新しい実行の完了と取り違えて S4 へ進むため、S3 が無視する。
+ * 進捗が入れ替わっていれば null。内容が同じでも別の完了は、新しい実行のものとして扱う。
+ */
+fun staleFinished(atPress: SyncProgress?, now: SyncProgress?): SyncProgress? =
+    atPress?.takeIf { it.stage == SyncStage.Finished && it === now }
