@@ -187,7 +187,7 @@ class MediaWriter(
     /** 曲を書く（新規、再開、完了済み、置き換え）。[body] は完了済みでは使わない。 */
     suspend fun write(plan: WritePlan, body: TrackBody?): TrackWriteResult = withContext(io) {
         when (plan) {
-            is WritePlan.Complete -> finish(plan.track, plan.pending.mediaUri, plan.track.size, isNew = true)
+            is WritePlan.Complete -> finish(plan.track, plan.pending.mediaUri, plan.track.size, discardOnFailure = true)
             is WritePlan.Replace -> replace(plan, checkNotNull(body))
             is WritePlan.Fresh -> fresh(plan, checkNotNull(body))
             is WritePlan.Resume -> resume(plan, checkNotNull(body))
@@ -299,7 +299,7 @@ class MediaWriter(
             discardPending(pending)
             return TrackWriteResult.Failed(WriteStep.TempFileWrite)
         }
-        return copy(track, uri, sink, body, startAt = 0, pending = pending, isNew = true)
+        return copy(track, uri, sink, body, startAt = 0, pending = pending)
     }
 
     private suspend fun resume(plan: WritePlan.Resume, body: TrackBody): TrackWriteResult {
@@ -313,14 +313,14 @@ class MediaWriter(
         }
         // 追記で開けなければ取り直し
         val sink = files.open(pending.mediaUri, mode) ?: return discardAndRestart(pending)
-        return copy(track, pending.mediaUri, sink, body, startAt, pending.copy(receivedBytes = startAt), isNew = true)
+        return copy(track, pending.mediaUri, sink, body, startAt, pending.copy(receivedBytes = startAt))
     }
 
     private suspend fun replace(plan: WritePlan.Replace, body: TrackBody): TrackWriteResult {
         val placed = plan.placed
         store.savePlaced(placed.copy(state = PlacedTrack.STATE_REPLACING))
         val sink = files.open(placed.mediaUri, OpenMode.Truncate) ?: return TrackWriteResult.Failed(WriteStep.TempFileWrite)
-        return copy(plan.track, placed.mediaUri, sink, body, startAt = 0, pending = null, isNew = false)
+        return copy(plan.track, placed.mediaUri, sink, body, startAt = 0, pending = null)
     }
 
     /** 入力を V27 の区切りで読んで書く。区切りごとにフラッシュし、T5 を更新して、取り消しを確かめる。 */
@@ -331,8 +331,9 @@ class MediaWriter(
         body: TrackBody,
         startAt: Long,
         pending: PendingTransfer?,
-        isNew: Boolean,
     ): TrackWriteResult {
+        // 新規と再開は T5 と pending の行を持つ。置き換えは持たない
+        val discardOnFailure = pending != null
         var written = startAt
         val buffer = ByteArray(SyncValues.WRITE_CHUNK_BYTES)
         try {
@@ -355,24 +356,24 @@ class MediaWriter(
         } catch (_: SourceDisconnectedException) {
             return TrackWriteResult.Disconnected
         } catch (_: OutOfSpaceException) {
-            if (isNew) withContext(NonCancellable) { discardPending(track.persistentId, uri) }
+            if (discardOnFailure) withContext(NonCancellable) { discardPending(track.persistentId, uri) }
             return TrackWriteResult.OutOfSpace(maxOf(0L, track.size - written))
         } catch (_: java.io.IOException) {
-            return failed(track, uri, isNew, WriteStep.TempFileWrite)
+            return failed(track, uri, discardOnFailure, WriteStep.TempFileWrite)
         }
 
         // 取得元が正常に閉じたのに足りないときは切断として扱い、再開に回す。多いときは不一致で E9
         if (written < track.size) return TrackWriteResult.Disconnected
-        if (written > track.size) return failed(track, uri, isNew, WriteStep.TempFileWrite)
-        return finish(track, uri, written, isNew)
+        if (written > track.size) return failed(track, uri, discardOnFailure, WriteStep.TempFileWrite)
+        return finish(track, uri, written, discardOnFailure)
     }
 
     /** `IS_PENDING`＝0 にして読み戻し、T1 を書いて T5 を消す（手順 8、9）。 */
-    private suspend fun finish(track: ManifestTrack, uri: String, written: Long, isNew: Boolean): TrackWriteResult {
-        val stored = files.publish(uri) ?: return failed(track, uri, isNew, WriteStep.MediaStoreRegistration)
+    private suspend fun finish(track: ManifestTrack, uri: String, written: Long, discardOnFailure: Boolean): TrackWriteResult {
+        val stored = files.publish(uri) ?: return failed(track, uri, discardOnFailure, WriteStep.MediaStoreRegistration)
         // RELATIVE_PATH はヒントにすぎない。場所が変わると m3u8 の基準が崩れるため E9
         if (!stored.relativePath.startsWith(root) || stored.size != written) {
-            return failed(track, uri, isNew, WriteStep.MediaStoreRegistration)
+            return failed(track, uri, discardOnFailure, WriteStep.MediaStoreRegistration)
         }
         val row = PlacedTrack(
             deviceId = deviceId,
@@ -390,8 +391,8 @@ class MediaWriter(
     }
 
     /** 新規と再開は行を削除して T5 を消す。置き換えは元のファイルなので消さず、T1 は `replacing` のまま残す。 */
-    private suspend fun failed(track: ManifestTrack, uri: String, isNew: Boolean, step: WriteStep): TrackWriteResult {
-        if (isNew) discardPending(track.persistentId, uri)
+    private suspend fun failed(track: ManifestTrack, uri: String, discardOnFailure: Boolean, step: WriteStep): TrackWriteResult {
+        if (discardOnFailure) discardPending(track.persistentId, uri)
         return TrackWriteResult.Failed(step)
     }
 
