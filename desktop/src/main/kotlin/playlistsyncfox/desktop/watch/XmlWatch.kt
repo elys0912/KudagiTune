@@ -16,7 +16,10 @@ private fun statOf(path: Path): FileStamp? = try {
     null
 }
 
-/** 1 つの XML の場所に対する監視と読み直しの一式（X2-4）。場所が変わったら作り直す。結果は [holder] に流す。 */
+/**
+ * 1 つの XML の場所に対する監視と読み直しの一式（X2-4）。場所が変わったら作り直す。結果は [holder] に流す。
+ * [stop] の後は [holder] に書かない。場所の切り替えで、古い場所の結果が新しい場所の結果を上書きしないため。
+ */
 class XmlWatch(
     parent: CoroutineScope,
     private val path: Path,
@@ -43,5 +46,8 @@ class XmlWatch(
     /** P1・P3 の要求の時。 */
     suspend fun refreshForRequest() = refresher.refreshForRequest()
 
-    fun stop() = scope.cancel()
+    fun stop() {
+        refresher.stop()
+        scope.cancel()
+    }
 }

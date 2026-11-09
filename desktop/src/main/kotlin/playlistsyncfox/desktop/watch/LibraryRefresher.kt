@@ -25,6 +25,7 @@ class LibraryRefresher(
     private var phase = Phase.Idle
     private var rereadRequested = false
     private var running: CompletableDeferred<Unit>? = null
+    private var stopped = false
 
     /** 起動のとき。安定待ちは省く。 */
     fun start() {
@@ -42,6 +43,9 @@ class LibraryRefresher(
         }
     }
 
+    /** 場所の切り替えで世代を捨てるとき。この後は holder に書かない（読み取りの最中だった結果も捨てる）。 */
+    fun stop() = synchronized(lock) { stopped = true }
+
     /** 取りこぼし（OVERFLOW）の後。更新日時を取り直し、保持値と違えば読み直す。 */
     fun checkModified() {
         if (xmlModifiedNow() != holder.held.value?.xmlModified) notifyChanged()
@@ -53,7 +57,7 @@ class LibraryRefresher(
      */
     suspend fun refreshForRequest() {
         if (!existsAfterGrace()) {
-            holder.apply(LoadOutcome.GaveUp)
+            applyUnlessStopped(LoadOutcome.GaveUp)
             return
         }
 
@@ -74,6 +78,11 @@ class LibraryRefresher(
         return xmlModifiedNow() != null
     }
 
+    // 停止した世代の結果は古い場所のものなので捨てる。stop と同じ lock の中で書くため、stop の後に書き込みは起きない
+    private fun applyUnlessStopped(outcome: LoadOutcome) = synchronized(lock) {
+        if (!stopped) holder.apply(outcome)
+    }
+
     private fun needsReload(): Boolean =
         holder.status.value is XmlStatus.Unreadable || xmlModifiedNow() != holder.held.value?.xmlModified
 
@@ -89,22 +98,22 @@ class LibraryRefresher(
         running = done
         phase = if (waitForStability) Phase.Waiting else Phase.Loading
         rereadRequested = false
-        scope.launch {
-            try {
-                var wait = waitForStability
-                do {
-                    if (wait) waiter.awaitStable()
-                    synchronized(lock) {
-                        phase = Phase.Loading
-                        rereadRequested = false
-                    }
-                    holder.apply(loader.load())
-                    wait = true
-                } while (rereadAfterPass())
-            } finally {
-                synchronized(lock) { phase = Phase.Idle }
-                done.complete(Unit)
-            }
+        val cycle = scope.launch {
+            var wait = waitForStability
+            do {
+                if (wait) waiter.awaitStable()
+                synchronized(lock) {
+                    phase = Phase.Loading
+                    rereadRequested = false
+                }
+                applyUnlessStopped(loader.load())
+                wait = true
+            } while (rereadAfterPass())
+        }
+        // 停止済みの scope では本体が走らずに終わるため、本体の finally ではなく完了の通知で待ちを解く
+        cycle.invokeOnCompletion {
+            synchronized(lock) { phase = Phase.Idle }
+            done.complete(Unit)
         }
         return done
     }
