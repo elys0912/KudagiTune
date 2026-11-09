@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ForegroundInfo
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -42,36 +43,40 @@ object SyncServices {
 }
 
 /**
+ * WorkManager の入力データから同期の入力を作る。[runAttemptCount] が 1 以上は、OS が止めた仕事とプロセスが
+ * 落ちた仕事の走り直し。走り直しでは「消す」の承認を捨てる（V48）。
+ */
+internal fun runInputOf(data: Data, runAttemptCount: Int) = RunInput(
+    trigger = if (data.getString(SyncWorker.KEY_TRIGGER) == SyncWorker.TRIGGER_MANUAL) SyncTrigger.Manual else SyncTrigger.Auto,
+    deleteApproved = data.getBoolean(SyncWorker.KEY_DELETE_APPROVED, false),
+    approvedDeleteCount = data.getInt(SyncWorker.KEY_APPROVED_DELETE_COUNT, 0),
+    reachFailed = data.getBoolean(SyncWorker.KEY_REACH_FAILED, false),
+    rerun = runAttemptCount > 0,
+)
+
+/**
+ * OS が止めた理由（[WorkInfo] の `STOP_REASON_*`）から、時間切れか、アプリからの取り消しかを決める。
+ * [stopReason] が null（Android 11 は理由を取れない）なら中断として扱う。どちらも「消す」をせず、次の同期で続きから進むので害が無い。
+ */
+internal fun stopCauseOf(stopReason: Int?): StopCause =
+    if (stopReason == WorkInfo.STOP_REASON_TIMEOUT || stopReason == WorkInfo.STOP_REASON_FOREGROUND_SERVICE_TIMEOUT) {
+        StopCause.Timeout
+    } else {
+        StopCause.UserCancel
+    }
+
+/**
  * 同期のワーカー（X6-3）。手動と自動で 1 つの実装を使う。結果は T3 に持つので、想定外の例外でも
  * `Result.success` を返し、再試行は WorkManager に求めない（X6-12）。
  */
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val factory = SyncServices.factory
-        val trigger = if (inputData.getString(KEY_TRIGGER) == TRIGGER_MANUAL) SyncTrigger.Manual else SyncTrigger.Auto
-        // OS が止めた仕事とプロセスが落ちた仕事の走り直しでは、「消す」の承認を捨てる（V48）
-        val rerun = runAttemptCount > 0
-        val input = RunInput(
-            trigger = trigger,
-            deleteApproved = inputData.getBoolean(KEY_DELETE_APPROVED, false),
-            approvedDeleteCount = inputData.getInt(KEY_APPROVED_DELETE_COUNT, 0),
-            reachFailed = inputData.getBoolean(KEY_REACH_FAILED, false),
-            rerun = rerun,
-        )
+        val input = runInputOf(inputData, runAttemptCount)
 
         val hooks = WorkerHooks(
             promote = ::promote,
-            stopCause = {
-                // 時間切れ（ジョブ、前面サービス）か、アプリからの取り消しか。
-                // Android 11 は理由を取れないので中断として扱う。どちらも「消す」をせず、次の同期で続きから進むので害が無い
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                    (stopReason == WorkInfo.STOP_REASON_TIMEOUT || stopReason == WorkInfo.STOP_REASON_FOREGROUND_SERVICE_TIMEOUT)
-                ) {
-                    StopCause.Timeout
-                } else {
-                    StopCause.UserCancel
-                }
-            },
+            stopCause = { stopCauseOf(if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) stopReason else null) },
             manualActive = ::manualActive,
             notifyFinished = { run, progress, trigger -> SyncNotifications.postFinished(applicationContext, run, progress, trigger) },
         )
