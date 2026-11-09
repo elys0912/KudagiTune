@@ -1,4 +1,4 @@
-# playlist-sync-fox
+# KudagiTune
 
 Windows の iTunes（12.x）のプレイリストを、曲ごと Android 端末へ同期するツール。PC がサーバー、端末が取りに行く一方向の同期。接続は同一 LAN、Tailscale、USB テザリングの 3 方式。
 

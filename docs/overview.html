@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>playlist-sync-fox 設計の視覚資料</title>
+<title>KudagiTune 設計の視覚資料</title>
 <style>
   body { font-family: "Yu Gothic", "Meiryo", sans-serif; color: #222; line-height: 1.6; margin: 0; padding: 16px; }
   main { max-width: 1100px; margin: 0 auto; }
@@ -41,7 +41,7 @@
 <body>
 <main>
 
-<h1>playlist-sync-fox 設計の視覚資料</h1>
+<h1>KudagiTune 設計の視覚資料</h1>
 <p class="meta">概要設計（第 2 稿）、基本設計・詳細設計（第 5 稿）、テスト計画（第 3 稿）まで区切り（2026-11-06。review-13 を反映）</p>
 <p class="lead">iTunes（12.x）のプレイリストを曲ごと Android へ。PC → 端末の一方向。</p>
 
@@ -163,7 +163,7 @@ Music/
   <tr><td class="num">D2</td><td>同期の向き</td><td>PC から端末への一方向のみ。再生回数と評価の書き戻しはしない</td></tr>
   <tr><td class="num">D3</td><td>端末側の反映</td><td>m3u8 を正とし、MediaStore へは端末の索引で反映する</td></tr>
   <tr><td class="num">D4</td><td>言語</td><td>Kotlin。共有部分は Kotlin Multiplatform</td></tr>
-  <tr><td class="num">D5</td><td>名前と置き場</td><td>仮名は playlist-sync-fox。設計は portfolio の notes、repo 作成時に docs/ へ移す</td></tr>
+  <tr><td class="num">D5</td><td>名前と置き場</td><td>仮名は playlist-sync-fox（正式名は 2026-11-09 に KudagiTune に決定）。設計は portfolio の notes、repo 作成時に docs/ へ移す</td></tr>
   <tr><td class="num">D6</td><td>役割</td><td>PC がサーバー、端末がクライアント（pull）。同期するときだけ接続する</td></tr>
   <tr><td class="num">D7</td><td>接続方式</td><td>LAN の Wi-Fi、Tailscale、USB の 3 方式を 1 つのサーバーへの TCP に揃える。USB は USB テザリング。adb は同梱しない</td></tr>
   <tr><td class="num">D8</td><td>認証</td><td>初回に PC が出すペアリングコードを端末へ入力。鍵と PC の証明書を端末が保存（trust on first use）。LAN の中でも鍵なしでは配信しない</td></tr>
@@ -179,7 +179,7 @@ Music/
 <p class="legend"><span class="s-decided">決定</span><span class="s-temp">暫定採用</span><span class="s-open">未決・保留</span></p>
 <table>
   <tr><th>Q</th><th>題</th><th>状態</th><th>結論（決まった段階）</th></tr>
-  <tr><td class="num">Q1</td><td>正式名</td><td class="s-open">未決</td><td>未決のまま</td></tr>
+  <tr><td class="num">Q1</td><td>正式名</td><td class="s-decided">決定</td><td>KudagiTune（2026-11-09 先生。管狐と itune を重ねた名。識別子は変えない）</td></tr>
   <tr><td class="num">Q2</td><td>USB の方式</td><td class="s-decided">決定（D7）</td><td>USB テザリング（概要設計）</td></tr>
   <tr><td class="num">Q3</td><td>形式の変換</td><td class="s-decided">決定（D10）</td><td>変換なし（概要設計）</td></tr>
   <tr><td class="num">Q4</td><td>MediaStore への反映の仕方</td><td class="s-temp">暫定（実機の確認待ち）</td><td>m3u8 を <code>MediaStore.Files</code> に置き、索引に任せる（基本設計）。実機は C-2</td></tr>
