@@ -174,7 +174,8 @@ private fun RemovalConfirm(model: AppViewModel) {
 private fun PairingScreen(model: AppViewModel) {
     val state by model.pairing.state.collectAsState()
     var manual by rememberSaveable { mutableStateOf("") }
-    var code by rememberSaveable { mutableStateOf("") }
+    // ペアリングコードは、状態の保存（プロセスの再作成）にも残さない
+    var code by remember { mutableStateOf("") }
     when (val stage = state.stage) {
         PairingStage.Discovering -> {
             Label("PC を探しています", bold = true)
