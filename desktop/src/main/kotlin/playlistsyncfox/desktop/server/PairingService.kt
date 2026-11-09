@@ -38,6 +38,7 @@ class PairingService(
     private val settings: SettingsStore,
     private val registry: DeviceRegistry,
     private val onViewChanged: () -> Unit = {},
+    private val onPaired: () -> Unit = {},
 ) {
     private var state: PairingState = PairingState.Closed()
     private var deviceName: String? = null
@@ -87,6 +88,8 @@ class PairingService(
             registry.register(id, deviceName.orEmpty(), key)
         }
         state = step.state
+        // 登録に成功した時点で通知する。画面の状態を作り直す publish より先に済ませる
+        if (step.outcome is PairingOutcome.Ok) onPaired()
         publish()
         return step.outcome
     }

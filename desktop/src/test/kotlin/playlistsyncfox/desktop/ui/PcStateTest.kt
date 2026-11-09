@@ -55,6 +55,15 @@ class PcStateTest {
     }
 
     @Test
+    fun `X5-4 ポートの使用中も待機中と表示せず、未ペアより上、鍵の保管の失敗より下に選ばれる`() {
+        val noDevice = settings(devices = emptyList())
+
+        assertEquals(TrayStatus.ServerFailed, trayStatus(state(server = ServerStatus.Failed(ServerFailureKind.PortInUse))))
+        assertEquals(TrayStatus.ServerFailed, trayStatus(state(server = ServerStatus.Failed(ServerFailureKind.PortInUse), settings = noDevice)))
+        assertEquals(TrayStatus.KeyStorageFailed, trayStatus(state(server = ServerStatus.Failed(ServerFailureKind.KeyStorage), settings = noDevice)))
+    }
+
+    @Test
     fun `TD-35 警告の印は warnings が 1 件以上で付く`() {
         assertFalse(hasWarningMark(state()))
         assertTrue(hasWarningMark(state(xml = XmlStatus.Stale(8))))

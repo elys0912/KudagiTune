@@ -55,6 +55,8 @@ import playlistsyncfox.desktop.settings.LogLevel
 import playlistsyncfox.desktop.settings.ReportOutcome
 import playlistsyncfox.desktop.watch.XmlStatus
 import playlistsyncfox.shared.result.ProgressReport
+import java.awt.Toolkit
+import java.awt.datatransfer.StringSelection
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -83,6 +85,7 @@ private val STATUS_BAR_HEIGHT = 22.dp
 
 fun trayText(status: TrayStatus): String = when (status) {
     TrayStatus.KeyStorageFailed -> "鍵の保管に失敗しました"
+    TrayStatus.ServerFailed -> "サーバーを起動できません"
     TrayStatus.NotPaired -> "ペアリングしていません"
     TrayStatus.XmlUnreadable -> "XML を読めません"
     TrayStatus.Syncing -> "同期中"
@@ -92,6 +95,7 @@ fun trayText(status: TrayStatus): String = when (status) {
 private fun warningText(warning: Warning): String = when (warning) {
     Warning.XmlStale -> "XML がしばらく更新されていません"
     Warning.PortInUse -> "ポートが使用中のため、サーバーを起動できません"
+    Warning.ServerStartFailed -> "サーバーを起動できません。ログを確かめてください"
     Warning.KeyStorageFailed -> "鍵を読み出せません。対処はマニュアルを見てください"
     Warning.KeyMissing -> "端末の鍵が見つかりません。PC と端末の両方で解除してから、もう一度ペアリングしてください"
     Warning.CertificateRegenerated -> "証明書を作り直しました。端末でもう一度ペアリングしてください"
@@ -169,19 +173,23 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
+private fun StatusLine(dotColor: Color, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        StatusDot(dotColor)
+        Text(text)
+    }
+}
+
+@Composable
 private fun XmlSection(state: PcState) = Section("iTunes ライブラリ") {
     val colors = MaterialTheme.appColors
     when (val xml = state.xml) {
         is XmlStatus.Unreadable ->
             Text("XML を読めません。iTunes の［環境設定］→［詳細］で「iTunes ライブラリ XML をほかのアプリケーションと共有」をオンにしてください", color = MaterialTheme.colorScheme.error)
-        is XmlStatus.Stale -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatusDot(colors.caution)
-            Text("XML が ${xml.days} 日更新されていません")
-        }
-        else -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatusDot(colors.success)
-            Text("XML を読み込めています")
-        }
+        is XmlStatus.Stale -> StatusLine(colors.caution, "XML が ${xml.days} 日更新されていません")
+        // まだ読んでいない間（起動直後、読めずに再試行中）は、読めた印の緑を出さない
+        XmlStatus.Unchecked -> StatusLine(colors.muted, "XML を確かめています")
+        XmlStatus.Normal -> StatusLine(colors.success, "XML を読み込めています")
     }
 }
 
@@ -208,7 +216,10 @@ private fun PairingSection(app: PcApp, state: PcState) = Section("ペアリン�
         is PairingView.Open -> {
             val remaining = Duration.between(Instant.now(), pairing.expiresAt).seconds.coerceAtLeast(0)
             Text("ペアリングコード：${pairing.code}（残り $remaining 秒、失敗 ${pairing.failedAttempts} 回）", style = MaterialTheme.typography.headlineSmall, fontFamily = FontFamily.Monospace)
-            state.fingerprint?.let { Text("確認コード：$it", fontFamily = FontFamily.Monospace) }
+            state.fingerprint?.let { fingerprint ->
+                Text("確認コード：$fingerprint", fontFamily = FontFamily.Monospace)
+                SecondaryButton("確認コードをコピー") { copyToClipboard(fingerprint) }
+            }
             state.endpoints.forEach { Text("接続先：$it", fontFamily = FontFamily.Monospace) }
             SecondaryButton("コードを作り直す") { app.showPairingCode() }
             SecondaryButton("閉じる") { app.closePairing() }
@@ -221,10 +232,16 @@ private fun PairingSection(app: PcApp, state: PcState) = Section("ペアリン�
     }
 }
 
+// クリップボードへ写すのは確認コードだけ。ペアリングコードは写さない（X5-5）
+private fun copyToClipboard(text: String) {
+    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
+}
+
 @Composable
 private fun SettingsSection(app: PcApp) = Section("設定") {
     val settings = app.settings.current
-    var xmlPath by remember { mutableStateOf(settings.xmlPath.orEmpty()) }
+    // 未設定のときは、実際に読んでいる既定の場所を出す（空のまま保存すると読めない扱いになるため）
+    var xmlPath by remember { mutableStateOf(app.xmlPathInUse) }
     var xmlMessage by remember { mutableStateOf("") }
     OutlinedTextField(xmlPath, { xmlPath = it }, label = { Text("XML の場所") }, modifier = Modifier.fillMaxWidth())
     SecondaryButton("確認して保存する") { xmlMessage = if (app.setXmlPath(xmlPath) == XmlPathResult.Saved) "保存しました" else "この場所の XML を読めません" }

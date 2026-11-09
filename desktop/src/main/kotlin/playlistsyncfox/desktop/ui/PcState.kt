@@ -22,7 +22,7 @@ sealed interface ServerStatus {
     data class Failed(val kind: ServerFailureKind) : ServerStatus
 }
 
-enum class Warning { XmlStale, PortInUse, KeyStorageFailed, KeyMissing, CertificateRegenerated, SettingsReset }
+enum class Warning { XmlStale, PortInUse, ServerStartFailed, KeyStorageFailed, KeyMissing, CertificateRegenerated, SettingsReset }
 
 class DeviceState(
     val deviceId: String,
@@ -48,11 +48,12 @@ class PcState(
     val sending: SendingTrack?,
 )
 
-/** W1 のトレイの表示。優先順は上から。 */
-enum class TrayStatus { KeyStorageFailed, NotPaired, XmlUnreadable, Syncing, Idle }
+/** W1 のトレイの表示。優先順は上から。[ServerFailed] は鍵の保管以外の起動の失敗（ポートの使用中を含む）。 */
+enum class TrayStatus { KeyStorageFailed, ServerFailed, NotPaired, XmlUnreadable, Syncing, Idle }
 
 fun trayStatus(state: PcState): TrayStatus = when {
     state.server == ServerStatus.Failed(ServerFailureKind.KeyStorage) -> TrayStatus.KeyStorageFailed
+    state.server is ServerStatus.Failed -> TrayStatus.ServerFailed
     state.device == null -> TrayStatus.NotPaired
     state.xml is XmlStatus.Unreadable -> TrayStatus.XmlUnreadable
     state.syncing -> TrayStatus.Syncing
@@ -84,6 +85,7 @@ fun buildPcState(inputs: PcInputs, now: Instant): PcState {
     val warnings = buildList {
         if (inputs.xml is XmlStatus.Stale) add(Warning.XmlStale)
         if (inputs.server == ServerStatus.Failed(ServerFailureKind.PortInUse)) add(Warning.PortInUse)
+        if (inputs.server == ServerStatus.Failed(ServerFailureKind.Other)) add(Warning.ServerStartFailed)
         if (inputs.server == ServerStatus.Failed(ServerFailureKind.KeyStorage)) add(Warning.KeyStorageFailed)
         if (inputs.keyMissing.isNotEmpty()) add(Warning.KeyMissing)
         if (inputs.certificateRegenerated && settings.devices.isNotEmpty()) add(Warning.CertificateRegenerated)
