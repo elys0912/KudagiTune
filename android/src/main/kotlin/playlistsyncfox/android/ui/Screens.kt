@@ -420,7 +420,7 @@ private fun LogScreen(model: AppViewModel, actions: ScreenActions) {
     Action("共有する") { confirmShare = true }
     Action("消去する") { confirmClear = true }
     if (confirmShare) {
-        Confirm("ログには曲名が含まれます。共有しますか？", "共有する", { confirmShare = false; actions.onShareLog(model.logText()) }, { confirmShare = false })
+        Confirm("ログには曲名が含まれます。共有しますか？", "共有する", { confirmShare = false; model.shareLog(actions.onShareLog) }, { confirmShare = false })
     }
     if (confirmClear) {
         Confirm("ログをすべて消去します。よろしいですか？", "消去する", { confirmClear = false; model.clearLog() }, { confirmClear = false })

@@ -217,12 +217,18 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     }
 
     fun openLog() {
-        mutableLogLines.value = graph.log.tail().asReversed()
-        mutableScreen.value = Screen.Log
+        viewModelScope.launch {
+            mutableLogLines.value = withContext(Dispatchers.IO) { graph.log.tail() }.asReversed()
+            mutableScreen.value = Screen.Log
+        }
     }
 
-    /** 共有する本文。閲覧と同じ切り詰め。 */
-    fun logText(): String = graph.log.tail().joinToString("\n")
+    /** 共有する本文を [share] に渡す。本文は閲覧と同じ切り詰め。 */
+    fun shareLog(share: (String) -> Unit) {
+        viewModelScope.launch {
+            share(withContext(Dispatchers.IO) { graph.log.tail().joinToString("\n") })
+        }
+    }
 
     /** 「ファイルに保存する」。本文は全世代の全行。書き込み先は [write] が持ち、失敗は画面の下の知らせに出す。 */
     fun saveLog(write: (String) -> Unit) {
