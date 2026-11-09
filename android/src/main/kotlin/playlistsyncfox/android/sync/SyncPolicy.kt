@@ -86,7 +86,7 @@ fun autoSuppression(runs: List<SyncRun>, pairedAt: Long, now: Long): SuppressRea
     return if (resolved) null else SuppressReason.StorageShortage
 }
 
-private fun SyncRun.isAfter(other: SyncRun) = startedAt > other.startedAt || (startedAt == other.startedAt && runId > other.runId)
+internal fun SyncRun.isAfter(other: SyncRun) = startedAt > other.startedAt || (startedAt == other.startedAt && runId > other.runId)
 
 /** 差分なし・同じ `content_digest` の判定の基準：`content_digest` が NULL でない最新の行。 */
 fun digestBase(runs: List<SyncRun>): SyncRun? = runs.firstOrNull { it.contentDigest != null }
