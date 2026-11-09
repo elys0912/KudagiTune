@@ -240,6 +240,7 @@ class FakeMediaStore : MediaStoreFiles {
 
     var failInsert = false
     var failAppend = false
+    var failTruncate = false
     var readBackSizeDelta = 0L
     var readBackRelativePath: String? = null
     var diskFullAtTotalBytes: Long? = null
@@ -279,6 +280,7 @@ class FakeMediaStore : MediaStoreFiles {
     override fun open(uri: String, mode: OpenMode): MediaSink? {
         val entry = entries[uri] ?: return null
         if (mode == OpenMode.Append && failAppend) return null
+        if (mode == OpenMode.Truncate && failTruncate) return null
         if (mode == OpenMode.Truncate) entry.data = ByteArrayOutputStream()
         return object : MediaSink {
             override fun write(buffer: ByteArray, length: Int) {
