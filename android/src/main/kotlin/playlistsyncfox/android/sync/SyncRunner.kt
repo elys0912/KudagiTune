@@ -232,17 +232,22 @@ class SyncRunner(private val env: SyncEnvironment) {
             return try {
                 execute(connected.api, runs)
             } catch (e: CancellationException) {
-                // E7 と利用者の中断：T3 の更新は必須。m3u8 は時間があれば書く
-                withContext(NonCancellable) {
-                    val decision = decideStop(env.stopCause())
-                    decision.error?.let { errors += it }
-                    conclude(decision.userInterrupted, afterCancel = true)
-                }
+                // 終わりの記録（T3）が済んでいれば、記録・報告・通知を二度行わない
+                if (!recorded) concludeAfterCancel()
                 throw e
             } catch (e: Exception) {
                 // 終わりの記録（T3）の後の例外は、結果を変えずにワーカーへ渡す
                 if (recorded) throw e
                 closeAfterUnexpected(e)
+            }
+        }
+
+        /** E7 と利用者の中断：T3 の更新は必須。m3u8 は時間があれば書く。 */
+        private suspend fun concludeAfterCancel() {
+            withContext(NonCancellable) {
+                val decision = decideStop(env.stopCause())
+                decision.error?.let { errors += it }
+                conclude(decision.userInterrupted, afterCancel = true)
             }
         }
 
@@ -760,9 +765,12 @@ class SyncRunner(private val env: SyncEnvironment) {
                 contentDigest = loaded?.contentDigest,
                 resultJson = encodeResult(result),
             )
-            env.store.addIssues(issuesOf(current.runId, loaded, finalDiff, trackErrors))
-            env.store.finishRun(finished)
-            recorded = true
+            // 取り消されても途中で止めない。T6 を書いた後で止まると、二度目の記録で T6 が重なる
+            withContext(NonCancellable) {
+                env.store.addIssues(issuesOf(current.runId, loaded, finalDiff, trackErrors))
+                env.store.finishRun(finished)
+                recorded = true
+            }
 
             // 11. P4 で報告する。失敗しても結果に影響しない。報告できなかった行は次回の同期で再送する
             var saved = finished
@@ -771,7 +779,9 @@ class SyncRunner(private val env: SyncEnvironment) {
             val client = api
             if (client != null) {
                 val body = reportBody(finished)
-                val sent = body != null && runCatching { reportWithin(client, body, afterCancel) }.getOrDefault(false)
+                val sent = body != null && runCatching { reportWithin(client, body, afterCancel) }
+                    .onFailure { if (it is CancellationException) throw it }
+                    .getOrDefault(false)
                 if (sent) {
                     saved = finished.copy(reported = 1)
                     env.store.finishRun(saved)

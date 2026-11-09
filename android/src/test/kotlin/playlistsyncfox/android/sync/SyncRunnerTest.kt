@@ -804,6 +804,61 @@ class SyncRunnerTest {
         assertTrue(row.result().hasMore)
     }
 
+    @Test
+    fun `TA-018 T6 を書いた直後に取り消されても、T6 は重ならず T3 は閉じた結果のまま残る`() = runTest {
+        val h = Harness()
+        h.syncWithMissingSecondTrack()
+
+        runCancelledBy(h) { job -> h.store.onIssuesAdded = { job.cancel() } }
+
+        val row = h.runs.single()
+        assertEquals(SyncRun.RESULT_PARTIAL, row.result)
+        assertEquals(1, h.store.issueRows.count { it.kind == RunIssue.KIND_FAILED })
+        assertEquals(1, h.lanApi.reports.size)
+    }
+
+    @Test
+    fun `TA-018 P4 の後の T3 の更新で取り消されても、二度目の記録と報告をせず結果は変わらない`() = runTest {
+        val h = Harness()
+        h.syncWithMissingSecondTrack()
+
+        runCancelledBy(h) { job -> h.store.onRunFinished = { if (it.reported == 1) job.cancel() } }
+
+        val row = h.runs.single()
+        assertEquals(SyncRun.RESULT_PARTIAL, row.result)
+        assertEquals(1, h.store.issueRows.count { it.kind == RunIssue.KIND_FAILED })
+        assertEquals(1, h.lanApi.reports.size)
+    }
+
+    @Test
+    fun `TA-018 P4 の途中の取り消しは送信の失敗として飲まず呼び出し側へ渡し、T3 は閉じた結果のまま残る`() = runTest {
+        val h = Harness()
+        h.sync(tracks)
+        h.lanApi.onReport = { throw CancellationException("P4 の途中で取り消し") }
+
+        assertFailsWith<CancellationException> { h.run() }
+
+        val row = h.runs.single()
+        assertEquals(SyncRun.RESULT_SUCCESS, row.result)
+        assertEquals(0, row.reported)
+        assertEquals(1, h.lanApi.reports.size)
+    }
+
+    /** 3 曲の同期で 2 曲目だけ PC にファイルが無い（E5）。T6 の `failed` に 1 行残る。 */
+    private fun Harness.syncWithMissingSecondTrack() {
+        sync(tracks)
+        val serve = lanApi.trackScript
+        lanApi.trackScript = { if (it.persistentId == id(2)) TrackScript.Fail(ApiFailure.FileMissing) else serve(it) }
+    }
+
+    /** 同期を走らせ、[install] が受けた [kotlinx.coroutines.Job] を試験側の合図で取り消す。 */
+    private suspend fun kotlinx.coroutines.test.TestScope.runCancelledBy(h: Harness, install: (kotlinx.coroutines.Job) -> Unit) {
+        val job = launch(start = CoroutineStart.LAZY) { h.run() }
+        install(job)
+        job.start()
+        job.join()
+    }
+
     private suspend fun kotlinx.coroutines.test.TestScope.cancelDuringWrite(h: Harness): SyncRun {
         lateinit var job: kotlinx.coroutines.Job
         job = launch(start = CoroutineStart.LAZY) { h.run() }
