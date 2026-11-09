@@ -114,9 +114,9 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
         block = { withContext(Dispatchers.IO) { graph.startBlock() } },
         check = { withContext(Dispatchers.IO) { graph.checkRemoval() } },
         start = { approvedCount, reachFailed ->
-            // 前回の終了の状態が残っていると、開始した直後に S4 へ進んでしまう
-            SyncServices.progress.value = null
-            graph.scheduler.startManual(approvedCount != null, approvedCount ?: 0, reachFailed)
+            startManualSync(SyncServices.progress) {
+                graph.scheduler.startManual(approvedCount != null, approvedCount ?: 0, reachFailed)
+            }
         },
     )
 

@@ -1,5 +1,6 @@
 package playlistsyncfox.android.ui
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.WrittenPlaylist
@@ -132,4 +133,15 @@ class ManualSyncFlow(
         val unused = approvedCount != null && result == ManualStart.AutoRunning
         return PressOutcome.ToProgress(APPROVAL_UNUSED_NOTICE.takeIf { unused })
     }
+}
+
+/**
+ * 手動の同期の開始。前回の終了の進捗が [progress] に残っていると、開始した直後に S4 へ進むため、新しい仕事を作ったときだけ消す。
+ * 作らなかったとき（自動か手動が実行中）は、走っているワーカーの進捗を残す。新しいワーカーが先に出した進捗も消さない。
+ */
+suspend fun startManualSync(progress: MutableStateFlow<SyncProgress?>, start: suspend () -> ManualStart): ManualStart {
+    val before = progress.value
+    val result = start()
+    if (result == ManualStart.Started) progress.compareAndSet(before, null)
+    return result
 }

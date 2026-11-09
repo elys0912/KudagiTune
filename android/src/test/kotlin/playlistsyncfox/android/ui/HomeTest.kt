@@ -1,5 +1,6 @@
 package playlistsyncfox.android.ui
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import playlistsyncfox.android.DEVICE
 import playlistsyncfox.android.db.SyncRun
@@ -225,5 +226,52 @@ class ManualSyncFlowTest {
         val calls = Calls().also { it.block = StartBlock.NoSelection }
 
         assertEquals(PressOutcome.ToPairing, flowOf(calls).press(paired = false))
+    }
+}
+
+class StartManualSyncTest {
+    private val finished = SyncProgress(SyncStage.Finished)
+    private val running = SyncProgress(SyncStage.Transfer)
+
+    @Test
+    fun `新しく始めたときは、前回の終了の進捗を消す`() = runTest {
+        val progress = MutableStateFlow<SyncProgress?>(finished)
+
+        val result = startManualSync(progress) { ManualStart.Started }
+
+        assertEquals(ManualStart.Started, result)
+        assertNull(progress.value)
+    }
+
+    @Test
+    fun `TA-133 自動が実行中で新しい仕事を作らなかったときは、走っているワーカーの進捗を消さない`() = runTest {
+        val progress = MutableStateFlow<SyncProgress?>(running)
+
+        val result = startManualSync(progress) { ManualStart.AutoRunning }
+
+        assertEquals(ManualStart.AutoRunning, result)
+        assertEquals(running, progress.value)
+    }
+
+    @Test
+    fun `手動が実行中で新しい仕事を作らなかったときも、走っているワーカーの進捗を消さない`() = runTest {
+        val progress = MutableStateFlow<SyncProgress?>(running)
+
+        val result = startManualSync(progress) { ManualStart.AlreadyRunning }
+
+        assertEquals(ManualStart.AlreadyRunning, result)
+        assertEquals(running, progress.value)
+    }
+
+    @Test
+    fun `新しいワーカーが先に進捗を出していたら、その進捗は消さない`() = runTest {
+        val progress = MutableStateFlow<SyncProgress?>(finished)
+
+        startManualSync(progress) {
+            progress.value = running
+            ManualStart.Started
+        }
+
+        assertEquals(running, progress.value)
     }
 }
