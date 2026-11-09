@@ -13,7 +13,7 @@ private const val MAX_SUFFIX_BYTES = 2 + 16 + 1
  * 衝突の前のパスの候補。[title] は長さを切る前の曲名。接尾辞を付けるときに、切る長さを変えて作り直すために持つ。
  * [extension] は先頭の `.` を含み、拡張子が無いときは空。
  */
-data class PathParts(
+internal data class PathParts(
     val artistFolder: String,
     val albumFolder: String,
     val title: String,
@@ -21,7 +21,7 @@ data class PathParts(
     val maxBytes: Int,
 )
 
-fun buildTrackCandidate(track: ManifestTrack, maxBytes: Int): PathParts {
+internal fun buildTrackCandidate(track: ManifestTrack, maxBytes: Int): PathParts {
     val artist = track.albumArtist.takeUnless { it.isNullOrEmpty() }
         ?: track.artist.takeUnless { it.isNullOrEmpty() }
         ?: "Unknown Artist"
@@ -36,7 +36,7 @@ fun buildTrackCandidate(track: ManifestTrack, maxBytes: Int): PathParts {
 }
 
 /** `<アーティスト>/<アルバム>/<ステム><接尾辞>.<拡張子>`。接尾辞は空を許す。 */
-fun assemblePath(parts: PathParts, suffix: String): String {
+internal fun assemblePath(parts: PathParts, suffix: String): String {
     val stemBytes = maxOf(0, parts.maxBytes - utf8Length(parts.extension) - utf8Length(suffix))
     val stem = truncateToBytes(parts.title, stemBytes, UNTITLED)
 
