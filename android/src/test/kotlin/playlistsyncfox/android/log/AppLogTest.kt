@@ -165,6 +165,19 @@ class AppLogTest {
     }
 
     @Test
+    fun `消去すると全世代が消え、消した旨の 1 行だけが新しい世代に残る`() {
+        val dir = tempDir()
+        val log = log(dir, maxBytes = 200)
+        repeat(40) { log.log(LogLevel.Info, "sync", "メッセージ $it") }
+        assertEquals(setOf("app.log", "app.log.1", "app.log.2"), dir.list()!!.toSet())
+
+        log.clear()
+
+        assertEquals(setOf("app.log"), dir.list()!!.toSet())
+        assertTrue(log.tail().single().contains("ログを消去した"))
+    }
+
+    @Test
     fun `TA-136 画面の欄は直近 200 行までで 1 行超えると古い行から消える`() {
         val log = log(tempDir())
 

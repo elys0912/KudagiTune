@@ -1,11 +1,24 @@
 package playlistsyncfox.android.ui
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import playlistsyncfox.android.DEVICE
+import playlistsyncfox.android.FakeMediaStore
+import playlistsyncfox.android.InMemoryStore
+import playlistsyncfox.android.ROOT
 import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.pairing
+import playlistsyncfox.android.storage.MediaWriter
 import playlistsyncfox.android.sync.SyncValues
+import playlistsyncfox.android.sync.switchAutoSync
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 private fun settingsOf(
@@ -59,6 +72,112 @@ class SettingsUiTest {
 
         assertTrue(withLeftover.startsWith(STORAGE_CHANGED_NOTICE))
         assertTrue(withLeftover.contains("先に前の場所の曲を消してください"))
+    }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class SettingsPresenterTest {
+    private class Rig(scope: CoroutineScope) {
+        val store = InMemoryStore().also { it.pairingRow = pairing() }
+        val media = FakeMediaStore()
+        val messages = mutableListOf<String>()
+        var autoRegisters = true
+        var syncing = false
+        var unpaired = true
+
+        val presenter = SettingsPresenter(
+            scope = scope,
+            store = store,
+            setAutoEnabled = { enabled -> store.switchAutoSync(enabled) { check(autoRegisters) } },
+            mountedVolumes = { emptySet() },
+            storageVolume = { SyncValues.VOLUME_PRIMARY },
+            logBytes = { 0L },
+            cleanupWriter = { MediaWriter(store, media, DEVICE, now = { 0L }, io = Dispatchers.Unconfined) },
+            syncing = { syncing },
+            unpairDevice = { unpaired },
+            showMessage = { messages += it },
+        )
+    }
+
+    private fun TestScope.openedRig(): Rig =
+        Rig(backgroundScope).also {
+            it.presenter.refresh(notificationsAllowed = true, ReadAccess.Denied)
+            runCurrent()
+        }
+
+    @Test
+    fun `読み取りの権限の状態で、以前の曲の整理は一覧・許可の要求・拒否のどれかになる`() = runTest {
+        val rig = Rig(backgroundScope)
+        rig.media.addExisting("${ROOT}Artist/", "Old Song.mp3")
+
+        rig.presenter.refresh(notificationsAllowed = true, ReadAccess.Granted)
+        runCurrent()
+        val found = assertIs<CleanupState.Found>(rig.presenter.state.value?.cleanup)
+        rig.presenter.refresh(notificationsAllowed = true, ReadAccess.Requestable)
+        runCurrent()
+        val requestable = rig.presenter.state.value?.cleanup
+        rig.presenter.refresh(notificationsAllowed = true, ReadAccess.Denied)
+        runCurrent()
+        val denied = rig.presenter.state.value?.cleanup
+
+        assertEquals(listOf("Old Song.mp3"), found.items.map { it.displayName })
+        assertEquals(CleanupState.NeedsPermission, requestable)
+        assertEquals(CleanupState.Denied, denied)
+    }
+
+    @Test
+    fun `TA-129 自動同期の切り替えが成功したら知らせを出さず、表示が変わる`() = runTest {
+        val rig = openedRig()
+
+        rig.presenter.toggleAuto(true)
+        runCurrent()
+
+        assertTrue(rig.messages.isEmpty())
+        assertEquals(true, rig.presenter.state.value?.autoEnabled)
+    }
+
+    @Test
+    fun `TA-129 自動同期の切り替えが失敗したら知らせを出し、表示は元の値のまま`() = runTest {
+        val rig = openedRig().also { it.autoRegisters = false }
+
+        rig.presenter.toggleAuto(true)
+        runCurrent()
+
+        assertEquals(listOf(AUTO_SYNC_FAILED_NOTICE), rig.messages)
+        assertEquals(false, rig.presenter.state.value?.autoEnabled)
+    }
+
+    @Test
+    fun `TA-219 以前の場所の曲を消す操作は、同期中は消さずに知らせ、済んだ後は消した件数を知らせて残りを数え直す`() = runTest {
+        val rig = Rig(backgroundScope)
+        rig.store.relocatedRows += listOf(rig.media.addExisting(ROOT, "A.mp3"), rig.media.addExisting(ROOT, "B.mp3"))
+        rig.presenter.refresh(notificationsAllowed = true, ReadAccess.Denied)
+        runCurrent()
+
+        rig.syncing = true
+        rig.presenter.deleteRelocated()
+        runCurrent()
+        assertEquals(listOf(SYNCING_NO_DELETE_NOTICE), rig.messages)
+        assertEquals(2, rig.presenter.state.value?.relocatedCount)
+
+        rig.syncing = false
+        rig.presenter.deleteRelocated()
+        runCurrent()
+        assertEquals(listOf(SYNCING_NO_DELETE_NOTICE, relocatedDeletedNotice(2)), rig.messages)
+        assertEquals(0, rig.presenter.state.value?.relocatedCount)
+    }
+
+    @Test
+    fun `TA-129 解除に失敗したら知らせを出して偽を返し、成功なら知らせずに真を返す`() = runTest {
+        val rig = Rig(backgroundScope)
+
+        rig.unpaired = false
+        assertFalse(rig.presenter.unpair())
+        assertEquals(listOf(UNPAIR_FAILED_NOTICE), rig.messages)
+
+        rig.unpaired = true
+        assertTrue(rig.presenter.unpair())
+        assertEquals(1, rig.messages.size)
     }
 }
 

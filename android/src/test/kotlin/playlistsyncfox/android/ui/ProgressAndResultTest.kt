@@ -132,6 +132,22 @@ class TrackRowUiTest {
     }
 }
 
+class FormatBytesTest {
+    @Test
+    fun `1 KiB 未満は B、1 KiB から KiB、1 MiB から MiB で、小数 1 桁に丸める`() {
+        assertEquals("0 B", formatBytes(0))
+        assertEquals("1023 B", formatBytes(1023))
+        assertEquals("1.0 KiB", formatBytes(1024))
+        assertEquals("1.0 MiB", formatBytes(1L shl 20))
+        assertEquals("1.0 GiB", formatBytes(1L shl 30))
+    }
+
+    @Test
+    fun `1 MiB の 1 バイト手前は、丸めのため 1024 KiB と出る`() {
+        assertEquals("1024.0 KiB", formatBytes((1L shl 20) - 1))
+    }
+}
+
 class ResultUiTest {
     @Test
     fun `TA-106 一覧は V21 件なら全件、1 件超えると V21 件と、ほか 1 件にする`() {

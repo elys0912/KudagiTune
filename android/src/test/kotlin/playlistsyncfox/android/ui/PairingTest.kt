@@ -22,6 +22,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -121,6 +122,31 @@ class PairingPresenterTest {
         assertTrue(assertIs<PairingStage.Done>(emptyPresenter.state.value.stage).showCleanupHint)
         assertFalse(assertIs<PairingStage.Done>(trackPresenter.state.value.stage).showCleanupHint)
         assertFalse(assertIs<PairingStage.Done>(playlistPresenter.state.value.stage).showCleanupHint)
+    }
+
+    @Test
+    fun `失敗の段で やり直す と、直前の接続先の確定に戻り、前の指紋とコードの誤りは残さない`() = runTest {
+        val gateway = Gateway { it.emit(PairingEvent.Fingerprint("0a1b")); it.emit(PairingEvent.Failed(noticeOf(ErrorDetail.ClockSkew))) }
+        val presenter = targeted(InMemoryStore(), gateway)
+        presenter.submitCode("123456")
+        runCurrent()
+        assertIs<PairingStage.Failed>(presenter.state.value.stage)
+
+        presenter.retry()
+
+        val stage = assertIs<PairingStage.Target>(presenter.state.value.stage)
+        assertEquals("psfox-01234567", stage.target.name)
+        assertNull(stage.fingerprint)
+        assertNull(stage.codeError)
+    }
+
+    @Test
+    fun `接続先を確定する前に やり直す と、発見の段のまま`() = runTest {
+        val presenter = presenter(InMemoryStore(), Gateway { })
+
+        presenter.retry()
+
+        assertEquals(PairingStage.Discovering, presenter.state.value.stage)
     }
 
     @Test
