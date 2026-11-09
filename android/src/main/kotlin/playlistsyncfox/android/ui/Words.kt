@@ -14,6 +14,11 @@ data class Notice(val title: String, val guidance: String, val label: String, va
 
 private const val REPAIR_GUIDE = "PC の画面の「端末」とこのアプリの設定の両方で解除してから、もう一度ペアリングしてください"
 
+// E の番号の語（[errorWord]）と、S6 の取得の失敗の語（[catalogWord]）で共通の文
+private const val CONNECT_FAILED_WORD = "PC に接続できません"
+private const val REPAIR_NEEDED_WORD = "ペアリングのやり直しが必要です"
+private const val XML_UNAVAILABLE_WORD = "PC の iTunes ライブラリ（XML）を読めません"
+
 fun noticeOf(detail: ErrorDetail): Notice = when (detail) {
     ErrorDetail.ClockSkew -> Notice("端末と PC の時刻がずれています", "時刻を合わせてから、やり直してください", "時計のずれ", rePair = false)
     ErrorDetail.Replay -> Notice("同じ通信が重複して届きました", "もう一度同期してください", "通信の重複", rePair = false)
@@ -42,10 +47,10 @@ fun triggerWord(trigger: String): String = if (trigger == SyncRun.TRIGGER_MANUAL
 /** E の番号の表示語。空なら出さない。 */
 fun errorWord(errorKind: String?): String? = when (errorKind) {
     null, "" -> null
-    "E1" -> "PC に接続できません"
-    "E2" -> "ペアリングのやり直しが必要です"
+    "E1" -> CONNECT_FAILED_WORD
+    "E2" -> REPAIR_NEEDED_WORD
     "E3" -> "空き容量が足りません"
-    "E4" -> "PC の iTunes ライブラリ（XML）を読めません"
+    "E4" -> XML_UNAVAILABLE_WORD
     "E5" -> "PC に曲のファイルがありません"
     "E6" -> "通信が途中で切れました"
     "E7" -> "実行時間の上限に達しました。残りは次の同期で続けます"
@@ -78,10 +83,10 @@ fun formatTime(epochMillis: Long, zone: ZoneId = ZoneId.systemDefault()): String
 /** S6 で一覧を取れなかった理由の表示語。E2 の理由（[CatalogResult.Rejected]）は S3 と同じ [noticeOf] の見出し。 */
 fun catalogWord(result: CatalogResult): String = when (result) {
     is CatalogResult.Loaded -> ""
-    CatalogResult.Unreachable -> "PC に接続できません"
-    CatalogResult.KeyMismatch -> "ペアリングのやり直しが必要です"
+    CatalogResult.Unreachable -> CONNECT_FAILED_WORD
+    CatalogResult.KeyMismatch -> REPAIR_NEEDED_WORD
     is CatalogResult.Rejected -> noticeOf(result.detail).title
-    CatalogResult.XmlUnavailable -> "PC の iTunes ライブラリ（XML）を読めません"
+    CatalogResult.XmlUnavailable -> XML_UNAVAILABLE_WORD
     CatalogResult.Other -> "プレイリストの一覧を取得できませんでした"
 }
 
