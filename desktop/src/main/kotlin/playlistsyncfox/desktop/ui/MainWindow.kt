@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
@@ -82,6 +84,7 @@ private val logTimeFormat = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(Zon
 private val LEFT_COLUMN_WIDTH = 300.dp
 private val LOG_PANEL_HEIGHT = 270.dp
 private val STATUS_BAR_HEIGHT = 22.dp
+private val LICENSE_DIALOG_MAX_HEIGHT = 480.dp
 
 fun trayText(status: TrayStatus): String = when (status) {
     TrayStatus.KeyStorageFailed -> "鍵の保管に失敗しました"
@@ -256,17 +259,39 @@ private fun SettingsSection(app: PcApp) = Section("設定") {
     var licenses by remember { mutableStateOf<List<LicenseEntry>?>(null) }
     var showLicenses by remember { mutableStateOf(false) }
     SecondaryButton("ライセンス") {
-        showLicenses = !showLicenses
-        if (showLicenses && licenses == null) licenses = loadBundledLicenses().orEmpty()
+        if (licenses == null) licenses = loadBundledLicenses().orEmpty()
+        showLicenses = true
     }
-    if (showLicenses) {
-        val entries = licenses.orEmpty()
-        if (entries.isEmpty()) Text("ライセンスの一覧を読み込めません")
-        entries.forEach { e ->
-            Text("${e.name} ${e.version}", style = MaterialTheme.typography.bodyMedium)
-            e.licenses.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
-        }
-    }
+    if (showLicenses) LicenseDialog(licenses.orEmpty()) { showLicenses = false }
+}
+
+/** 部品の一覧と、許諾ごとの全文（B4-7、N4-4）。全文は長いので、設定の欄に並べず別の枠に出す。 */
+@Composable
+private fun LicenseDialog(entries: List<LicenseEntry>, onClose: () -> Unit) {
+    val texts = remember(entries) { bundledLicenseTexts(entries) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("ライセンス") },
+        text = {
+            Column(Modifier.heightIn(max = LICENSE_DIALOG_MAX_HEIGHT).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                if (entries.isEmpty()) Text("ライセンスの一覧を読み込めません")
+                entries.forEach { e ->
+                    Column {
+                        Text("${e.name} ${e.version}", style = MaterialTheme.typography.bodyMedium)
+                        e.licenses.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
+                texts.forEach { t ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(t.title, fontWeight = FontWeight.Bold)
+                        Text("対象：${t.componentNames.joinToString("、")}", fontSize = 12.sp, color = MaterialTheme.appColors.muted)
+                        Text(t.text, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+        },
+        confirmButton = { PrimaryButton("閉じる", onClick = onClose) },
+    )
 }
 
 // ---- 右：同期の進行状況 ----
