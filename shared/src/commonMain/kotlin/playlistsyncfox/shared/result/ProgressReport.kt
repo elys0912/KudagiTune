@@ -2,7 +2,6 @@ package playlistsyncfox.shared.result
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
 import playlistsyncfox.shared.manifest.boundaryJson
 
 /** P8 の `stage`。SyncProgress の段のうち `finished` を除く 6 つ（B4-4 の 5b）。 */
@@ -32,7 +31,7 @@ fun writeProgressReport(report: ProgressReport): String = boundaryJson.encodeToS
 fun readProgressReport(text: String): ProgressReport? {
     val report = try {
         boundaryJson.decodeFromString(ProgressReport.serializer(), text)
-    } catch (_: SerializationException) {
+    } catch (_: IllegalArgumentException) {
         return null
     }
     val counts = listOf(report.doneTracks.toLong(), report.totalTracks.toLong(), report.doneBytes, report.totalBytes)

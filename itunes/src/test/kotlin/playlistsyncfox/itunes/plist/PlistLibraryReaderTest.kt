@@ -1,5 +1,6 @@
 package playlistsyncfox.itunes.plist
 
+import org.junit.jupiter.api.Tag
 import playlistsyncfox.itunes.library.LibraryPlaylist
 import playlistsyncfox.itunes.library.LibraryReadError
 import playlistsyncfox.itunes.library.LibraryReadOutcome
@@ -515,6 +516,8 @@ class PlistLibraryReaderTest {
         assertEquals(mapOf(LocationFailure.InvalidFormat to 1), result.diagnostics.locationFailures)
     }
 
+    // 壁時計のしきい値を持つため、通常の test から外す。`./gradlew :itunes:performanceTest` で回す
+    @Tag("performance")
     @Test
     fun `数万トラックとプレイリスト数百本の文書を読むと、目標の時間内に完了する`() {
         val trackCount = 30_000
@@ -530,7 +533,7 @@ class PlistLibraryReaderTest {
 
         val elapsed = measureTime { read(xml) }
 
-        // 目標は 5 秒（V7）。CI の環境差に余裕を持たせて 2 倍
+        // 目標は 5 秒（V7）。手元の機械差に余裕を持たせて 2 倍
         assertTrue(elapsed < 10.seconds, "所要: $elapsed")
     }
 }
