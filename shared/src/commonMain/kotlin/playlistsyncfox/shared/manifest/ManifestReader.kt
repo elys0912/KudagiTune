@@ -22,8 +22,6 @@ private val manifestJson = Json {
     explicitNulls = false
 }
 
-private val persistentIdPattern = Regex("[0-9A-F]{16}")
-
 private val supportedFormatVersions = MANIFEST_FORMAT_VERSION..MANIFEST_FORMAT_VERSION
 
 fun writeManifest(manifest: Manifest): String = manifestJson.encodeToString(Manifest.serializer(), manifest)
@@ -73,5 +71,5 @@ private fun validateIds(manifest: Manifest): String? {
         manifest.playlists.map { it.persistentId } +
         manifest.unresolvedPlaylists.map { it.persistentId }
 
-    return if (ids.all { persistentIdPattern.matches(it) }) null else "persistent_id が大文字 16 桁の 16 進ではない"
+    return if (ids.all(::isPersistentId)) null else "persistent_id が大文字 16 桁の 16 進ではない"
 }

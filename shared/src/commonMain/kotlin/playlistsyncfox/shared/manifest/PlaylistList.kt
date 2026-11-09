@@ -34,8 +34,6 @@ private val json = Json {
     explicitNulls = false
 }
 
-private val idPattern = Regex("[0-9A-F]{16}")
-
 /**
  * 要求の本文の検査（境界）。JSON の形、各 ID の書式（大文字 16 桁の 16 進）、個数（[maxCount]）を確かめる。
  * 失敗の文に本文の中身を入れない。
@@ -48,7 +46,7 @@ fun parsePlaylistIds(text: String, maxCount: Int): PlaylistIdsResult {
     } catch (_: IllegalArgumentException) {
         return PlaylistIdsResult.Invalid
     }
-    if (body.playlistIds.size > maxCount || body.playlistIds.any { !idPattern.matches(it) }) return PlaylistIdsResult.Invalid
+    if (body.playlistIds.size > maxCount || body.playlistIds.any { !isPersistentId(it) }) return PlaylistIdsResult.Invalid
     return PlaylistIdsResult.Ids(body.playlistIds.distinct())
 }
 
@@ -65,7 +63,7 @@ fun readPlaylistTree(text: String): List<PlaylistNode>? {
     } catch (_: IllegalArgumentException) {
         return null
     }
-    fun valid(node: PlaylistNode): Boolean = idPattern.matches(node.id) && node.children.orEmpty().all(::valid)
+    fun valid(node: PlaylistNode): Boolean = isPersistentId(node.id) && node.children.orEmpty().all(::valid)
     return body.playlists.takeIf { it.all(::valid) }
 }
 

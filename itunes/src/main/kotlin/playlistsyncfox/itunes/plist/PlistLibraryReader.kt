@@ -13,6 +13,7 @@ import playlistsyncfox.itunes.library.UnidentifiedTrack
 import playlistsyncfox.itunes.location.LocationFailure
 import playlistsyncfox.itunes.location.TrackLocation
 import playlistsyncfox.itunes.location.decodeFileUrl
+import playlistsyncfox.shared.manifest.isPersistentId
 import java.io.ByteArrayInputStream
 import java.time.Instant
 import java.time.format.DateTimeParseException
@@ -26,8 +27,6 @@ private val trackKeys = setOf(
     "Persistent ID", "Track Type", "Location", "Total Time", "Name", "Artist", "Album",
     "Album Artist", "Track Number", "Disc Number", "Kind", "Protected",
 )
-
-private val persistentIdPattern = Regex("[0-9A-F]{16}")
 
 private const val FILE_TRACK_TYPE = "File"
 
@@ -203,7 +202,7 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
         var duplicatePersistentIds = 0
 
         for ((trackId, values) in rawTracks) {
-            val persistentId = text(values["Persistent ID"])?.uppercase()?.takeIf { persistentIdPattern.matches(it) }
+            val persistentId = text(values["Persistent ID"])?.uppercase()?.takeIf(::isPersistentId)
             if (persistentId == null) {
                 refsByTrackId[trackId] = TrackRef.Unidentified(unidentifiedTracks.size)
                 unidentifiedTracks += UnidentifiedTrack(name = text(values["Name"]), artist = text(values["Artist"]))
@@ -224,7 +223,7 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
         var droppedTrackRefs = 0
         val playlists = mutableListOf<LibraryPlaylist>()
         for (raw in rawPlaylists) {
-            if (raw.persistentId == null || !persistentIdPattern.matches(raw.persistentId)) {
+            if (raw.persistentId == null || !isPersistentId(raw.persistentId)) {
                 malformedEntries++
                 continue
             }

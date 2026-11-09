@@ -6,6 +6,11 @@ import kotlinx.serialization.Serializable
 /** 初版の `format_version`（V38）。M1 が読める版の範囲もこの 1 つだけ。 */
 const val MANIFEST_FORMAT_VERSION = 1
 
+private val persistentIdPattern = Regex("[0-9A-F]{16}")
+
+/** `persistent_id` の書式。大文字 16 桁の 16 進。 */
+fun isPersistentId(value: String): Boolean = persistentIdPattern.matches(value)
+
 @Serializable
 data class Manifest(
     @SerialName("format_version") val formatVersion: Int,
