@@ -188,7 +188,12 @@ private fun XmlSection(state: PcState) = Section("iTunes ライブラリ") {
     val colors = MaterialTheme.appColors
     when (val xml = state.xml) {
         is XmlStatus.Unreadable ->
-            Text("XML を読めません。iTunes の［環境設定］→［詳細］で「iTunes ライブラリ XML をほかのアプリケーションと共有」をオンにしてください", color = MaterialTheme.colorScheme.error)
+            // 日本語名は実物で未確認（Q16-4）。英語名も並べ、どちらの版でも探せるようにする
+            Text(
+                "XML を読めません。iTunes の［環境設定］→［詳細］で、「iTunes ライブラリ XML をほかのアプリケーションと共有」" +
+                    "（英語版は「Share iTunes Library XML with other applications」）に当たる項目をオンにしてください",
+                color = MaterialTheme.colorScheme.error,
+            )
         is XmlStatus.Stale -> StatusLine(colors.caution, "XML が ${xml.days} 日更新されていません")
         // まだ読んでいない間（起動直後、読めずに再試行中）は、読めた印の緑を出さない
         XmlStatus.Unchecked -> StatusLine(colors.muted, "XML を確かめています")
