@@ -39,6 +39,26 @@ class RequestAuthTest {
 
     private fun AuthResult.failure() = (this as AuthResult.Failure).reason
 
+    // 全スレッドが開始の合図を待って同時に [task] を始め、スレッドごとの戻り値を返す。スレッド内の例外は get() が投げ直す
+    private fun <T> runConcurrently(threadCount: Int, task: (threadIndex: Int) -> T): List<T> {
+        val startSignal = CountDownLatch(1)
+        val executor = Executors.newFixedThreadPool(threadCount)
+
+        try {
+            val futures = (1..threadCount).map { threadIndex ->
+                executor.submit<T> {
+                    startSignal.await()
+                    task(threadIndex)
+                }
+            }
+            startSignal.countDown()
+
+            return futures.map { it.get() }
+        } finally {
+            executor.shutdownNow()
+        }
+    }
+
     @Test
     fun `TS-115 固定の入力から 7 行の文字列が一致し末尾に LF が付かない`() {
         val expected = listOf(
@@ -178,26 +198,6 @@ class RequestAuthTest {
         assertEquals(false, store.recordIfNew(DEVICE_ID, "c", 0))
         assertEquals(false, store.recordIfNew(DEVICE_ID, "b", 0))
         assertTrue(store.recordIfNew(DEVICE_ID, "a", 0))
-    }
-
-    // 全スレッドが開始の合図を待って同時に [task] を始め、スレッドごとの戻り値を返す。スレッド内の例外は get() が投げ直す
-    private fun <T> runConcurrently(threadCount: Int, task: (threadIndex: Int) -> T): List<T> {
-        val startSignal = CountDownLatch(1)
-        val executor = Executors.newFixedThreadPool(threadCount)
-
-        try {
-            val futures = (1..threadCount).map { threadIndex ->
-                executor.submit<T> {
-                    startSignal.await()
-                    task(threadIndex)
-                }
-            }
-            startSignal.countDown()
-
-            return futures.map { it.get() }
-        } finally {
-            executor.shutdownNow()
-        }
     }
 
     @Test
