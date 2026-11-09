@@ -47,8 +47,8 @@ plist の構造：
 |---|---|---|
 | 最上位の辞書 | dict | ライブラリ全体 |
 | `Library Persistent ID` | string | ライブラリの識別子。16 桁の大文字の 16 進（2026-11-06 の実物の確認） |
-| `Date` | date | XML を書き出した時刻。診断のログにだけ使う |
-| `Application Version` | string | 診断のログにだけ使う |
+| `Date` | date | XML を書き出した時刻。診断用に持つだけで、ログには書かない |
+| `Application Version` | string | 診断用に持つだけで、ログには書かない |
 | `Music Folder` | string | 使わない。トラックの場所は各トラックの `Location` で決める |
 | `Tracks` | dict | キーは Track ID の文字列、値はトラックの辞書 |
 | `Playlists` | array | プレイリストの辞書の並び |
