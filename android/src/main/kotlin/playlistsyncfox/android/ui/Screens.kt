@@ -1,32 +1,22 @@
 package playlistsyncfox.android.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,26 +24,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import playlistsyncfox.android.R
-import playlistsyncfox.android.log.LogLevel
 import playlistsyncfox.android.storage.StoredFile
 import playlistsyncfox.shared.manifest.PlaylistNode
 import playlistsyncfox.shared.manifest.leafIds
 
-// 画面は状態を描くだけ（X7-1-1）。配色は OS のライト・ダークに従い（Theme.kt。D20）、部品は下の 1 か所に置いて全部の画面が使う。
+// 画面は状態を描くだけ（X7-1-1）。配色は OS のライト・ダークに従い（Theme.kt。D20）、部品は Components.kt に置いて全部の画面が使う。
 
 /** 画面から Activity（権限、共有、削除の同意）へ頼む操作。 */
 class ScreenActions(
@@ -116,116 +97,6 @@ private fun TitleBand() {
 }
 
 @Composable
-private fun Label(text: String, bold: Boolean = false, color: Color = LocalPsfoxColors.current.text, mono: Boolean = false) =
-    BasicText(
-        text,
-        style = TextStyle(
-            color = color,
-            fontSize = if (mono) 13.sp else 15.sp,
-            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
-            fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
-        ),
-    )
-
-/** 枠のボタン。 */
-@Composable
-private fun Action(label: String, onClick: () -> Unit) = ActionCell(label, Modifier.fillMaxWidth(), onClick)
-
-@Composable
-private fun ActionCell(label: String, modifier: Modifier, onClick: () -> Unit) {
-    val c = LocalPsfoxColors.current
-    Box(
-        modifier.heightIn(min = 44.dp).border(1.dp, c.buttonBorder, RoundedCornerShape(4.dp)).clickable(role = Role.Button, onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        BasicText(label, style = TextStyle(color = c.text, fontSize = 14.sp, textAlign = TextAlign.Center))
-    }
-}
-
-/** 主ボタン（白文字）。 */
-@Composable
-private fun PrimaryAction(label: String, onClick: () -> Unit) {
-    val c = LocalPsfoxColors.current
-    Box(
-        Modifier.fillMaxWidth().height(48.dp).background(c.primary, RoundedCornerShape(4.dp)).clickable(role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        BasicText(label, style = TextStyle(color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Medium))
-    }
-}
-
-/** 枠のボタンを 2 列に並べる（S1）。 */
-@Composable
-private fun ActionGrid(actions: List<Pair<String, () -> Unit>>) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        actions.chunked(2).forEach { pair ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                pair.forEach { (label, onClick) -> ActionCell(label, Modifier.weight(1f), onClick) }
-                if (pair.size == 1) Spacer(Modifier.weight(1f))
-            }
-        }
-    }
-}
-
-@Composable
-private fun Card(content: @Composable () -> Unit) {
-    val c = LocalPsfoxColors.current
-    Column(
-        Modifier.fillMaxWidth().background(c.card, RoundedCornerShape(6.dp)).border(1.dp, c.border, RoundedCornerShape(6.dp)).padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) { content() }
-}
-
-/** 棒。[fraction] は 0〜1。 */
-@Composable
-private fun Bar(fraction: Float, height: Int) {
-    val c = LocalPsfoxColors.current
-    Box(Modifier.fillMaxWidth().height(height.dp).background(c.barGroove, RoundedCornerShape((height / 2).dp))) {
-        Box(Modifier.fillMaxWidth(fraction.coerceIn(0f, 1f)).height(height.dp).background(c.accent, RoundedCornerShape((height / 2).dp)))
-    }
-}
-
-@Composable
-private fun Field(value: String, onChange: (String) -> Unit) {
-    val c = LocalPsfoxColors.current
-    BasicTextField(
-        value = value,
-        onValueChange = onChange,
-        singleLine = true,
-        textStyle = TextStyle(color = c.text, fontSize = 15.sp),
-        cursorBrush = SolidColor(c.text),
-        modifier = Modifier.fillMaxWidth().border(1.dp, c.buttonBorder, RoundedCornerShape(4.dp)).padding(10.dp),
-    )
-}
-
-@Composable
-private fun Confirm(text: String, ok: String, onOk: () -> Unit, onCancel: () -> Unit, cancel: String = "取り消す") {
-    val c = LocalPsfoxColors.current
-    Column(
-        Modifier.fillMaxWidth().border(2.dp, c.accent, RoundedCornerShape(6.dp)).padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Label(text)
-        Action(ok, onOk)
-        Action(cancel, onCancel)
-    }
-}
-
-/** 押すと確認を出し、「ok」で [onConfirmed] を行うボタン。確認を出しているかは中で持つ。 */
-@Composable
-private fun ConfirmedAction(label: String, prompt: String, ok: String, onConfirmed: () -> Unit) {
-    var asking by remember { mutableStateOf(false) }
-    Action(label) { asking = true }
-    if (asking) {
-        Confirm(prompt, ok, { asking = false; onConfirmed() }, { asking = false })
-    }
-}
-
-@Composable
-private fun Back(model: AppViewModel) = Action("戻る", model::back)
-
-
-@Composable
 private fun HomeScreen(model: AppViewModel, actions: ScreenActions) {
     val c = LocalPsfoxColors.current
     val state by model.home.collectAsState()
@@ -282,7 +153,6 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions) {
 /** カードの見出し（小さい薄い文字）。 */
 @Composable
 private fun Caption(text: String) = BasicText(text, style = TextStyle(color = LocalPsfoxColors.current.muted, fontSize = 12.sp))
-
 
 /** 「消す」の確認。同期ボタンは S1 と S4 にあるので、両方に置く。 */
 @Composable
@@ -388,159 +258,6 @@ private fun NodeRow(model: AppViewModel, stage: SelectionStage.Loaded, node: Pla
         if (open) children.forEach { NodeRow(model, stage, it, depth + 1) }
     }
 }
-
-/** S3（X7-1-4）。上から、見出しと全体の棒、曲ごとの一覧（残りの高さ）、ログの欄（150 dp）、「中断する」。 */
-@Composable
-private fun ProgressScreen(model: AppViewModel, current: Screen.Progress, actions: ScreenActions, modifier: Modifier) {
-    val c = LocalPsfoxColors.current
-    val progress by model.progress.collectAsState()
-    val logLines by model.logPane.collectAsState()
-    val ui = progress
-    Column(modifier) {
-        Column(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            current.notice?.let { Label(it, bold = true) }
-            if (ui == null) {
-                Label("開始を待っています")
-            } else {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-                    Label(ui.heading, bold = true)
-                    Label("${(ui.fraction * 100).toInt()}%", mono = true)
-                }
-                Bar(ui.fraction, 8)
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    val failed = if (ui.failedCount > 0) "　失敗 ${ui.failedCount}" else ""
-                    BasicText("${ui.doneCount} / ${ui.totalCount} 曲$failed", style = TextStyle(color = c.muted, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                    BasicText("${formatBytes(ui.doneBytes)} / ${formatBytes(ui.totalBytes)}", style = TextStyle(color = c.muted, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                }
-                ui.nearLimitNote?.let { Label(it, bold = true) }
-                ui.shortageBytes?.let {
-                    Label("空き容量が ${formatBytes(it)} 足りません", bold = true)
-                    Action("ストレージの設定を開く", actions.onOpenStorageSettings)
-                }
-                ui.notice?.let {
-                    Label(it.title, bold = true)
-                    Label(it.guidance)
-                }
-            }
-        }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
-
-        val rows = ui?.tracks.orEmpty()
-        val listState = rememberLazyListState()
-        val nowIndex = rows.indexOfFirst { it.mark == TrackMark.Transferring }
-        val nowId = rows.getOrNull(nowIndex)?.id
-        // 転送中の行が変わったとき、その行が見える位置へ送る。利用者が触っている間は送らない
-        LaunchedEffect(nowId) {
-            if (nowIndex >= 0 && !listState.isScrollInProgress) listState.animateScrollToItem((nowIndex - 2).coerceAtLeast(0))
-        }
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState) {
-            items(rows, key = { it.id }) { TrackRowItem(it) }
-        }
-
-        LogPane(logLines)
-        Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
-        Box(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Action("中断する", model::cancelSync)
-        }
-    }
-}
-
-@Composable
-private fun TrackRowItem(row: TrackRowUi) {
-    val c = LocalPsfoxColors.current
-    Column(Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.fillMaxWidth().background(if (row.highlighted) c.transferringRow else Color.Transparent).padding(horizontal = 16.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            MarkIcon(row.mark)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BasicText(
-                        row.title,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(color = if (row.dimmed) c.muted else c.text, fontSize = 14.sp),
-                    )
-                    BasicText(row.sizeText, style = TextStyle(color = c.muted, fontSize = 12.sp, fontFamily = FontFamily.Monospace))
-                }
-                row.fraction?.let { Bar(it, 4) }
-                row.reason?.let { BasicText(it, style = TextStyle(color = c.failure, fontSize = 12.sp)) }
-            }
-        }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(c.rowLine))
-    }
-}
-
-/** 状態の印。完了＝チェック、転送中＝下向きの矢印、待機＝時計、失敗＝×。 */
-@Composable
-private fun MarkIcon(mark: TrackMark) {
-    val c = LocalPsfoxColors.current
-    Canvas(Modifier.size(20.dp)) {
-        val w = size.width
-        val stroke = 2.2.dp.toPx()
-        fun line(x1: Float, y1: Float, x2: Float, y2: Float, color: Color) =
-            drawLine(color, Offset(x1 * w, y1 * w), Offset(x2 * w, y2 * w), strokeWidth = stroke, cap = StrokeCap.Round)
-        when (mark) {
-            TrackMark.Done -> {
-                line(0.2f, 0.52f, 0.42f, 0.74f, c.success)
-                line(0.42f, 0.74f, 0.82f, 0.28f, c.success)
-            }
-            TrackMark.Transferring -> {
-                line(0.5f, 0.15f, 0.5f, 0.85f, c.accent)
-                line(0.22f, 0.57f, 0.5f, 0.85f, c.accent)
-                line(0.78f, 0.57f, 0.5f, 0.85f, c.accent)
-            }
-            TrackMark.Waiting -> {
-                drawCircle(c.muted, radius = 0.38f * w, center = Offset(w / 2, w / 2), style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
-                line(0.5f, 0.3f, 0.5f, 0.5f, c.muted)
-                line(0.5f, 0.5f, 0.65f, 0.6f, c.muted)
-            }
-            TrackMark.Failed -> {
-                line(0.22f, 0.22f, 0.78f, 0.78f, c.failure)
-                line(0.78f, 0.22f, 0.22f, 0.78f, c.failure)
-            }
-        }
-    }
-}
-
-/** ログの欄（X7-1-4）。新しい行が下。時刻とメッセージ。警告とエラーの行はその色。 */
-@Composable
-private fun LogPane(lines: List<playlistsyncfox.android.log.LogEntry>) {
-    val c = LocalPsfoxColors.current
-    Column(Modifier.fillMaxWidth().height(150.dp).background(c.logPanel)) {
-        Box(Modifier.fillMaxWidth().height(1.dp).background(c.border))
-        Box(Modifier.fillMaxWidth().height(29.dp).padding(horizontal = 16.dp), contentAlignment = Alignment.CenterStart) {
-            BasicText("ログ", style = TextStyle(color = c.muted, fontSize = 11.sp, letterSpacing = 0.5.sp))
-        }
-        // 下を起点に積むので、新しい行が来ても末尾が見えたままになる
-        LazyColumn(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp), reverseLayout = true) {
-            items(lines.asReversed()) { entry ->
-                val color = when (entry.level) {
-                    LogLevel.Info -> c.text
-                    LogLevel.Warn -> c.warning
-                    LogLevel.Error -> c.failure
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    BasicText(logTime(entry), style = TextStyle(color = c.muted, fontSize = 11.sp, lineHeight = 19.sp, fontFamily = FontFamily.Monospace))
-                    BasicText(
-                        logMessage(entry),
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = TextStyle(color = color, fontSize = 11.sp, lineHeight = 19.sp, fontFamily = FontFamily.Monospace),
-                    )
-                }
-            }
-        }
-    }
-}
-
 
 @Composable
 private fun ResultScreen(model: AppViewModel, actions: ScreenActions) {
