@@ -51,24 +51,13 @@ class ManifestBuilder(
         now: Instant,
     ): BuiltManifest {
         val result = library.result
-        val byId = result.playlists.associateBy { it.persistentId }
         val trackById = result.tracks.associateBy { it.persistentId }
-
-        val resolved = mutableListOf<LibraryPlaylist>()
-        val unresolved = mutableListOf<UnresolvedPlaylist>()
-        for (id in selectedIds.distinct()) {
-            val playlist = byId[id]
-            if (playlist != null && playlist.kind == PlaylistKind.Normal) {
-                resolved += playlist
-            } else {
-                unresolved += UnresolvedPlaylist(id, playlist?.name ?: lastKnownNames[id].orEmpty())
-            }
-        }
+        val selection = resolveSelection(result.playlists, selectedIds, lastKnownNames)
 
         val tracks = LinkedHashMap<String, ManifestTrack>()
         val entries = LinkedHashMap<String, TrackEntry>()
         val excluded = LinkedHashMap<Any, ExcludedTrack>()
-        val playlists = resolved.map { playlist ->
+        val playlists = selection.resolved.map { playlist ->
             val ids = mutableListOf<String>()
             for (ref in playlist.items) {
                 when (ref) {
@@ -105,10 +94,32 @@ class ManifestBuilder(
             contentDigest = "",
             tracks = tracks.values.toList(),
             playlists = playlists,
-            unresolvedPlaylists = unresolved,
+            unresolvedPlaylists = selection.unresolved,
             excluded = excluded.values.toList(),
         )
         return BuiltManifest(withoutDigest.copy(contentDigest = computeContentDigest(crypto, withoutDigest)), entries)
+    }
+
+    private class Selection(val resolved: List<LibraryPlaylist>, val unresolved: List<UnresolvedPlaylist>)
+
+    /** 選んだ ID を、通常のプレイリスト（resolved）と、XML に無いか種別が通常でないもの（unresolved）に分ける。重複は除く。 */
+    private fun resolveSelection(
+        playlists: List<LibraryPlaylist>,
+        selectedIds: List<String>,
+        lastKnownNames: Map<String, String>,
+    ): Selection {
+        val byId = playlists.associateBy { it.persistentId }
+        val resolved = mutableListOf<LibraryPlaylist>()
+        val unresolved = mutableListOf<UnresolvedPlaylist>()
+        for (id in selectedIds.distinct()) {
+            val playlist = byId[id]
+            if (playlist != null && playlist.kind == PlaylistKind.Normal) {
+                resolved += playlist
+            } else {
+                unresolved += UnresolvedPlaylist(id, playlist?.name ?: lastKnownNames[id].orEmpty())
+            }
+        }
+        return Selection(resolved, unresolved)
     }
 
     private sealed interface Checked {
