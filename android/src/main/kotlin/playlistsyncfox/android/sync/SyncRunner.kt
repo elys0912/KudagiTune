@@ -22,8 +22,6 @@ import playlistsyncfox.android.storage.TrackWriteResult
 import playlistsyncfox.android.storage.WritePlan
 import playlistsyncfox.shared.diff.Diff
 import playlistsyncfox.shared.diff.RemovalGate
-import playlistsyncfox.shared.diff.SyncRecord
-import playlistsyncfox.shared.diff.computeDiff
 import playlistsyncfox.shared.diff.requiredBytes
 import playlistsyncfox.shared.m3u8.buildM3u8
 import playlistsyncfox.shared.m3u8.buildPlaylistFileName
@@ -308,7 +306,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             // 保存先が変わっていれば、T1・T2 を T9 へ移して全曲を取り直す（D16）
             relocating = env.writer.relocateTo(env.volume)
             val placed = env.store.placedTracks(deviceId)
-            val first = computeDiffFor(loaded.manifest, placed, runs)
+            val first = env.diffFor(loaded.manifest, placed, recordedLibraryId(runs), env.isPlayable)
             diff = first
             plannedAdd = first.toAdd.size
             plannedReplace = first.toReplace.size
@@ -348,19 +346,6 @@ class SyncRunner(private val env: SyncEnvironment) {
             return if (free < needed) needed - free else null
         }
 
-        private suspend fun computeDiffFor(manifest: Manifest, placed: List<PlacedTrack>, runs: List<SyncRun>): Diff =
-            computeDiff(
-                tracks = manifest.tracks,
-                records = placed.map { SyncRecord(it.persistentId, it.sourceSize, it.sourceModified, it.relativePath) },
-                // T1 の曲のうち MediaStore に行が今ある曲（pending も含む）。差分の入力に state は渡さない
-                presentIds = env.writer.presentIds(placed),
-                manifestLibraryId = manifest.libraryId,
-                recordedLibraryId = recordedLibraryId(runs),
-                removalConfirmThreshold = SyncValues.REMOVAL_CONFIRM_THRESHOLD,
-                unresolvedPlaylists = manifest.unresolvedPlaylists,
-                isPlayable = env.isPlayable,
-            )
-
         /** 全部の曲の後、E8 になった曲があれば、マニフェストを取り直して 1 回だけ行う。 */
         private suspend fun retryStale(api: SyncApi, runs: List<SyncRun>) {
             val loaded = when (val fetched = fetchManifest(api)) {
@@ -375,7 +360,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             manifest = loaded.manifest
             duplicatesDropped = loaded.duplicatesDropped
             val placed = env.store.placedTracks(deviceId)
-            val again = computeDiffFor(loaded.manifest, placed, runs)
+            val again = env.diffFor(loaded.manifest, placed, recordedLibraryId(runs), env.isPlayable)
             diff = again
 
             // 取り直した対象の前回の記録（E8、同じ回の E5・E9）は、やり直しの結果で置き換える
@@ -406,7 +391,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             val usedPaths = placed.filter { it.persistentId !in targetIds }.mapTo(HashSet()) { it.relativePath } + env.writer.existingPaths()
             val paths = resolveTrackPaths(
                 tracks = targets.map { it.first },
-                records = placed.map { SyncRecord(it.persistentId, it.sourceSize, it.sourceModified, it.relativePath) },
+                records = placed.map { it.toSyncRecord() },
                 usedPaths = usedPaths,
                 suffixLength = SyncValues.SUFFIX_LENGTH,
                 maxBytes = SyncValues.MAX_ELEMENT_BYTES,

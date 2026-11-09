@@ -2,13 +2,17 @@ package playlistsyncfox.android.sync
 
 import kotlinx.coroutines.withTimeoutOrNull
 import playlistsyncfox.android.db.Pairing
+import playlistsyncfox.android.db.PlacedTrack
 import playlistsyncfox.android.net.ApiFailure
 import playlistsyncfox.android.net.ApiResult
 import playlistsyncfox.android.net.Endpoint
 import playlistsyncfox.android.net.SyncApi
+import playlistsyncfox.shared.diff.Diff
 import playlistsyncfox.shared.diff.SyncRecord
 import playlistsyncfox.shared.diff.computeDiff
+import playlistsyncfox.shared.manifest.Manifest
 import playlistsyncfox.shared.manifest.ManifestReadResult
+import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.manifest.readManifest
 import playlistsyncfox.shared.result.Transport
 
@@ -88,6 +92,29 @@ internal suspend fun <T> SyncEnvironment.reachPc(
     return Reach.Unreachable(mismatch)
 }
 
+internal fun PlacedTrack.toSyncRecord() = SyncRecord(persistentId, sourceSize, sourceModified, relativePath)
+
+/**
+ * マニフェストと、端末に置いた曲（T1）・MediaStore の現状との差分。同期本体と画面側が同じ計算をする。
+ * [isPlayable] は端末で再生できる形式の曲か。渡さなければ全曲を再生できるものとして扱う。
+ */
+internal suspend fun SyncEnvironment.diffFor(
+    manifest: Manifest,
+    placed: List<PlacedTrack>,
+    recordedLibraryId: String?,
+    isPlayable: (ManifestTrack) -> Boolean = { true },
+): Diff = computeDiff(
+    tracks = manifest.tracks,
+    records = placed.map { it.toSyncRecord() },
+    // T1 の曲のうち MediaStore に行が今ある曲（pending も含む）。差分の入力に state は渡さない
+    presentIds = writer.presentIds(placed),
+    manifestLibraryId = manifest.libraryId,
+    recordedLibraryId = recordedLibraryId,
+    removalConfirmThreshold = SyncValues.REMOVAL_CONFIRM_THRESHOLD,
+    unresolvedPlaylists = manifest.unresolvedPlaylists,
+    isPlayable = isPlayable,
+)
+
 /** T4 の `pc_id` の先頭 8 桁と前方一致する PC を NSD から引き直す（X6-3 の 2 の 2）。 */
 private suspend fun SyncEnvironment.resolveLan(pairing: Pairing): LanService? {
     val found = withTimeoutOrNull(SyncValues.NSD_RESOLVE_WAIT_MS) { lan.discover() }
@@ -138,15 +165,7 @@ class SyncPreview(private val env: SyncEnvironment) {
         val manifest = (readManifest(body) as? ManifestReadResult.Loaded)?.manifest ?: return RemovalCheck.Failed(reachFailed = false)
         val placed = env.store.placedTracks(pairing.deviceId)
         // 使うのは toRemove の件数だけ。再生できるかの判定は、端末のデコーダの列挙が走るため渡さない（X6-10）
-        val diff = computeDiff(
-            tracks = manifest.tracks,
-            records = placed.map { SyncRecord(it.persistentId, it.sourceSize, it.sourceModified, it.relativePath) },
-            presentIds = env.writer.presentIds(placed),
-            manifestLibraryId = manifest.libraryId,
-            recordedLibraryId = recordedLibraryId(env.store.runs()),
-            removalConfirmThreshold = SyncValues.REMOVAL_CONFIRM_THRESHOLD,
-            unresolvedPlaylists = manifest.unresolvedPlaylists,
-        )
+        val diff = env.diffFor(manifest, placed, recordedLibraryId(env.store.runs()))
         // 手動は 1 件でも消すなら確認を出す（D19）。`removalGate` は自動の判定に使う
         return if (diff.toRemove.isEmpty()) RemovalCheck.Allowed else RemovalCheck.NeedsConfirmation(diff.toRemove.size)
     }
