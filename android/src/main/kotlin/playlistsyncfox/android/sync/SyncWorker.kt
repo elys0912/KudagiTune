@@ -40,6 +40,9 @@ object SyncServices {
     /** Application が起動時に必ず設定する。未設定のまま [SyncWorker] が走ったら、成功にせず例外にする。 */
     @Volatile
     lateinit var factory: SyncEnvironmentFactory
+
+    /** [factory] が設定済みか。lateinit の `isInitialized` は宣言の外から使えないため、ここで公開する。 */
+    val isReady: Boolean get() = ::factory.isInitialized
 }
 
 /**
