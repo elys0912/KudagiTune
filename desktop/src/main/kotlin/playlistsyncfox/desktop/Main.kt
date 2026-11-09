@@ -32,6 +32,7 @@ import playlistsyncfox.desktop.server.NettyServerLauncher
 import playlistsyncfox.desktop.ui.MainWindowContent
 import playlistsyncfox.desktop.ui.PsfoxTheme
 import playlistsyncfox.desktop.ui.TrayStatus
+import playlistsyncfox.desktop.ui.hasWarningMark
 import playlistsyncfox.desktop.ui.trayStatus
 import playlistsyncfox.desktop.ui.trayText
 import playlistsyncfox.desktop.watch.WatchServiceOpener
@@ -103,7 +104,7 @@ fun main(args: Array<String>) {
         val windowIcon = remember { BitmapPainter(loadIcon(WINDOW_ICON)) }
         Tray(
             icon = trayIcon,
-            tooltip = "$PRODUCT_NAME：" + trayText(trayStatus(state)).let { if (state.warnings.isNotEmpty()) "$it（警告あり）" else it },
+            tooltip = "$PRODUCT_NAME：" + trayText(trayStatus(state)).let { if (hasWarningMark(state)) "$it（警告あり）" else it },
             onAction = { windowOpen = true },
         ) {
             Item("開く") { windowOpen = true }
