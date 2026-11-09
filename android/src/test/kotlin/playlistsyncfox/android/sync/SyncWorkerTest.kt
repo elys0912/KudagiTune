@@ -19,7 +19,7 @@ class SyncWorkerTest {
     }
 
     @Test
-    fun `X6-14 再試行の回数が 0 なら初回、1 以上なら走り直しとして入力を作る`() {
+    fun `TA-237 再試行の回数が 0 なら初回、1 以上なら走り直しとして入力を作る`() {
         val data = Data.Builder()
             .putString(SyncWorker.KEY_TRIGGER, SyncWorker.TRIGGER_MANUAL)
             .putBoolean(SyncWorker.KEY_DELETE_APPROVED, true)

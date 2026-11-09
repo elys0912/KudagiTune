@@ -43,7 +43,7 @@ class SettingsUiTest {
     }
 
     @Test
-    fun `X4-5 確認コードは T4 の spki_hash の先頭 12 バイトを 4 桁ごとに区切る`() {
+    fun `TA-255 確認コードは T4 の spki_hash の先頭 12 バイトを 4 桁ごとに区切る`() {
         val hash = "0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9"
 
         val state = settingsUi(null, null, 0, storageUi(emptySet(), SyncValues.VOLUME_PRIMARY), pairing().copy(spkiHash = hash), notificationsAllowed = true, logBytes = 0, cleanup = CleanupState.Denied)
@@ -52,7 +52,7 @@ class SettingsUiTest {
     }
 
     @Test
-    fun `X6-19 保存先を変えたとき、前の場所に曲が残っていれば先に消す案内を足し、無ければ足さない`() {
+    fun `TA-252 保存先を変えたとき、前の場所に曲が残っていれば先に消す案内を足し、無ければ足さない`() {
         assertEquals(STORAGE_CHANGED_NOTICE, storageChangedNotice(0))
 
         val withLeftover = storageChangedNotice(1)

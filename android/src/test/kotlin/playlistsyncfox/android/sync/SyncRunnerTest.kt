@@ -1177,7 +1177,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-1 前面への昇格が拒否されて終えたとき進行状態が消える`() = runTest {
+    fun `TA-239 前面への昇格が拒否されて終えたとき進行状態が消える`() = runTest {
         val h = Harness()
         h.promoteResult = false
         h.sync(tracks)
@@ -1188,7 +1188,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-1 手動が実行中か待機中の自動が何もせず終えたとき進行状態が消える`() = runTest {
+    fun `TA-239 手動が実行中か待機中の自動が何もせず終えたとき進行状態が消える`() = runTest {
         val h = Harness(SyncTrigger.Auto)
         h.sync(tracks)
         h.manualActive = true
@@ -1199,7 +1199,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-1 内容が前回と同じ自動が何もせず終えたとき進行状態が消える`() = runTest {
+    fun `TA-239 内容が前回と同じ自動が何もせず終えたとき進行状態が消える`() = runTest {
         val h = Harness(SyncTrigger.Auto)
         h.sync(tracks)
         h.addRun(digest = "digest-1")
@@ -1210,7 +1210,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-1 自動の抑止で終えたとき進行状態が消える`() = runTest {
+    fun `TA-239 自動の抑止で終えたとき進行状態が消える`() = runTest {
         val h = Harness(SyncTrigger.Auto)
         h.sync(tracks)
         h.addRun(trigger = SyncRun.TRIGGER_MANUAL, startedAt = h.clock - 10 * MIN, endedAt = h.clock - 10 * MIN)
@@ -1221,7 +1221,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-1 T3 の行を作る前に中断されたとき進行状態が消える`() = runTest {
+    fun `TA-239 T3 の行を作る前に中断されたとき進行状態が消える`() = runTest {
         val h = Harness()
         h.sync(tracks)
         h.onDiscover = { throw CancellationException("中断") }
@@ -1233,7 +1233,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-1 完了を出して終えた同期の進行状態は S4 のために残る`() = runTest {
+    fun `TA-239 完了を出して終えた同期の進行状態は S4 のために残る`() = runTest {
         val h = Harness()
         h.sync(tracks)
 
@@ -1243,7 +1243,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-12 想定外の例外は T3 の行を error_kind が空の failed で閉じ、ログに残し、進行状態を消して例外を出さない`() = runTest {
+    fun `TA-238 想定外の例外は T3 の行を error_kind が空の failed で閉じ、ログに残し、進行状態を消して例外を出さない`() = runTest {
         val h = Harness()
         h.sync(tracks)
         h.lanApi.trackScript = { error("想定外") }
@@ -1260,7 +1260,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-12 終わりの記録の後の例外は T3 の結果を変えずに呼び出し側へ渡す`() = runTest {
+    fun `TA-238 終わりの記録の後の例外は T3 の結果を変えずに呼び出し側へ渡す`() = runTest {
         val h = Harness()
         h.sync(tracks)
         h.failOnFinished = true
@@ -1271,7 +1271,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-6 同じ曲で切断からの再開を挟んでも、その曲に受けた分を足し上げて bytes_transferred と done_bytes に数える`() = runTest {
+    fun `TA-240 同じ曲で切断からの再開を挟んでも、その曲に受けた分を足し上げて bytes_transferred と done_bytes に数える`() = runTest {
         val h = Harness()
         val one = listOf(track(1))
         h.sync(one)
@@ -1311,7 +1311,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-7 利用者の中断では、先に曲単位の失敗があっても error_kind が空で、失敗は件数と一覧に残る`() = runTest {
+    fun `TA-242 利用者の中断では、先に曲単位の失敗があっても error_kind が空で、失敗は件数と一覧に残る`() = runTest {
         val h = Harness()
         h.sync(tracks)
         val serve = h.lanApi.trackScript
@@ -1327,7 +1327,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-11 正常に閉じた短い本文は 1 回目は E6 として続きから取り直し、増えれば完了する`() = runTest {
+    fun `TA-245 正常に閉じた短い本文は 1 回目は E6 として続きから取り直し、増えれば完了する`() = runTest {
         val h = Harness()
         val one = listOf(track(1))
         h.sync(one)
@@ -1344,7 +1344,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-11 続きから取り直しても 1 バイトも増えなければ、その曲を E9 にして pending を消し次の曲へ進む`() = runTest {
+    fun `TA-245 続きから取り直しても 1 バイトも増えなければ、その曲を E9 にして pending を消し次の曲へ進む`() = runTest {
         val h = Harness()
         h.sync(tracks)
         val serve = h.lanApi.trackScript
@@ -1384,7 +1384,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-9 マニフェストの版違いで止めたとき結果に印を残し、壊れた本文では印を付けない`() = runTest {
+    fun `TA-246 マニフェストの版違いで止めたとき結果に印を残し、壊れた本文では印を付けない`() = runTest {
         val mismatch = Harness()
         mismatch.lanApi.manifestResults.clear()
         mismatch.lanApi.manifestResults += ApiResult.Ok("""{"format_version":99}""")
@@ -1402,7 +1402,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-10 端末が再生できない形式の曲は転送し、T6 と結果の unplayable に unsupported_format で載せる`() = runTest {
+    fun `TA-244 端末が再生できない形式の曲は転送し、T6 と結果の unplayable に unsupported_format で載せる`() = runTest {
         val h = Harness()
         val alac = track(2, extension = "m4a").copy(kind = "Apple Lossless audio file")
         val aac = track(3, extension = "m4a").copy(kind = "AAC audio file")
@@ -1420,7 +1420,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `X6-10 端末にデコーダがあれば ALAC は unsupported_format に載せない`() = runTest {
+    fun `TA-244 端末にデコーダがあれば ALAC は unsupported_format に載せない`() = runTest {
         val h = Harness()
         h.sync(listOf(track(2, extension = "m4a").copy(kind = "Apple Lossless audio file")))
         val allDecoders = Playability { true }

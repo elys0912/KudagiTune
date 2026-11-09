@@ -23,14 +23,14 @@ class LicensesTest {
     private val entries = parseLicenses(ARTIFACTS)!!.associateBy { it.name }
 
     @Test
-    fun `X7-7 SPDX の識別子と URL のどちらの許諾でも、同梱の全文のファイルを選ぶ`() {
+    fun `TA-254 SPDX の識別子と URL のどちらの許諾でも、同梱の全文のファイルを選ぶ`() {
         assertEquals(listOf("apache-2.0.txt"), entries.getValue("androidx.core:core").textFiles)
         assertEquals(listOf("mit-slf4j.txt"), entries.getValue("org.slf4j:slf4j-api").textFiles)
         assertEquals(listOf("bouncycastle.txt"), entries.getValue("org.bouncycastle:bcprov").textFiles)
     }
 
     @Test
-    fun `X7-7 全文を同梱していない許諾は、名前と URL だけを出し、全文のファイルは持たない`() {
+    fun `TA-254 全文を同梱していない許諾は、名前と URL だけを出し、全文のファイルは持たない`() {
         val other = entries.getValue("example:other")
 
         assertTrue(other.textFiles.isEmpty())
@@ -38,12 +38,12 @@ class LicensesTest {
     }
 
     @Test
-    fun `X7-7 読めない JSON は null を返す`() {
+    fun `TA-254 読めない JSON は null を返す`() {
         assertNull(parseLicenses("{"))
     }
 
     @Test
-    fun `X7-7 表に載せた全文のファイルは資産に実在し、空でない`() {
+    fun `TA-254 表に載せた全文のファイルは資産に実在し、空でない`() {
         BUNDLED_LICENSE_FILES.values.forEach { name ->
             val file = File("src/main/assets/$LICENSE_TEXT_DIR/$name")
 

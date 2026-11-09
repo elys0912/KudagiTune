@@ -69,7 +69,7 @@ class DeleteMissingTest {
     }
 
     @Test
-    fun `X6-4 画面側の確認も、つながった接続先を last_endpoint に記録し NSD の名が変わっていれば endpoint_lan も更新する`() = runTest {
+    fun `TA-243 画面側の確認も、つながった接続先を last_endpoint に記録し NSD の名が変わっていれば endpoint_lan も更新する`() = runTest {
         val viaTailscale = Harness()
         val kept = viaTailscale.setup(placedCount = 3, keep = 2).take(2)
         viaTailscale.lanApi.digestResult = ApiResult.Fail(ApiFailure.Disconnected)

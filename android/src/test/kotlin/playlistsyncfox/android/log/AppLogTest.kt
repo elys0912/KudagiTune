@@ -96,7 +96,7 @@ class AppLogTest {
     }
 
     @Test
-    fun `X7-5 ファイルに保存する本文は残っている全世代の全行を古い順に出し、閲覧の 500 行の切り詰めを受けない`() {
+    fun `TA-253 ファイルに保存する本文は残っている全世代の全行を古い順に出し、閲覧の 500 行の切り詰めを受けない`() {
         val dir = tempDir()
         val log = log(dir, maxBytes = 12_000)
         repeat(1_200) { log.log(LogLevel.Info, "m", "行 %04d".format(it)) }
@@ -113,7 +113,7 @@ class AppLogTest {
     }
 
     @Test
-    fun `X7-5 ログがまだ無いときの保存の本文は空`() {
+    fun `TA-253 ログがまだ無いときの保存の本文は空`() {
         assertEquals("", log(tempDir()).exportText())
     }
 
