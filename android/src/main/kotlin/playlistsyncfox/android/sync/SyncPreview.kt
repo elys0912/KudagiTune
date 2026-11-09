@@ -46,6 +46,16 @@ internal sealed interface Reach<out T> {
     class Stopped(val failure: ApiFailure) : Reach<Nothing>
 }
 
+/** 到達確認が開いた接続の入れ物を [block] に渡し、[block] を抜けるときに全部閉じる。 */
+internal suspend fun <T> withOpenedApis(block: suspend (MutableList<SyncApi>) -> T): T {
+    val opened = mutableListOf<SyncApi>()
+    try {
+        return block(opened)
+    } finally {
+        opened.forEach { runCatching { it.close() } }
+    }
+}
+
 /**
  * 到達確認（X6-3 の 2 の 2）。[endpointOrder] の順に、[probe] が成功する接続先を探す。同期本体と画面側が同じ選び方をする。
  * つながった接続先を `last_endpoint` に、NSD で引き直した名が保存と違うときは `endpoint_lan` に保存する。
@@ -147,16 +157,13 @@ class SyncPreview(private val env: SyncEnvironment) {
         if (!env.aliasExists(pairing.keyAlias)) return RemovalCheck.Failed(reachFailed = false)
         val selectedIds = env.store.selectedPlaylists().map { it.playlistId }
 
-        val opened = mutableListOf<SyncApi>()
-        try {
-            return when (val reach = env.reachPc(pairing, opened) { it.digest(selectedIds) }) {
+        return withOpenedApis { opened ->
+            when (val reach = env.reachPc(pairing, opened) { it.digest(selectedIds) }) {
                 is Reach.Connected -> gateOf(pairing, reach.api, selectedIds)
                 // E2、E4、500：届いているので、ほかの接続先は試さない。ワーカーが記録する
                 is Reach.Stopped -> RemovalCheck.Failed(reachFailed = false)
                 is Reach.Unreachable -> RemovalCheck.Failed(reachFailed = !reach.mismatch)
             }
-        } finally {
-            opened.forEach { runCatching { it.close() } }
         }
     }
 
