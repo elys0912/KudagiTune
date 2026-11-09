@@ -109,7 +109,7 @@ sealed interface RemovalCheck {
 
 /**
  * 手動の同期の前に、画面側が P1 と差分で「消す」の確認の要否を得る（X7-1-2 の手順 1〜2）。
- * 接続先は到達確認と同じ順で試し、P3 が通った 1 件で P1 を取る。何も書かない。
+ * 接続先は同期本体と同じ選び方（[reachPc]）で試し、P3 が通った 1 件で P1 を取る。書くのは、つながった接続先の記録だけ。
  */
 class SyncPreview(private val env: SyncEnvironment) {
     suspend fun check(): RemovalCheck {
