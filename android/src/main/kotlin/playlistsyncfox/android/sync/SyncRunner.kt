@@ -10,7 +10,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.db.PlacedTrack
-import playlistsyncfox.android.db.RunIssue
 import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.encodeResult
 import playlistsyncfox.android.net.ApiFailure
@@ -33,9 +32,7 @@ import playlistsyncfox.shared.manifest.ManifestReadResult
 import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.manifest.readManifest
 import playlistsyncfox.shared.path.resolveTrackPaths
-import playlistsyncfox.shared.result.Capacity
 import playlistsyncfox.shared.result.ConnectionFailure
-import playlistsyncfox.shared.result.Counts
 import playlistsyncfox.shared.result.ErrorDetail
 import playlistsyncfox.shared.result.ErrorScope
 import playlistsyncfox.shared.result.FileMissingReason
@@ -43,13 +40,10 @@ import playlistsyncfox.shared.result.KeyMismatchCause
 import playlistsyncfox.shared.result.StoragePhase
 import playlistsyncfox.shared.result.SyncError
 import playlistsyncfox.shared.result.SyncOutcome
-import playlistsyncfox.shared.result.SyncResult
 import playlistsyncfox.shared.result.SyncTrigger
 import playlistsyncfox.shared.result.Transport
 import playlistsyncfox.shared.result.classifyOutcome
-import playlistsyncfox.shared.result.hasMore
 import playlistsyncfox.shared.result.mayRemove
-import playlistsyncfox.shared.result.toUnplayable
 import playlistsyncfox.shared.result.WriteStep
 
 /**
@@ -744,57 +738,30 @@ class SyncRunner(private val env: SyncEnvironment) {
                 libraryChangedKept -> baseLibraryId
                 else -> loaded.libraryId
             }
-            val result = SyncResult(
-                startedAt = isoMillis(startedAt),
-                finishedAt = isoMillis(endedAt),
-                trigger = trigger,
-                transport = transport,
-                outcome = outcome,
-                hasMore = hasMore(outcome, added + replaced, plannedAdd + plannedReplace),
-                counts = Counts(
-                    toAdd = plannedAdd,
-                    toReplace = plannedReplace,
-                    toRemove = finalDiff?.toRemove?.size ?: 0,
-                    unchanged = finalDiff?.unchangedCount ?: 0,
-                    added = added,
-                    replaced = replaced,
-                    removed = removed,
-                    failed = trackErrors.size,
-                ),
-                capacity = Capacity(plannedBytes, bytesTransferred, freeBefore, if (transferStarted && !afterCancel) env.freeBytes() else freeBefore),
-                errors = errors.toList(),
-                excluded = loaded?.excluded.orEmpty(),
-                unplayable = finalDiff?.let { toUnplayable(it.unplayable, it.unsupported) }.orEmpty(),
-                libraryId = libraryId,
-                contentDigest = loaded?.contentDigest,
-                unresolvedPlaylists = loaded?.unresolvedPlaylists?.map { it.lastKnownName }.orEmpty(),
-                duplicatesDropped = duplicatesDropped,
-                removalSkipped = removalSkipped,
-                keyMismatch = keyMismatch.takeIf { errors.any { it is SyncError.KeyMismatch } },
-                errorDetail = errorDetail.takeIf { errors.any { it is SyncError.KeyMismatch } },
-                manifestVersionMismatch = manifestVersionMismatch,
-            )
-
-            val resultText = when {
-                storagePreCheck -> SyncRun.RESULT_NOT_STARTED
-                else -> when (outcome) {
-                    SyncOutcome.Completed -> SyncRun.RESULT_SUCCESS
-                    SyncOutcome.Partial -> SyncRun.RESULT_PARTIAL
-                    SyncOutcome.Interrupted -> SyncRun.RESULT_INTERRUPTED
-                    SyncOutcome.Failed -> SyncRun.RESULT_FAILED
-                }
-            }
-            // 利用者の中断は、先に曲単位の失敗があっても空にする。曲単位の失敗は件数と T6 に残る
-            val errorKind = if (userInterrupted) null else (errors.firstOrNull { it.scope == ErrorScope.Run } ?: errors.firstOrNull())?.let { "E${it.number}" }
-            val finished = current.copy(
-                endedAt = endedAt,
-                result = resultText,
-                errorKind = errorKind,
+            val totals = RunTotals(
+                plannedAdd = plannedAdd,
+                plannedReplace = plannedReplace,
+                plannedBytes = plannedBytes,
                 added = added,
                 replaced = replaced,
                 removed = removed,
                 failed = trackErrors.size,
                 bytesTransferred = bytesTransferred,
+                freeBefore = freeBefore,
+                freeAfter = if (transferStarted && !afterCancel) env.freeBytes() else freeBefore,
+            )
+            val marks = RunMarks(duplicatesDropped, removalSkipped, keyMismatch, errorDetail, manifestVersionMismatch)
+            val result = buildSyncResult(trigger, transport, startedAt, endedAt, outcome, totals, errors, loaded, finalDiff, libraryId, marks)
+            val resultText = resultTextOf(outcome, storagePreCheck)
+            val finished = current.copy(
+                endedAt = endedAt,
+                result = resultText,
+                errorKind = errorKindOf(errors, userInterrupted),
+                added = totals.added,
+                replaced = totals.replaced,
+                removed = totals.removed,
+                failed = totals.failed,
+                bytesTransferred = totals.bytesTransferred,
                 libraryId = libraryId,
                 contentDigest = loaded?.contentDigest,
                 resultJson = encodeResult(result),
@@ -828,42 +795,6 @@ class SyncRunner(private val env: SyncEnvironment) {
             env.onFinished(saved, finalProgress, trigger)
             return saved
         }
-
-        private fun issuesOf(runId: Long, loaded: Manifest?, finalDiff: Diff?, trackErrors: List<SyncError>): List<RunIssue> {
-            val issues = mutableListOf<RunIssue>()
-            loaded?.excluded?.forEach {
-                issues += RunIssue(
-                    runId = runId,
-                    title = it.name ?: "",
-                    artist = it.artist,
-                    reason = it.reason.name.lowercase(),
-                    kind = RunIssue.KIND_EXCLUDED,
-                )
-            }
-            finalDiff?.unplayable?.forEach { issues += unplayableIssue(runId, it, UNPLAYABLE_PROTECTED) }
-            finalDiff?.unsupported?.forEach { issues += unplayableIssue(runId, it, UNPLAYABLE_UNSUPPORTED_FORMAT) }
-            for (error in trackErrors) {
-                val (id, name) = when (error) {
-                    is SyncError.FileMissing -> error.persistentId to error.name
-                    is SyncError.ManifestStale -> error.persistentId to error.name
-                    is SyncError.WriteFailed -> error.persistentId to error.name
-                    else -> continue
-                }
-                issues += RunIssue(runId = runId, persistentId = id, title = name, kind = RunIssue.KIND_FAILED, errorKind = "E${error.number}")
-            }
-            return issues
-        }
-
-        /** T6 の `unplayable` の行。[reason] は `protected` か `unsupported_format`。どちらも転送しない。 */
-        private fun unplayableIssue(runId: Long, track: ManifestTrack, reason: String) = RunIssue(
-            runId = runId,
-            persistentId = track.persistentId,
-            title = track.name ?: track.fileName,
-            artist = track.artist,
-            reason = reason,
-            format = track.kind ?: track.extension,
-            kind = RunIssue.KIND_UNPLAYABLE,
-        )
 
         private fun progressNow(stage: SyncStage, title: String? = null, shortage: Long? = null) = SyncProgress(
             stage = stage,
@@ -905,9 +836,6 @@ class SyncRunner(private val env: SyncEnvironment) {
     }
 
 }
-
-private const val UNPLAYABLE_PROTECTED = "protected"
-private const val UNPLAYABLE_UNSUPPORTED_FORMAT = "unsupported_format"
 
 private fun SyncRun.isAfterRun(other: SyncRun) =
     startedAt > other.startedAt || (startedAt == other.startedAt && runId > other.runId)
