@@ -39,7 +39,7 @@ class DecodeFileUrlTest {
     }
 
     @Test
-    fun `共有名が空のネットワークのパスを復号すると、解決できない接続先になる`() {
+    fun `TS-168 共有名が空のネットワークのパスを復号すると、解決できない接続先になる`() {
         assertEquals(undecodable(LocationFailure.UnresolvableHost), decodeFileUrl("file://nas.example.invalid//a.mp3"))
         assertEquals(undecodable(LocationFailure.UnresolvableHost), decodeFileUrl("file://nas.example.invalid/"))
     }

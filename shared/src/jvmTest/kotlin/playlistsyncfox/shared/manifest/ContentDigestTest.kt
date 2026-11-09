@@ -69,7 +69,7 @@ class ContentDigestTest {
     }
 
     @Test
-    fun `content_hash だけを変えると指紋は変わる`() {
+    fun `TS-162 content_hash だけを変えると指紋は変わる`() {
         val withoutHash = sampleManifest(tracks = listOf(track(idA)))
         val withHash = sampleManifest(tracks = listOf(track(idA).copy(contentHash = "abc")))
         val withOtherHash = sampleManifest(tracks = listOf(track(idA).copy(contentHash = "abd")))

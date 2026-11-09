@@ -106,7 +106,7 @@ class DiffTest {
     }
 
     @Test
-    fun `再生できない形式の曲は再生できる曲と同じく足すに入り unsupported にも入る`() {
+    fun `TS-164 再生できない形式の曲は再生できる曲と同じく足すに入り unsupported にも入る`() {
         val result = diff(listOf(track(a, extension = "m4a"), track(b)), isPlayable = { it.persistentId != a })
 
         assertEquals(listOf(a, b), ids(result.toAdd))
@@ -115,7 +115,7 @@ class DiffTest {
     }
 
     @Test
-    fun `記録と同じ値で端末にある再生できない形式の曲は変更なしに数え unsupported にも入る`() {
+    fun `TS-165 記録と同じ値で端末にある再生できない形式の曲は変更なしに数え unsupported にも入る`() {
         val result = diff(listOf(track(a)), listOf(record(a)), isPlayable = { false })
 
         assertEquals(1, result.unchangedCount)
@@ -124,12 +124,37 @@ class DiffTest {
     }
 
     @Test
-    fun `保護付きの曲は再生できるかを問わず unplayable に入り足すにも unsupported にも入らない`() {
+    fun `TS-164 保護付きの曲は再生できるかを問わず unplayable に入り足すにも unsupported にも入らない`() {
         val result = diff(listOf(track(a, isProtected = true)), isPlayable = { false })
 
         assertEquals(listOf(a), ids(result.unplayable))
         assertTrue(result.toAdd.isEmpty())
         assertTrue(result.unsupported.isEmpty())
+    }
+
+    @Test
+    fun `TS-164 isPlayable を渡さない呼び出しでは全ての曲を再生できる扱いにして unsupported は空になる`() {
+        val result = computeDiff(
+            tracks = listOf(track(a, extension = "m4a"), track(b)),
+            records = emptyList(),
+            presentIds = emptySet(),
+            manifestLibraryId = "L1",
+            recordedLibraryId = "L1",
+            removalConfirmThreshold = V20,
+            unresolvedPlaylists = emptyList(),
+        )
+
+        assertEquals(listOf(a, b), ids(result.toAdd))
+        assertTrue(result.unsupported.isEmpty())
+    }
+
+    @Test
+    fun `TS-165 記録があり size が違う再生できない形式の曲は置き換えに入り unsupported にも入って消すに入らない`() {
+        val result = diff(listOf(track(a, size = 200)), listOf(record(a, size = 100)), isPlayable = { false })
+
+        assertEquals(listOf(a), ids(result.toReplace))
+        assertEquals(listOf(a), ids(result.unsupported))
+        assertTrue(result.toRemove.isEmpty())
     }
 
     @Test

@@ -58,7 +58,7 @@ class TrackPathTest {
     }
 
     @Test
-    fun `TS-50 拡張子が上限ちょうどならそのまま残り 1 バイト超えると上限に切れる`() {
+    fun `TS-163 拡張子が上限ちょうどならそのまま残り 1 バイト超えると上限に切れる`() {
         // 上限は V23 から、代わりの名前 Untitled の 8 バイト、全文の接尾辞の 19 バイト、先頭の点の 1 バイトを引いた値
         val maxExtensionBytes = V23 - 8 - 19 - 1
 
@@ -70,7 +70,7 @@ class TrackPathTest {
     }
 
     @Test
-    fun `TS-50 拡張子が異常に長く曲名が空でも全文の接尾辞を付けた要素は上限以内に収まる`() {
+    fun `TS-163 拡張子が異常に長く曲名が空でも全文の接尾辞を付けた要素は上限以内に収まる`() {
         val parts = candidate(track(a, name = null, extension = "e".repeat(V23 * 2)))
 
         assertTrue(lastSegmentBytes(assemblePath(parts, "")) <= V23)
