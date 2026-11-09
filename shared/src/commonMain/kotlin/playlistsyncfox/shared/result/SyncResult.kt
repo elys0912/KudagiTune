@@ -113,7 +113,7 @@ fun hasMore(outcome: SyncOutcome, completedCount: Int, plannedCount: Int): Boole
 /** E の番号の昇順。 */
 fun breakdown(errors: List<SyncError>): List<BreakdownEntry> =
     errors.groupBy { it.number }.toSortedMap().map { (number, sameNumber) ->
-        BreakdownEntry(number, sameNumber.size, sameNumber.firstNotNullOfOrNull { trackNameOf(it) })
+        BreakdownEntry(number, sameNumber.size, sameNumber.firstNotNullOfOrNull { (it as? TrackError)?.name })
     }
 
 fun toReport(result: SyncResult): SyncReport = SyncReport(
@@ -134,10 +134,3 @@ fun toUnplayable(protected: List<ManifestTrack>, unsupported: List<ManifestTrack
 
 private fun toUnplayableTrack(track: ManifestTrack, reason: UnplayableReason) =
     UnplayableTrack(track.name, track.kind, track.extension, reason)
-
-private fun trackNameOf(error: SyncError): String? = when (error) {
-    is SyncError.FileMissing -> error.name
-    is SyncError.ManifestStale -> error.name
-    is SyncError.WriteFailed -> error.name
-    else -> null
-}
