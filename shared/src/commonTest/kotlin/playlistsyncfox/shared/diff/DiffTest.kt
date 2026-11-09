@@ -106,29 +106,29 @@ class DiffTest {
     }
 
     @Test
-    fun `再生できない形式の曲は転送せず unsupported に入る`() {
-        val alac = track(a, extension = "m4a")
+    fun `再生できない形式の曲は再生できる曲と同じく足すに入り unsupported にも入る`() {
+        val result = diff(listOf(track(a, extension = "m4a"), track(b)), isPlayable = { it.persistentId != a })
 
-        val result = diff(listOf(alac, track(b)), isPlayable = { it.persistentId != a })
-
+        assertEquals(listOf(a, b), ids(result.toAdd))
         assertEquals(listOf(a), ids(result.unsupported))
-        assertEquals(listOf(b), ids(result.toAdd))
         assertTrue(result.unplayable.isEmpty())
     }
 
     @Test
-    fun `記録のある再生できない形式の曲は置き換えにも消すにも入らない`() {
-        val result = diff(listOf(track(a, size = 999)), listOf(record(a, size = 100)), isPlayable = { false })
+    fun `記録と同じ値で端末にある再生できない形式の曲は変更なしに数え unsupported にも入る`() {
+        val result = diff(listOf(track(a)), listOf(record(a)), isPlayable = { false })
 
+        assertEquals(1, result.unchangedCount)
         assertEquals(listOf(a), ids(result.unsupported))
         assertTrue(result.isEmpty())
     }
 
     @Test
-    fun `保護付きの曲は再生できるかを問わず unplayable に入り unsupported には入らない`() {
+    fun `保護付きの曲は再生できるかを問わず unplayable に入り足すにも unsupported にも入らない`() {
         val result = diff(listOf(track(a, isProtected = true)), isPlayable = { false })
 
         assertEquals(listOf(a), ids(result.unplayable))
+        assertTrue(result.toAdd.isEmpty())
         assertTrue(result.unsupported.isEmpty())
     }
 

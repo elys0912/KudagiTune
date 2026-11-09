@@ -19,7 +19,7 @@ data class Diff(
     val toRemove: List<SyncRecord>,
     val unchangedCount: Int,
     val unplayable: List<ManifestTrack>,
-    /** 端末が再生できない形式の曲。転送せず、保護付きの曲と同じに扱う。 */
+    /** 端末が再生できない形式の曲（保護付きを除く）。転送の判定は再生できる曲と同じで、端末に今ある曲も含む。 */
     val unsupported: List<ManifestTrack>,
     val removalGate: RemovalGate,
 ) {
@@ -30,7 +30,7 @@ data class Diff(
  * @param presentIds 置いた場所にファイルが今ある曲の `persistent_id`
  * @param recordedLibraryId 記録済みのライブラリ ID。初回は null
  * @param removalConfirmThreshold 「消す」の確認の閾値（V20）
- * @param isPlayable 端末が再生できる形式の曲か。保護付きでない曲のうち、偽のものは転送せず [Diff.unsupported] に入れる
+ * @param isPlayable 端末が再生できる形式の曲か。保護付きでない曲のうち、偽のものは転送の判定に乗せたうえで [Diff.unsupported] にも入れる
  */
 fun computeDiff(
     tracks: List<ManifestTrack>,
@@ -51,9 +51,11 @@ fun computeDiff(
 
     for (track in tracks.sortedBy { it.persistentId }) {
         val record = recordsById[track.persistentId]
+        val isProtectedTrack = track.isProtected || track.extension == "m4p"
+        if (!isProtectedTrack && !isPlayable(track)) unsupported += track
+
         when {
-            track.isProtected || track.extension == "m4p" -> unplayable += track
-            !isPlayable(track) -> unsupported += track
+            isProtectedTrack -> unplayable += track
             record == null -> toAdd += track
             // ファイルが無いときは、置き換えより先に補充として足す
             track.persistentId !in presentIds -> toAdd += track
@@ -62,7 +64,7 @@ fun computeDiff(
         }
     }
 
-    // 保護付きと再生できない形式も tracks にあるので、消す対象にならない
+    // 保護付きも tracks にあるので、消す対象にならない
     val manifestIds = tracks.mapTo(HashSet()) { it.persistentId }
     val toRemove = records.filter { it.persistentId !in manifestIds }.sortedBy { it.persistentId }
 
