@@ -133,7 +133,7 @@ class ManifestReaderTest {
     }
 
     @Test
-    fun `空文字と JSON でない本文と最上位が配列の本文は壊れたになる`() {
+    fun `TS-180 空文字と JSON でない本文と最上位が配列の本文は壊れたになる`() {
         for (text in listOf("", "not json", "[]")) {
             assertIs<Broken>(read(text), "本文: $text")
         }
@@ -169,7 +169,7 @@ class ManifestReaderTest {
     }
 
     @Test
-    fun `size が Long の範囲を超える曲と track_number が Int の範囲を超える曲は例外を投げず壊れたになる`() {
+    fun `TS-181 size が Long の範囲を超える曲と track_number が Int の範囲を超える曲は例外を投げず壊れたになる`() {
         val base = writeManifest(sampleManifest(listOf(track(idA, size = 4242).copy(trackNumber = 7))))
         val outOfRange = listOf(
             base.replace("\"size\":4242", "\"size\":9223372036854775808"),

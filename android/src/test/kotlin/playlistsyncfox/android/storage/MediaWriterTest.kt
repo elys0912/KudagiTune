@@ -293,7 +293,7 @@ class MediaWriterTest {
     }
 
     @Test
-    fun `m3u8 の行を作れないと書き込みは始まらず失敗を返し T2 にも行を残さない`() = runTest {
+    fun `TA-260 m3u8 の行を作れないと書き込みは始まらず失敗を返し T2 にも行を残さない`() = runTest {
         h.media.failInsert = true
 
         val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
@@ -304,7 +304,7 @@ class MediaWriterTest {
     }
 
     @Test
-    fun `m3u8 を書き込み用に開けないと作った pending の行を消して失敗を返す`() = runTest {
+    fun `TA-260 m3u8 を書き込み用に開けないと作った pending の行を消して失敗を返す`() = runTest {
         h.media.failTruncate = true
 
         val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
@@ -315,7 +315,7 @@ class MediaWriterTest {
     }
 
     @Test
-    fun `m3u8 の書き込み中に容量が尽きると作った pending の行を消して失敗を返す`() = runTest {
+    fun `TA-260 m3u8 の書き込み中に容量が尽きると作った pending の行を消して失敗を返す`() = runTest {
         h.media.diskFullAtTotalBytes = 0
 
         val result = h.writer.writePlaylist(ManifestPlaylist(id(9), "Mix", emptyList()), "Mix.m3u8", "#EXTM3U\n", 0)
@@ -326,7 +326,7 @@ class MediaWriterTest {
     }
 
     @Test
-    fun `m3u8 を書いた後に公開できないと作った pending の行を消して失敗を返し T2 に行を残さない`() = runTest {
+    fun `TA-260 m3u8 を書いた後に公開できないと作った pending の行を消して失敗を返し T2 に行を残さない`() = runTest {
         // 書き込みと公開の間に行が消えた状態（publish が null を返す）
         var createdUri: String? = null
         h.media.onWrite = {
@@ -342,7 +342,7 @@ class MediaWriterTest {
     }
 
     @Test
-    fun `既存の m3u8 を書き直して公開できなくても既存の行は消さず T2 の行も残す`() = runTest {
+    fun `TA-261 既存の m3u8 を書き直して公開できなくても既存の行は消さず T2 の行も残す`() = runTest {
         val uri = h.media.addExisting(ROOT, "Mix.m3u8", playlist = true)
         h.store.playlistRows[id(9)] = playlistRow(id(9), "Mix.m3u8", uri)
         h.media.onWrite = { h.media.entries.remove(it.uri) }
@@ -355,7 +355,7 @@ class MediaWriterTest {
     }
 
     @Test
-    fun `新規の曲の本文が size より長いと E9 の書き込みの失敗で、pending の行と T5 を消す`() = runTest {
+    fun `TA-262 新規の曲の本文が size より長いと E9 の書き込みの失敗で、pending の行と T5 を消す`() = runTest {
         val plan = h.writer.plan(song, PATH, placed = null, replace = false)
 
         val result = h.writer.write(plan, TrackBody(0, ByteSource(bytes(150))))
@@ -367,7 +367,7 @@ class MediaWriterTest {
     }
 
     @Test
-    fun `置き換えの本文が size より長いと失敗を返し、元の行は消さず T1 は replacing のまま残る`() = runTest {
+    fun `TA-262 置き換えの本文が size より長いと失敗を返し、元の行は消さず T1 は replacing のまま残る`() = runTest {
         val uri = h.media.addExisting("${ROOT}Artist/Album/", "Song 1.mp3", bytes = 50)
         val placed = PlacedTrack(DEVICE, song.persistentId, PATH, uri, 50, 0, 50, PlacedTrack.STATE_PLACED, 0)
         h.store.placed[song.persistentId] = placed

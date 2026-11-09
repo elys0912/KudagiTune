@@ -259,12 +259,12 @@ class PlistLibraryReaderTest {
     }
 
     @Test
-    fun `実物の形を写した文書を読むと、Library Persistent ID が大文字で取れる`() {
+    fun `TS-86 実物の形を写した文書を読むと、Library Persistent ID が大文字で取れる`() {
         assertEquals("9F8E7D6C5B4A3921", read(realLibraryDocument()).libraryPersistentId)
     }
 
     @Test
-    fun `実物の形を写した文書を読むと、普通の一覧だけが除外の印なしで残る`() {
+    fun `TS-86 実物の形を写した文書を読むと、普通の一覧だけが除外の印なしで残る`() {
         val result = read(realLibraryDocument())
 
         assertEquals(
@@ -274,31 +274,31 @@ class PlistLibraryReaderTest {
     }
 
     @Test
-    fun `実物の形を写した文書を読むと、NFD のパスは変わらない`() {
+    fun `TS-86 実物の形を写した文書を読むと、NFD のパスは変わらない`() {
         val result = read(realLibraryDocument())
 
         assertEquals(TrackLocation.Found("C:\\Music\\$NFD_NAME.mp3"), result.tracks.first().location)
     }
 
     @Test
-    fun `実物の形を写した文書を読むと、名前の文字参照が戻る`() {
+    fun `TS-86 実物の形を写した文書を読むと、名前の文字参照が戻る`() {
         val result = read(realLibraryDocument())
 
         assertEquals("R & B", result.tracks.single { it.persistentId == ID_B }.name)
     }
 
     @Test
-    fun `実物の形を写した文書を読むと、Application Version が診断に入る`() {
+    fun `TS-86 実物の形を写した文書を読むと、Application Version が診断に入る`() {
         assertEquals("12.13.7.1", read(realLibraryDocument()).diagnostics.applicationVersion)
     }
 
     @Test
-    fun `実物の形を写した文書を読むと、Date が診断に入る`() {
+    fun `TS-86 実物の形を写した文書を読むと、Date が診断に入る`() {
         assertEquals(Instant.parse("2026-11-06T01:02:03Z"), read(realLibraryDocument()).diagnostics.xmlDate)
     }
 
     @Test
-    fun `Folder が真のプレイリストを読むと、Folder の除外の印が付く`() {
+    fun `TS-178 Folder が真のプレイリストを読むと、Folder の除外の印が付く`() {
         val folder = playlist(PLAYLIST_ID, "フォルダ", bool("Folder", true))
 
         val result = read(document(standardTracks, folder))
@@ -307,7 +307,7 @@ class PlistLibraryReaderTest {
     }
 
     @Test
-    fun `除外の条件が重なるプレイリストを読むと、Master、Distinguished Kind、Folder の順に優先して印が付く`() {
+    fun `TS-179 除外の条件が重なるプレイリストを読むと、Master、Distinguished Kind、Folder の順に優先して印が付く`() {
         val allThree = playlist(PLAYLIST_ID, "三つ", bool("Master", true), int("Distinguished Kind", "4"), bool("Folder", true))
         val kindAndFolder = playlist(MASTER_ID, "種別とフォルダ", int("Distinguished Kind", "4"), bool("Folder", true))
 

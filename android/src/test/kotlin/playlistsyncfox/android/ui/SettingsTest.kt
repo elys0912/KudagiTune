@@ -106,7 +106,7 @@ class SettingsPresenterTest {
         }
 
     @Test
-    fun `読み取りの権限の状態で、以前の曲の整理は一覧・許可の要求・拒否のどれかになる`() = runTest {
+    fun `TA-267 読み取りの権限の状態で、以前の曲の整理は一覧・許可の要求・拒否のどれかになる`() = runTest {
         val rig = Rig(backgroundScope)
         rig.media.addExisting("${ROOT}Artist/", "Old Song.mp3")
 

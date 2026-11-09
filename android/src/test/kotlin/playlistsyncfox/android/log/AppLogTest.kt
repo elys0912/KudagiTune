@@ -165,7 +165,7 @@ class AppLogTest {
     }
 
     @Test
-    fun `消去すると全世代が消え、消した旨の 1 行だけが新しい世代に残る`() {
+    fun `TA-258 消去すると全世代が消え、消した旨の 1 行だけが新しい世代に残る`() {
         val dir = tempDir()
         val log = log(dir, maxBytes = 200)
         repeat(40) { log.log(LogLevel.Info, "sync", "メッセージ $it") }

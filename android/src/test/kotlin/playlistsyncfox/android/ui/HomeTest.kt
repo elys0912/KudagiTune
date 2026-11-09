@@ -267,7 +267,7 @@ class StartManualSyncTest {
     private val running = SyncProgress(SyncStage.Transfer)
 
     @Test
-    fun `新しく始めたときは、前回の終了の進捗を消す`() = runTest {
+    fun `TA-264 新しく始めたときは、前回の終了の進捗を消す`() = runTest {
         val progress = MutableStateFlow<SyncProgress?>(finished)
 
         val result = startManualSync(progress) { ManualStart.Started }
@@ -287,7 +287,7 @@ class StartManualSyncTest {
     }
 
     @Test
-    fun `手動が実行中で新しい仕事を作らなかったときも、走っているワーカーの進捗を消さない`() = runTest {
+    fun `TA-133 手動が実行中で新しい仕事を作らなかったときも、走っているワーカーの進捗を消さない`() = runTest {
         val progress = MutableStateFlow<SyncProgress?>(running)
 
         val result = startManualSync(progress) { ManualStart.AlreadyRunning }
@@ -297,7 +297,7 @@ class StartManualSyncTest {
     }
 
     @Test
-    fun `新しいワーカーが先に進捗を出していたら、その進捗は消さない`() = runTest {
+    fun `TA-264 新しいワーカーが先に進捗を出していたら、その進捗は消さない`() = runTest {
         val progress = MutableStateFlow<SyncProgress?>(finished)
 
         startManualSync(progress) {

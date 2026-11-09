@@ -143,7 +143,7 @@ class TrackRowUiTest {
 
 class FormatBytesTest {
     @Test
-    fun `1 KiB 未満は B、1 KiB から KiB、1 MiB から MiB で、小数 1 桁に丸める`() {
+    fun `TA-266 1 KiB 未満は B、1 KiB から KiB、1 MiB から MiB で、小数 1 桁に丸める`() {
         assertEquals("0 B", formatBytes(0))
         assertEquals("1023 B", formatBytes(1023))
         assertEquals("1.0 KiB", formatBytes(1024))
@@ -152,7 +152,7 @@ class FormatBytesTest {
     }
 
     @Test
-    fun `小数 1 桁に丸めて 1024 になる値は、上の単位で出す`() {
+    fun `TA-266 小数 1 桁に丸めて 1024 になる値は、上の単位で出す`() {
         assertEquals("1023.9 KiB", formatBytes(1048524))
         assertEquals("1.0 MiB", formatBytes(1048525))
         assertEquals("1.0 MiB", formatBytes((1L shl 20) - 1))

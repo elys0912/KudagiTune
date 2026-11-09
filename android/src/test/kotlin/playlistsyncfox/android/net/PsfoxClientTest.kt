@@ -345,14 +345,14 @@ class PsfoxClientTest {
     }
 
     @Test
-    fun `P3 の応答の本文を読む途中で取り消すと、サーバーの異常の結果にせず取り消しが伝わる`() = runTest {
+    fun `TA-259 P3 の応答の本文を読む途中で取り消すと、サーバーの異常の結果にせず取り消しが伝わる`() = runTest {
         val result = resultOfCancelledBodyRead(HttpStatusCode.OK) { digest(IDS) }
 
         assertNull(result)
     }
 
     @Test
-    fun `エラー応答の本文を読む途中で取り消すと、鍵の不一致の結果にせず取り消しが伝わる`() = runTest {
+    fun `TA-259 エラー応答の本文を読む途中で取り消すと、鍵の不一致の結果にせず取り消しが伝わる`() = runTest {
         val result = resultOfCancelledBodyRead(HttpStatusCode.Unauthorized) { track("A", 1, 1, rangeFrom = 0) { } }
 
         assertNull(result)

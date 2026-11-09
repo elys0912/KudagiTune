@@ -38,7 +38,7 @@ class PairingServiceTest {
     }
 
     @Test
-    fun `コードは V3 の 1 秒前まで開のままで、V3 ちょうどに閉になって通知される`() {
+    fun `TD-98 コードは V3 の 1 秒前まで開のままで、V3 ちょうどに閉になって通知される`() {
         service.open()
         val open = service.view.value as PairingView.Open
         assertEquals(T0.plusSeconds(AuthValues.CODE_VALID_SECONDS), open.expiresAt)
@@ -56,7 +56,7 @@ class PairingServiceTest {
     }
 
     @Test
-    fun `試行が V2 回失敗すると V4 の間は待ちの状態で、V4 ちょうどに閉に戻る`() {
+    fun `TD-99 試行が V2 回失敗すると V4 の間は待ちの状態で、V4 ちょうどに閉に戻る`() {
         service.open()
         val code = openCode()
 
@@ -73,7 +73,7 @@ class PairingServiceTest {
     }
 
     @Test
-    fun `P5 を受けて途中の間は、直前の開のコードと失敗回数を保ち、通知しない`() {
+    fun `TD-100 P5 を受けて途中の間は、直前の開のコードと失敗回数を保ち、通知しない`() {
         service.open()
         val code = openCode()
         failOnce(code)
@@ -88,7 +88,7 @@ class PairingServiceTest {
     }
 
     @Test
-    fun `途中の間も、開いてから V3 が経てば閉になる`() {
+    fun `TD-101 途中の間も、開いてから V3 が経てば閉になる`() {
         service.open()
         receiveStart(openCode())
 

@@ -592,7 +592,7 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `m3u8 の書き込みに失敗したプレイリストは E9 にして続け、T3 は partial で T6 の failed に残る`() = runTest {
+    fun `TA-263 m3u8 の書き込みに失敗したプレイリストは E9 にして続け、T3 は partial で T6 の failed に残る`() = runTest {
         val h = Harness()
         h.seedPlaced(tracks)
         h.sync(tracks, listOf(ManifestPlaylist(id(50), "Mix", tracks.map { it.persistentId })))

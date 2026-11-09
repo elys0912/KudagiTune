@@ -205,7 +205,7 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `場所の切り替えで停止した世代の要求が、XML の無い短い待ちの後に戻っても、読めない状態にしない`() = runTest {
+    fun `TD-102 場所の切り替えで停止した世代の要求が、XML の無い短い待ちの後に戻っても、読めない状態にしない`() = runTest {
         val holder = holder()
         holder.apply(LoadOutcome.Loaded(emptyLibrary(), T0))
         val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { XML_BYTES }, stable, holder, { null })
@@ -219,7 +219,7 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `場所の切り替えで停止した世代の読み取りが、切り替えの後に終わっても、結果を holder に入れない`() = runTest {
+    fun `TD-103 場所の切り替えで停止した世代の読み取りが、切り替えの後に終わっても、結果を holder に入れない`() = runTest {
         var reads = 0
         val holder = holder()
         lateinit var refresher: LibraryRefresher
@@ -239,7 +239,7 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `停止した XmlWatch への要求は、待たずに戻り、読み直さない`() = runTest {
+    fun `TD-104 停止した XmlWatch への要求は、待たずに戻り、読み直さない`() = runTest {
         val holder = holder()
         val watch = XmlWatch(backgroundScope, xml, holder, { events(null, hang = true) }, log)
         watch.stop()
@@ -356,7 +356,7 @@ class LibraryReloadTest {
     }
 
     @Test
-    fun `XML の場所が相対パスでも、現在のフォルダを基にした絶対パスのフォルダを監視する`() = runTest {
+    fun `TD-105 XML の場所が相対パスでも、現在のフォルダを基にした絶対パスのフォルダを監視する`() = runTest {
         val opened = mutableListOf<Path>()
         val opener = DirectoryEventsOpener { dir ->
             opened += dir

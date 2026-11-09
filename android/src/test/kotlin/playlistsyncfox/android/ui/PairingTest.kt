@@ -125,7 +125,7 @@ class PairingPresenterTest {
     }
 
     @Test
-    fun `失敗の段で やり直す と、直前の接続先の確定に戻り、前の指紋とコードの誤りは残さない`() = runTest {
+    fun `TA-265 失敗の段で やり直す と、直前の接続先の確定に戻り、前の指紋とコードの誤りは残さない`() = runTest {
         val gateway = Gateway { it.emit(PairingEvent.Fingerprint("0a1b")); it.emit(PairingEvent.Failed(noticeOf(ErrorDetail.ClockSkew))) }
         val presenter = targeted(InMemoryStore(), gateway)
         presenter.submitCode("123456")
@@ -141,7 +141,7 @@ class PairingPresenterTest {
     }
 
     @Test
-    fun `接続先を確定する前に やり直す と、発見の段のまま`() = runTest {
+    fun `TA-265 接続先を確定する前に やり直す と、発見の段のまま`() = runTest {
         val presenter = presenter(InMemoryStore(), Gateway { })
 
         presenter.retry()

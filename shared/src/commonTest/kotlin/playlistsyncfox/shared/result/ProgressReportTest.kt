@@ -9,12 +9,12 @@ class ProgressReportTest {
         """{"stage":"transfer","done_tracks":$doneTracks,"total_tracks":$totalTracks,"done_bytes":$doneBytes,"total_bytes":$totalBytes}"""
 
     @Test
-    fun `正しい本文は読める`() {
+    fun `TS-182 正しい本文は読める`() {
         assertEquals(ProgressReport(ProgressStage.Transfer, 1, 3, 100, 300), readProgressReport(body()))
     }
 
     @Test
-    fun `数が Int や Long の範囲を超える本文は例外を投げず null になる`() {
+    fun `TS-183 数が Int や Long の範囲を超える本文は例外を投げず null になる`() {
         val outOfRange = listOf(
             body(doneTracks = "2147483648"),
             body(totalTracks = "-2147483649"),
