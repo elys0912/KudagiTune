@@ -33,6 +33,7 @@ import playlistsyncfox.android.ui.AppViewModel
 import playlistsyncfox.android.ui.DarkColors
 import playlistsyncfox.android.ui.LICENSE_TEXT_DIR
 import playlistsyncfox.android.ui.LightColors
+import playlistsyncfox.android.ui.NOTICE_DIR
 import playlistsyncfox.android.ui.PermissionStep
 import playlistsyncfox.android.ui.Screen
 import playlistsyncfox.android.ui.ScreenActions
@@ -85,9 +86,10 @@ class MainActivity : ComponentActivity() {
             onOpenStorageSettings = { startActivity(Intent(StorageManager.ACTION_MANAGE_STORAGE)) },
             licenses = {
                 // 資産が読めなければ null（「読み込めない」を出す。アプリは止めない）
-                runCatching { assets.open("artifacts.json").bufferedReader().use { it.readText() } }.getOrNull()?.let(::parseLicenses)
+                readAsset("artifacts.json")?.let(::parseLicenses)
             },
-            licenseText = { file -> runCatching { assets.open("$LICENSE_TEXT_DIR/$file").bufferedReader().use { it.readText() } }.getOrNull() },
+            licenseText = { file -> readAsset("$LICENSE_TEXT_DIR/$file") },
+            licenseNotice = { file -> readAsset("$NOTICE_DIR/$file") },
         )
         setContent {
             val screen by model.screen.collectAsState()
@@ -98,6 +100,10 @@ class MainActivity : ComponentActivity() {
             AppScreen(model, actions, ::notificationsAllowed, ::readGranted)
         }
     }
+
+    /** 資産の [path] を文字列で読む。無い・読めないときは null。 */
+    private fun readAsset(path: String): String? =
+        runCatching { assets.open(path).bufferedReader().use { it.readText() } }.getOrNull()
 
     private fun applySystemBars(dark: Boolean) {
         window.setBackgroundDrawable(ColorDrawable((if (dark) DarkColors else LightColors).background.toArgb()))
