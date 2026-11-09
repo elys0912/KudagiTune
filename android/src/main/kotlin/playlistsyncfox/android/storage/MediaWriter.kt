@@ -273,12 +273,15 @@ class MediaWriter(
         }
     }
 
-    /** 以前の曲を一覧する：T1 に無い曲と、T2 に無い m3u8（入れ直し後の古い m3u8 を含む。J32）。 */
+    /**
+     * 以前の曲を一覧する：T1 に無い曲と、T2 に無い m3u8（入れ直し後の古い m3u8 を含む。J32）。
+     * 持ち主では絞らない（X6-2）。入れ直しで持ち主が外れた行も入る。
+     */
     suspend fun leftovers(): List<StoredFile> = withContext(io) {
         // 列挙の URI は `Files` の形で、T1・T2 の URI（`Audio.Media`）と書き方が違う。相対パスで突き合わせる
         val known = store.placedTracks(deviceId).mapTo(HashSet()) { it.relativePath } +
             store.playlists(deviceId).map { it.relativePath }
-        files.listOwned().filter { it.pathUnderRoot(root) !in known }
+        files.listUnderRoot().filter { it.pathUnderRoot(root) !in known }
     }
 
     private suspend fun fresh(plan: WritePlan.Fresh, body: TrackBody): TrackWriteResult {

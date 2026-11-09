@@ -57,8 +57,11 @@ interface MediaStoreFiles {
     /** 自分の pending の m3u8 の URI。 */
     fun ownedPendingPlaylistUris(): List<String>
 
-    /** 自分が持ち主で `Music/<V22>/` の下にある曲と m3u8（pending でないもの）。 */
-    fun listOwned(): List<StoredFile>
+    /**
+     * `Music/<V22>/` の下にある曲と m3u8（pending でないもの）。持ち主で絞らない（X6-2）。
+     * 入れ直しで持ち主が外れた行も入る。消すときに利用者の同意が要る行は、呼び出し側が OS の削除の確認で扱う。
+     */
+    fun listUnderRoot(): List<StoredFile>
 }
 
 /** `Music/<V22>/` を除いた相対パス（フォルダ部分とファイル名をつなげたもの）。 */

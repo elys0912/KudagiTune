@@ -58,13 +58,13 @@ class ResolverMediaStoreFiles(context: Context, volume: String) : MediaStoreFile
         if (resolver.delete(Uri.parse(uri), pendingArgs(MediaStore.MATCH_INCLUDE)) > 0) DeleteOutcome.Deleted else DeleteOutcome.Missing
 
     override fun ownedTrackPaths(): Set<String> =
-        queryOwned(MediaStore.MATCH_INCLUDE).filterNot { it.displayName.endsWith(".m3u8") }
+        queryUnderRoot(MediaStore.MATCH_INCLUDE, ownedOnly = true).filterNot { it.displayName.endsWith(".m3u8") }
             .mapTo(HashSet()) { it.pathUnderRoot(SyncValues.MEDIA_ROOT) }
 
     override fun ownedPendingPlaylistUris(): List<String> =
-        queryOwned(MediaStore.MATCH_ONLY).filter { it.displayName.endsWith(".m3u8") }.map { it.uri }
+        queryUnderRoot(MediaStore.MATCH_ONLY, ownedOnly = true).filter { it.displayName.endsWith(".m3u8") }.map { it.uri }
 
-    override fun listOwned(): List<StoredFile> = queryOwned(MediaStore.MATCH_EXCLUDE)
+    override fun listUnderRoot(): List<StoredFile> = queryUnderRoot(MediaStore.MATCH_EXCLUDE, ownedOnly = false)
 
     private fun insertPending(collection: Uri, displayName: String, mimeType: String, relativePath: String): String? {
         val values = ContentValues().apply {
@@ -80,11 +80,21 @@ class ResolverMediaStoreFiles(context: Context, volume: String) : MediaStoreFile
         }
     }
 
-    /** 持ち主が自分で `Music/<V22>/` の下の行。絞り方（OWNER_PACKAGE_NAME）は実機で確かめる（C-7）。 */
-    private fun queryOwned(pendingMode: Int): List<StoredFile> {
+    /**
+     * `Music/<V22>/` の下の行。[ownedOnly] が真なら持ち主が自分の行だけ（書き込み時の衝突判定と、自分の残りの回収）。
+     * 偽なら持ち主で絞らない（S5 の一覧。X6-2）。絞り方（OWNER_PACKAGE_NAME）は実機で確かめる（C-7）。
+     */
+    private fun queryUnderRoot(pendingMode: Int, ownedOnly: Boolean): List<StoredFile> {
+        val underRoot = "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
+        val rootPattern = "${SyncValues.MEDIA_ROOT}%"
+        val (selection, selectionArgs) = if (ownedOnly) {
+            "$underRoot AND ${MediaStore.MediaColumns.OWNER_PACKAGE_NAME} = ?" to arrayOf(rootPattern, packageName)
+        } else {
+            underRoot to arrayOf(rootPattern)
+        }
         val args = pendingArgs(pendingMode).apply {
-            putString(ContentResolver.QUERY_ARG_SQL_SELECTION, "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ? AND ${MediaStore.MediaColumns.OWNER_PACKAGE_NAME} = ?")
-            putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, arrayOf("${SyncValues.MEDIA_ROOT}%", packageName))
+            putString(ContentResolver.QUERY_ARG_SQL_SELECTION, selection)
+            putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, selectionArgs)
         }
         val found = mutableListOf<StoredFile>()
         resolver.query(filesUri, STORED_COLUMNS, args, null)?.use { cursor ->
