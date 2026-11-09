@@ -16,14 +16,13 @@ import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.manifest.readManifest
 import playlistsyncfox.shared.result.Transport
 
-internal const val LAN = "lan"
-internal const val TAILSCALE = "tailscale"
-internal const val USB = "usb"
-
 /** `last_endpoint` を先頭に、残りは LAN、Tailscale、USB（保存してあるものだけ）。 */
 internal fun endpointOrder(pairing: Pairing): List<String> {
-    val saved = listOf(LAN to pairing.endpointLan, TAILSCALE to pairing.endpointTailscale, USB to pairing.endpointUsb)
-        .filter { it.second != null }.map { it.first }
+    val saved = listOf(
+        PairingKeeper.LAN to pairing.endpointLan,
+        PairingKeeper.TAILSCALE to pairing.endpointTailscale,
+        PairingKeeper.USB to pairing.endpointUsb,
+    ).filter { it.second != null }.map { it.first }
     val last = pairing.lastEndpoint
     return if (last != null && last in saved) listOf(last) + saved.filter { it != last } else saved
 }
@@ -70,7 +69,7 @@ internal suspend fun <T> SyncEnvironment.reachPc(
     var mismatch = false
     for (kind in endpointOrder(saved)) {
         val endpoint = when (kind) {
-            LAN -> {
+            PairingKeeper.LAN -> {
                 val service = resolveLan(saved)
                 if (service != null && service.serviceName != saved.endpointLan) {
                     saved = saved.copy(endpointLan = service.serviceName)
@@ -78,7 +77,7 @@ internal suspend fun <T> SyncEnvironment.reachPc(
                 }
                 service?.let { Endpoint(Transport.Lan, it.host, it.port) }
             }
-            TAILSCALE -> parseHostPort(Transport.Tailscale, saved.endpointTailscale)
+            PairingKeeper.TAILSCALE -> parseHostPort(Transport.Tailscale, saved.endpointTailscale)
             else -> parseHostPort(Transport.UsbTethering, saved.endpointUsb)
         } ?: continue
         val candidate = apis.open(endpoint).also { opened += it }

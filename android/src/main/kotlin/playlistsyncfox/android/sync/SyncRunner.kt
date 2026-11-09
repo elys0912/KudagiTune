@@ -803,9 +803,9 @@ class SyncRunner(private val env: SyncEnvironment) {
         }
 
         private fun transportOf(kind: String?): Transport? = when (kind) {
-            LAN -> Transport.Lan
-            TAILSCALE -> Transport.Tailscale
-            USB -> Transport.UsbTethering
+            PairingKeeper.LAN -> Transport.Lan
+            PairingKeeper.TAILSCALE -> Transport.Tailscale
+            PairingKeeper.USB -> Transport.UsbTethering
             else -> null
         }
 
