@@ -97,7 +97,18 @@ T5 `pending_transfers`：列は B3-4 のとおり。すべて必須。主キー 
 
 T6 `run_issues`（索引：`run_id`）：列は B3-4 のとおり。主キーは連番の `issue_id`（自動採番。J23）。必須は `persistent_id`（ID 無しの除外を入れるため）と `error_kind` だけ「いいえ」。`reason`（除外の理由の細目と、再生できない理由 `protected`・`unsupported_format`）、`artist`、`format`（拡張子）は J23 で B3-4 に足した列で、いずれも「いいえ」。同じ曲に `excluded` と `failed` など 2 種の行が入ってよい。
 
-T7 `app_settings`：主キー `key`、`value` は必須。既知の `key` は `auto_sync_enabled`（`true`／`false`）、`log_enabled`（同）、`device_id`（初回の起動で作る。解除（T4 の削除）で消さない。T1 はこの値で引く。B3-4）。値が無いときの既定は実装で決める（`auto_sync_enabled` は `false`）。。2026-11-07 に `storage_volume`（保存先のボリューム名。無ければ `external_primary`）と `placed_volume`（T1、T2 の行があるボリューム。無ければ `external_primary`）を足した（D16）
+T7 `app_settings`：主キー `key`、`value` は必須。既知の `key` は次のとおり。値が無いときの既定は実装で決める（`auto_sync_enabled` は `false`）。
+
+| `key` | 値 | 意味 |
+|---|---|---|
+| `auto_sync_enabled` | `true`／`false` | 自動の同期の入／切 |
+| `device_id` | 乱数 16 バイトの UUID の形 | 初回のペアリングで作る（P5 の送信の前。起動しただけでは作らない）。解除（T4 の削除）で消さない。T1 はこの値で引く（B3-4） |
+| `storage_volume` | ボリューム名 | 保存先。無ければ `external_primary`（D16） |
+| `placed_volume` | ボリューム名 | T1、T2 の行があるボリューム。無ければ `external_primary`（D16） |
+| `relocating` | `true`／`false` | 保存先の切り替えの取り直しが完了で終わるまで `true`（D16） |
+| `delete_missing_enabled` | `true`／`false` | 「PC に無い曲を端末から消す」。`true` のときだけ ON。無ければ OFF（D19） |
+
+ログの有無の `key` は持たない。ログは常に書く（review-15。X7-5-1）
 
 T8 `selected_playlists`：列は B3-4 のとおり。すべて必須。主キー `playlist_id`。選択の保存は全置き換え（1 取引）。PC が持たない選択の唯一の置き場（D15）。
 
@@ -122,7 +133,7 @@ T9 `relocated_files`：列は B3-4 のとおり。主キー `media_uri`。保存
 - 保存先のボリューム（D16。2026-11-07）：`MediaStoreFiles` の実体はボリューム名を受け取って作る。挿入と問い合わせは `MediaStore.Audio.Media.getContentUri(<ボリューム名>)`、`MediaStore.Files.getContentUri(<ボリューム名>)` を使う。ボリューム名は T7 の `storage_volume`（無ければ `external_primary`）。選んだボリュームが `MediaStore.getExternalVolumeNames` に無いとき、`MediaStoreFiles` を作る側が「保存先が無い」を同期の入口（X6-3 の手順 0）に伝える。削除は URI を直接指すので、別のボリュームの URI も削除できる
 - 切り替え前のファイルの削除（`deleteRelocated`）：T9 の URI を順に削除し、成功か「既に無い」なら T9 の行を消す。`SecurityException`（持ち主が違うなど）の行は残す。消した件数を返す。呼ぶのは S5 の「以前の場所の曲を消す」（確認の後。同期が動いている間は呼ばない）だけで、同期の手順からは呼ばない（2026-11-07）
 
-呼び出しは `ContentResolver` 経由。操作は 1 つのクラス（名前は `MediaWriter`）に集める。入口は次の表。
+呼び出しは `ContentResolver` 経由。操作は 1 つのクラス（名前は `MediaWriter`）に集める。`MediaWriter` は手順と T1・T2・T5 の更新を持つ具象クラスで、OS に触る部分（挿入、開く、読み戻し、削除、問い合わせ）だけを interface `MediaStoreFiles` に分ける。実体は `ContentResolver` を呼び、試験では `MediaStoreFiles` を差し替える（X6-7）。入口は次の表。
 
 | 操作 | 入力 | 出力 | 副作用 |
 |---|---|---|---|
@@ -138,7 +149,7 @@ T9 `relocated_files`：列は B3-4 のとおり。主キー `media_uri`。保存
 2. 空き容量は、同期の前に一括で確かめ済み（X6-3 の 5）。ここでは書き込み中の容量不足（`IOException` のうち空きの不足）を E3 として扱い、pending の行を削除し T5 を消して止める（B2-6）
 3. `MediaStore.Audio.Media` に insert する。`DISPLAY_NAME`、`MIME_TYPE`（拡張子の表から決める。表は X3-3 が持つ）、`RELATIVE_PATH`（`Music/<V22>/<アーティスト>/<アルバム>/`）、`IS_PENDING`＝1。行が作れなければ E9
 4. 返った URI と、`expected_size`、`source_modified`、`started_at`、`received_bytes`＝0 を T5 に保存する
-5. 出力ストリームを開く。再開のときは追記の書き込みモード（`"wa"`）で開き、開けなければ「取り直し」（`"wt"` で `received_bytes`＝0 から）にする。`"wa"` が使えるかは、公式文書に記載が無く、コード上は拒否する箇所を見つけていない。実機で確かめる（未確認。C-12）
+5. 出力ストリームを開く。再開のときは追記の書き込みモード（`"wa"`）で開き、開けなければ「取り直し」にする。取り直しは、pending の行を削除し、T5 を消して、新規に書き直す（手順 3 から。同じ行を `"wt"` で開き直さないので、URI が変わりうる）。`"wa"` が使えるかは、公式文書に記載が無く、コード上は拒否する箇所を見つけていない。実機で確かめる（未確認。C-12）
 6. 入力を、V27 の長さの区切りで読んで書く。1 区切りごとにフラッシュし、`received_bytes` を T5 に更新する。区切りの間に、取り消しの要求（下の X6-3 の「中断と時間の上限」）と容量不足を確かめる
 7. 書き終えたら、書いた量を `expected_size` と比べる。足りないとき、取得元の切断なら E6 とし、pending の行と T5 を残して再開に回す（B2-6）。それ以外の不一致は E9 とし、行を削除して T5 を消す
 8. `IS_PENDING`＝0 に更新し、`DISPLAY_NAME`、`RELATIVE_PATH`、`SIZE`、`DATE_MODIFIED` を読み戻す
@@ -204,7 +215,7 @@ T9 `relocated_files`：列は B3-4 のとおり。主キー `media_uri`。保存
    4. P3 が E2 を返したとき、または全部の接続先が応えず、そのうち 1 つでも証明書の不一致があったとき（J36）は、手動・自動とも T3 に行を追加して E2（`failed`）で閉じて終える。`result_json` に空の件数、`key_mismatch`、`error_detail` を書く（手順 2 の 3 と同じ書き方。手順 10 を通らないため）。閉じた後に `stage`＝`finished`（`outcome`＝`failed`、`error_detail` に E2 の `detail`）を立て、手順 12 の終了の通知を出す（自動は静かな通知。X7-3-2 の 7）。鍵の不一致（`key_mismatch` が真）の自動の E2 の行は (b) の抑止の印なので、「抑止で終えた自動は残さない」規則とは別の扱いとする（`reported`＝0。再送の対象）
    - 4b. P3 が E2 以外の失敗（503＝E4、500）を返したときは、その接続先で止め、次の接続先を試さない。PC には届いているので「届かない」にも抑止にも当たらず、手動・自動とも T3 に行を追加して E4（500 は `error_kind` なし）の `failed` で閉じて終える（書き方は手順 2 の 4 と同じ。`reported`＝0。J45）。閉じた後は `stage`＝`finished` を立て、手順 12 の終了の通知を出す（自動は静かな通知）
    5. P3 が通った後に、`reported`＝0 の T3 の行を `started_at` の昇順で全部、P4 で再送する。1 行の再送は 1 回の同期で 1 度。成功するまで次の同期で試す（B4-4 の 5）。PC は保存済みより古い `startedAt` の報告で `last_sync` を上書きしない（X5-1 への依頼）。失敗しても結果に影響しない
-   6. 自動のとき、P3 の `content_digest` が T3 の最新の完了した行（`content_digest` が NULL でない最新の行）と同じで、その行が `success` なら終える（T3 に残さない）。手動は、この比較ではなく手順 4 の 1 で扱う
+   6. 自動のとき、P3 の `content_digest` が T3 の最新の完了した行（`content_digest` が NULL でない最新の行）と同じで、その行が `success` なら終える（T3 に残さない）。ただし、保存先の切り替えが要る（T7 の `placed_volume` が選んだボリュームと違う）か、前の切り替えが完了していない（`relocating` が `true`）ときは終えない（手順 3b、手順 4 の 1 と同じ。B3-1）。手動は、この比較ではなく手順 4 の 1 で扱う
    7. 自動の抑止で終えないと決まったら、自動は `setForeground` を呼ぶ。抑止で終える自動、届かない自動は前面の通知を出さない（B2-7）。手動は開始直後に呼び済み（入口の表。J46）
 3. T3 に行を追加する（`ended_at` は NULL）。上の抑止で終える自動は追加しない。手順 2 の 3（手動）と 4（手動・自動）で終えるときは、そこで追加している（J10）
 3b. 保存先の切り替え（D16）：T7 の `placed_volume` が `storage_volume`（既定は本体）と違えば、T1 と T2 の行を T9 へ移し、T5 を破棄し（pending の行を削除）、`placed_volume` を新しい値、`relocating` を `true` にする（X6-1 の「保存先の切り替えの記録」。T3 の行を作った後、差分の前）。`relocating` が `true` のままなら（前の切り替えが完了せずに終わった）、切り替えの途中として手順 4 の 1 の省略と手順 9b の対象にする。ここで T1 が空になるので、差分は選択の全曲の「足す」になる
@@ -362,17 +373,17 @@ T9 `relocated_files`：列は B3-4 のとおり。主キー `media_uri`。保存
 |---|---|---|
 | Room の移行 | 薄い統合（端末の実行環境。CI の対象外にしてよい。B1-3） | 旧版のスキーマから新版へ。T1、T5 の行が残る。破壊的再作成を使っていない。版 1 → 2 で T8、T9 が空で作られる |
 | Room の取引 | 同上 | T1 の追加と T5 の削除が 1 取引。T3 の超過分の削除で T6 も消える。T3 の `result_json` の往復と `library_id`・`content_digest` の列、T6 の連番の主キー（同じ曲の別の `reason`、ID 無しの除外）、T4 の `last_endpoint` の更新と、解除で T7 の `device_id` が残ること |
-| 曲の書き込みの手順 | 試験用の差し替えを使う単体 | `MediaWriter` の入口を interface にして試験で差し替え、成功のときの結果の状態（T1 に読み戻した値の行、T5 の行が無い、pending でない）と、失敗の各点（行の作成、サイズ違い、読み戻した相対パスのずれ）の後の状態を確かめる。使用中のパス（T1 と MediaStore の既存パスを `resolveTrackPaths` に渡す結線）は接尾辞つきのパスで書くことを `MediaWriter` の入力で確かめる |
+| 曲の書き込みの手順 | 試験用の差し替えを使う単体 | OS の境界 `MediaStoreFiles`（interface）を試験で差し替え、`MediaWriter` の実物で、成功のときの結果の状態（T1 に読み戻した値の行、T5 の行が無い、pending でない）と、失敗の各点（行の作成、サイズ違い、読み戻した相対パスのずれ）の後の状態を確かめる。使用中のパス（T1 と MediaStore の既存パスを `resolveTrackPaths` に渡す結線）は接尾辞つきのパスで書くことを、`MediaStoreFiles` の挿入の入力（`RELATIVE_PATH`、`DISPLAY_NAME`）で確かめる |
 | 曲を消す | 同上 | 成功と MediaStore に行が既に無いときは T1 の行を消す。`SecurityException` はその曲だけ E9、T1 の行は残る |
 | 再開 | 同上 | 再開の判定表：`source_modified` が違う、T5 に URI が無い、URI が MediaStore に無い（T5 を消して新規）、`expected_size` が違うときは最初から。pending のファイルの大きさが `expected_size` と同じなら取得せず次へ。置き換えは常に最初から。再開の位置は pending のファイルの大きさ（T5 とずれる場合） |
-| ワーカーの手順 | 単体（M1 と HTTP と `MediaWriter` を差し替え） | E1〜E9 の各動作（E6 は行と T5 を残す、E3 の途中は削除。曲単位の E5・E8・E9 は次の曲へ進み、失敗の一覧（T6 の `failed`）に残す）。始めの整理。「消す」の扱い（自動の `Allowed`、確認なし、確認の取り消し、同期全体の失敗の後、`library_id` の違いと承認後の記録の更新）。自動の抑止（V19 は手動の `success`・`partial` の後だけで、失敗した手動の後は抑止しない、鍵の不一致の E2 だけ。`clock_skew`・`replay`・429 は抑止しない、E3、同じ `content_digest`）と、抑止で終えたとき T3 に残らないこと、前面の通知を出さないこと。手動の前面への昇格は開始直後で、自動は抑止の判定の後。手順 2 の 1b、3、4、4b で閉じた行（手動の E1・E2、自動の E2、P3 の 503（E4）・500）は T3 に残り、`finished` と終了の通知が出ること（自動は静かな通知）。差分が空で、前回の完了した同期（`content_digest` が NULL でない最新の行）が `success` かつ同じ `content_digest` なら m3u8 を書かず T3 だけ記録する。`setForeground` が例外のとき（手動・自動とも）`Result.success` で終え T3 に残さない。停止の理由から E7 と利用者の中断を決める関数。E7 と利用者の中断の後の T3（`interrupted`。`error_kind` は E7 か空。T5 を残す。T3 の更新は必須で、m3u8 は時間があれば書く。E7 の通知は「続きは次の同期で」）。M1 の区分と `result` の対応（E なしの停止は `stoppedWithoutE` で「失敗」、転送の後は「中断」、`mayRemove` は偽。区分から T3 の `result` への写しは M4 の手順）と、`not_started` の P4 への畳み（M4。初回の報告と再送）。E8 の終わりのやり直し（取り直しの後に成功か、再び E8 で結果に載る。「消す」の判定と T3 の `content_digest`・`library_id` は取り直した側で決める。取り直した差分の容量の確認、取り直しの P1 の失敗は同期全体の失敗で `content_digest` が NULL） |
+| ワーカーの手順 | 単体（HTTP と `MediaStoreFiles` を差し替え。`MediaWriter` と M1 は実物） | E1〜E9 の各動作（E6 は行と T5 を残す、E3 の途中は削除。曲単位の E5・E8・E9 は次の曲へ進み、失敗の一覧（T6 の `failed`）に残す）。始めの整理。「消す」の扱い（自動の `Allowed`、確認なし、確認の取り消し、同期全体の失敗の後、`library_id` の違いと承認後の記録の更新）。自動の抑止（V19 は手動の `success`・`partial` の後だけで、失敗した手動の後は抑止しない、鍵の不一致の E2 だけ。`clock_skew`・`replay`・429 は抑止しない、E3、同じ `content_digest`）と、抑止で終えたとき T3 に残らないこと、前面の通知を出さないこと。手動の前面への昇格は開始直後で、自動は抑止の判定の後。手順 2 の 1b、3、4、4b で閉じた行（手動の E1・E2、自動の E2、P3 の 503（E4）・500）は T3 に残り、`finished` と終了の通知が出ること（自動は静かな通知）。差分が空で、前回の完了した同期（`content_digest` が NULL でない最新の行）が `success` かつ同じ `content_digest` なら m3u8 を書かず T3 だけ記録する。`setForeground` が例外のとき（手動・自動とも）`Result.success` で終え T3 に残さない。停止の理由から E7 と利用者の中断を決める関数。E7 と利用者の中断の後の T3（`interrupted`。`error_kind` は E7 か空。T5 を残す。T3 の更新は必須で、m3u8 は時間があれば書く。E7 の通知は「続きは次の同期で」）。M1 の区分と `result` の対応（E なしの停止は `stoppedWithoutE` で「失敗」、転送の後は「中断」、`mayRemove` は偽。区分から T3 の `result` への写しは M4 の手順）と、`not_started` の P4 への畳み（M4。初回の報告と再送）。E8 の終わりのやり直し（取り直しの後に成功か、再び E8 で結果に載る。「消す」の判定と T3 の `content_digest`・`library_id` は取り直した側で決める。取り直した差分の容量の確認、取り直しの P1 の失敗は同期全体の失敗で `content_digest` が NULL） |
 | 到達確認 | 単体（HTTP と NSD を差し替え） | 証明書の固定が合わない接続先は「応えない」と同じで次の接続先を試し、全部だめで 1 件でも不一致があれば E2、不一致が無ければ E1（J36）。待ちは NSD の引き直しが V14、接続の確立が V29、P3 の応答が V53（J39、J47）。V29・V53 のどちらの時間切れも「応えない」と同じ。LAN の引き直しは `pc_id` の先頭 8 桁で探し、`pid` の前方一致が合うものだけ採り、見つかった名前が違えば `endpoint_lan` を書き直す。`last_endpoint` を先頭に試す。手動で `reach_failed` が真なら接続を試さず手順 2 の 3（E1）へ進む。Keystore の別名が無ければ P3 を送らず E2（`key_mismatch`＝真）。P3 が E2 以外の失敗（503、500）なら次の接続先を試さず止める |
-| 差分の入力 | 単体（`MediaStore` を差し替え） | `presentIds` は T1 の曲のうち MediaStore に行が今ある曲（pending の行も含める）。端末で消した曲は「足す」に戻る。差分の入力に `state` は渡さない（置き換えの途中の曲は T1 の `size`・`modified_at` が古いままなので「置き換える」になる。X3-2） |
+| 差分の入力 | 単体（`MediaStoreFiles` を差し替え） | `presentIds` は T1 の曲のうち MediaStore に行が今ある曲（pending の行も含める）。端末で消した曲は「足す」に戻る。差分の入力に `state` は渡さない（置き換えの途中の曲は T1 の `size`・`modified_at` が古いままなので「置き換える」になる。X3-2） |
 | 選択が空・保存先が無い | 単体 | 選択が空、または選んだ保存先が無いとき、同期を始めず T3 に残さない。接続も試さない（D15、D16） |
-| 保存先の切り替え | 単体（`MediaStore` を差し替え） | `placed_volume` が `storage_volume` と違えば、T1、T2 が T9 へ移り、差分が全曲の「足す」になる。完了で終えても古い場所のファイルと T9 は残り、`relocating` が `false` になる。S5 の操作で確認の後に T9 のファイルが消え、持ち主が違う行は残り、同期が動いている間は何もしない。容量は新しい場所の空きで判定する |
+| 保存先の切り替え | 単体（`MediaStoreFiles` を差し替え） | `placed_volume` が `storage_volume` と違えば、T1、T2 が T9 へ移り、差分が全曲の「足す」になる。完了で終えても古い場所のファイルと T9 は残り、`relocating` が `false` になる。S5 の操作で確認の後に T9 のファイルが消え、持ち主が違う行は残り、同期が動いている間は何もしない。容量は新しい場所の空きで判定する |
 | 「PC に無い曲を端末から消す」 | 単体 | OFF：`toRemove` があっても消さず、手動の確認が出ず、結果に消さなかった件数が残る。ON：手動は確認の後に消え、確認を断れば消えない |
 | 同期の進捗 | 単体（時刻は引数） | 経過が V17 に達したら `near_limit` が真になる。V17 では同期を区切らない（J33） |
-| 曲ごとの行（`tracks`。D22） | 単体（HTTP と `MediaWriter` を差し替え） | 手順 7 の始めに全部が `waiting`。1 曲の間は `transferring` で `received_bytes` が進み、終わりに `done`、E5・E8・E9 は `failed` と E の番号。E6 で止めたとき残りは `waiting`。`done_bytes` は転送中の分を含み、T3 の `bytes_transferred` は含まない |
+| 曲ごとの行（`tracks`。D22） | 単体（HTTP と `MediaStoreFiles` を差し替え） | 手順 7 の始めに全部が `waiting`。1 曲の間は `transferring` で `received_bytes` が進み、終わりに `done`、E5・E8・E9 は `failed` と E の番号。E6 で止めたとき残りは `waiting`。`done_bytes` は転送中の分を含み、T3 の `bytes_transferred` は含まない |
 | P8 の送信（D22） | 単体（HTTP を差し替え、時刻は引数） | P3 が通るまで送らない。同じ `stage` の更新は V28 に満たなければ送らない。`stage` が変われば間隔を待たず送る。送っている途中は次を送らない。P8 の失敗（切断、400、500）で同期の結果が変わらない。P4 の後は送らない |
 | HTTP クライアント | 単体（偽のサーバー） | SPKI が一致しないと切断。206 の `Content-Range` の不一致、200 への変化、409・416・401・403・429・400・500 の扱い。署名ヘッダの付与と、再開ごとの nonce の更新 |
 | 鍵の保管 | 実機 | Keystore への HMAC の取り込みと署名。別名の削除。別名が無いときの動作（C-12 へ） |
