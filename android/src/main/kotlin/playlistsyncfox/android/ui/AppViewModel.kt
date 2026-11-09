@@ -130,6 +130,8 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     init {
         // 画面の下の知らせは、その画面にいる間だけ出す。移ったら消す
         viewModelScope.launch { screen.drop(1).collect { mutableMessage.value = null } }
+        // S2 を離れたら、どの経路で離れても（通知のタップを含む）PC の発見と接続を止める
+        viewModelScope.launch { screen.collect { if (it != Screen.Pairing) pairing.close() } }
         // S3 の自動の遷移（finished で S4、動いていなければ S1）
         viewModelScope.launch {
             SyncServices.progress.combine(screen) { progress, current -> progress to current }.collect { (progress, current) ->
@@ -145,7 +147,6 @@ class AppViewModel(private val graph: AppGraph) : ViewModel() {
     }
 
     fun back() {
-        if (screen.value == Screen.Pairing) pairing.close()
         mutableScreen.value = when (screen.value) {
             Screen.Log, Screen.Licenses -> Screen.Settings
             else -> Screen.Home
