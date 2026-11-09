@@ -1256,47 +1256,27 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `TA-239 前面への昇格が拒否されて終えたとき進行状態が消える`() = runTest {
-        val h = Harness()
-        h.promoteResult = false
-        h.sync(tracks)
+    fun `TA-239 何もせず終えるどの経路でも進行状態が消える`() = runTest {
+        // 準備は TA-062（昇格の拒否）、TA-035（手動の実行中）、TA-025（内容が同じ）、TA-063（自動の抑止）と同じ
+        val cases = mapOf<String, () -> Harness>(
+            "前面への昇格の拒否" to { Harness().also { it.promoteResult = false } },
+            "手動が実行中か待機中の自動" to { Harness(SyncTrigger.Auto).also { it.manualActive = true } },
+            "内容が前回と同じ自動" to { Harness(SyncTrigger.Auto).also { it.addRun(digest = "digest-1") } },
+            "自動の抑止" to {
+                Harness(SyncTrigger.Auto).also {
+                    it.addRun(trigger = SyncRun.TRIGGER_MANUAL, startedAt = it.clock - 10 * MIN, endedAt = it.clock - 10 * MIN)
+                }
+            },
+        )
 
-        assertNull(h.run())
+        for ((label, prepare) in cases) {
+            val h = prepare()
+            h.sync(tracks)
 
-        assertNull(h.progress.value)
-    }
+            assertNull(h.run(), label)
 
-    @Test
-    fun `TA-239 手動が実行中か待機中の自動が何もせず終えたとき進行状態が消える`() = runTest {
-        val h = Harness(SyncTrigger.Auto)
-        h.sync(tracks)
-        h.manualActive = true
-
-        assertNull(h.run())
-
-        assertNull(h.progress.value)
-    }
-
-    @Test
-    fun `TA-239 内容が前回と同じ自動が何もせず終えたとき進行状態が消える`() = runTest {
-        val h = Harness(SyncTrigger.Auto)
-        h.sync(tracks)
-        h.addRun(digest = "digest-1")
-
-        assertNull(h.run())
-
-        assertNull(h.progress.value)
-    }
-
-    @Test
-    fun `TA-239 自動の抑止で終えたとき進行状態が消える`() = runTest {
-        val h = Harness(SyncTrigger.Auto)
-        h.sync(tracks)
-        h.addRun(trigger = SyncRun.TRIGGER_MANUAL, startedAt = h.clock - 10 * MIN, endedAt = h.clock - 10 * MIN)
-
-        assertNull(h.run())
-
-        assertNull(h.progress.value)
+            assertNull(h.progress.value, label)
+        }
     }
 
     @Test
