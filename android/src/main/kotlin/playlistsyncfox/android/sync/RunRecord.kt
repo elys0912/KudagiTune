@@ -13,6 +13,7 @@ import playlistsyncfox.shared.result.SyncError
 import playlistsyncfox.shared.result.SyncOutcome
 import playlistsyncfox.shared.result.SyncResult
 import playlistsyncfox.shared.result.SyncTrigger
+import playlistsyncfox.shared.result.TrackError
 import playlistsyncfox.shared.result.Transport
 import playlistsyncfox.shared.result.hasMore
 import playlistsyncfox.shared.result.toUnplayable
@@ -118,13 +119,9 @@ internal fun issuesOf(runId: Long, loaded: Manifest?, finalDiff: Diff?, trackErr
     finalDiff?.unplayable?.forEach { issues += unplayableIssue(runId, it, UNPLAYABLE_PROTECTED) }
     finalDiff?.unsupported?.forEach { issues += unplayableIssue(runId, it, UNPLAYABLE_UNSUPPORTED_FORMAT) }
     for (error in trackErrors) {
-        val (id, name) = when (error) {
-            is SyncError.FileMissing -> error.persistentId to error.name
-            is SyncError.ManifestStale -> error.persistentId to error.name
-            is SyncError.WriteFailed -> error.persistentId to error.name
-            else -> continue
-        }
-        issues += RunIssue(runId = runId, persistentId = id, title = name, kind = RunIssue.KIND_FAILED, errorKind = "E${error.number}")
+        if (error !is TrackError) continue
+
+        issues += RunIssue(runId = runId, persistentId = error.persistentId, title = error.name, kind = RunIssue.KIND_FAILED, errorKind = "E${error.number}")
     }
     return issues
 }

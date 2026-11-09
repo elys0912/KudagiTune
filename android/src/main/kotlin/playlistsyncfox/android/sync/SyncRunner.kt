@@ -41,6 +41,7 @@ import playlistsyncfox.shared.result.StoragePhase
 import playlistsyncfox.shared.result.SyncError
 import playlistsyncfox.shared.result.SyncOutcome
 import playlistsyncfox.shared.result.SyncTrigger
+import playlistsyncfox.shared.result.TrackError
 import playlistsyncfox.shared.result.Transport
 import playlistsyncfox.shared.result.classifyOutcome
 import playlistsyncfox.shared.result.mayRemove
@@ -380,7 +381,7 @@ class SyncRunner(private val env: SyncEnvironment) {
             // 取り直した対象の前回の記録（E8、同じ回の E5・E9）は、やり直しの結果で置き換える
             val targets = again.toAdd + again.toReplace
             val targetIds = targets.mapTo(HashSet()) { it.persistentId }
-            errors.removeAll { it is SyncError.ManifestStale || (it.scope == ErrorScope.Track && trackIdOf(it) in targetIds) }
+            errors.removeAll { it is SyncError.ManifestStale || (it is TrackError && it.persistentId in targetIds) }
 
             if (targets.isEmpty()) return
             val shortage = shortageOf(requiredBytes(again), env.freeBytes())
@@ -393,13 +394,6 @@ class SyncRunner(private val env: SyncEnvironment) {
         }
 
         private fun runStopped() = errors.any { it.scope == ErrorScope.Run } || stoppedWithoutE
-
-        private fun trackIdOf(error: SyncError): String? = when (error) {
-            is SyncError.FileMissing -> error.persistentId
-            is SyncError.ManifestStale -> error.persistentId
-            is SyncError.WriteFailed -> error.persistentId
-            else -> null
-        }
 
         /** 差分の「足す」「置き換える」を 1 曲ずつ行う。E8 になった曲の ID を返す（取り直しでは空）。 */
         private suspend fun transferAll(api: SyncApi, target: Diff, placed: List<PlacedTrack>, retried: Boolean): List<String> {
