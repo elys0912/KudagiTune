@@ -63,6 +63,9 @@ private fun newStreamReader(xml: ByteArray): XMLStreamReader {
 
 private class PlistLibraryReader(private val xml: XMLStreamReader) {
     private var malformedEntries = 0
+    private var duplicatePersistentIds = 0
+    private var droppedTrackRefs = 0
+    private val locationFailures = HashMap<LocationFailure, Int>()
     private var libraryPersistentId: String? = null
     private var applicationVersion: String? = null
     private var xmlDate: Instant? = null
@@ -78,6 +81,13 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
         val parentPersistentId: String?,
         val kind: PlaylistKind,
         val trackIds: List<Long>,
+    )
+
+    /** 曲の解決の結果。[refsByTrackId] は、プレイリストの `Track ID` から曲への参照を引く表。 */
+    private class ResolvedTracks(
+        val tracks: List<LibraryTrack>,
+        val unidentifiedTracks: List<UnidentifiedTrack>,
+        val refsByTrackId: Map<String, TrackRef>,
     )
 
     fun read(): LibraryReadResult {
@@ -194,12 +204,32 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
 
     /** `Track ID` を `Persistent ID` に置き換える。文書の最後まで読んだ後でないと対応が揃わない。 */
     private fun resolve(): LibraryReadResult {
+        val resolvedTracks = resolveTracks()
+        val playlists = resolvePlaylists(resolvedTracks.refsByTrackId)
+
+        return LibraryReadResult(
+            libraryPersistentId = libraryPersistentId,
+            tracks = resolvedTracks.tracks,
+            unidentifiedTracks = resolvedTracks.unidentifiedTracks,
+            playlists = playlists,
+            diagnostics = ReadDiagnostics(
+                trackCount = resolvedTracks.tracks.size,
+                playlistCount = playlists.size,
+                droppedTrackRefs = droppedTrackRefs,
+                duplicatePersistentIds = duplicatePersistentIds,
+                malformedEntries = malformedEntries,
+                locationFailures = locationFailures,
+                applicationVersion = applicationVersion,
+                xmlDate = xmlDate,
+            ),
+        )
+    }
+
+    private fun resolveTracks(): ResolvedTracks {
         val tracks = mutableListOf<LibraryTrack>()
         val unidentifiedTracks = mutableListOf<UnidentifiedTrack>()
         val seenPersistentIds = HashSet<String>()
         val refsByTrackId = HashMap<String, TrackRef>()
-        val locationFailures = HashMap<LocationFailure, Int>()
-        var duplicatePersistentIds = 0
 
         for ((trackId, values) in rawTracks) {
             val persistentId = textOrCountMalformed(values["Persistent ID"])?.uppercase()?.takeIf(::isPersistentId)
@@ -220,7 +250,10 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
             tracks += track
         }
 
-        var droppedTrackRefs = 0
+        return ResolvedTracks(tracks, unidentifiedTracks, refsByTrackId)
+    }
+
+    private fun resolvePlaylists(refsByTrackId: Map<String, TrackRef>): List<LibraryPlaylist> {
         val playlists = mutableListOf<LibraryPlaylist>()
         for (raw in rawPlaylists) {
             if (raw.persistentId == null || !isPersistentId(raw.persistentId)) {
@@ -234,23 +267,7 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
             }
             playlists += LibraryPlaylist(raw.persistentId, raw.name ?: "", raw.parentPersistentId, raw.kind, items)
         }
-
-        return LibraryReadResult(
-            libraryPersistentId = libraryPersistentId,
-            tracks = tracks,
-            unidentifiedTracks = unidentifiedTracks,
-            playlists = playlists,
-            diagnostics = ReadDiagnostics(
-                trackCount = tracks.size,
-                playlistCount = playlists.size,
-                droppedTrackRefs = droppedTrackRefs,
-                duplicatePersistentIds = duplicatePersistentIds,
-                malformedEntries = malformedEntries,
-                locationFailures = locationFailures,
-                applicationVersion = applicationVersion,
-                xmlDate = xmlDate,
-            ),
-        )
+        return playlists
     }
 
     private fun buildTrack(persistentId: String, values: Map<String, Value>): LibraryTrack {
