@@ -112,7 +112,8 @@ class LibraryRefresher(
         }
         // 停止済みの scope では本体が走らずに終わるため、本体の finally ではなく完了の通知で待ちを解く
         cycle.invokeOnCompletion {
-            synchronized(lock) { phase = Phase.Idle }
+            // 通知より先に次の周が始まっていたら、その周の phase は書き換えない
+            synchronized(lock) { if (running === done) phase = Phase.Idle }
             done.complete(Unit)
         }
         return done

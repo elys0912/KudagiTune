@@ -775,21 +775,32 @@ class SyncRunner(private val env: SyncEnvironment) {
 
             // 11. P4 で報告する。失敗しても結果に影響しない。報告できなかった行は次回の同期で再送する
             var saved = finished
-            // P8 は P4 の前まで。送っている途中のものも片付ける
-            reporter.close()
-            val client = api
-            if (client != null) {
-                val body = reportBody(finished)
-                val sent = body != null && runCatching { reportWithin(client, body, afterCancel) }
-                    .onFailure { if (it is CancellationException) throw it }
-                    .getOrDefault(false)
-                if (sent) {
-                    saved = finished.copy(reported = 1)
-                    env.store.finishRun(saved)
+            try {
+                // P8 は P4 の前まで。送っている途中のものも片付ける
+                reporter.close()
+                val client = api
+                if (client != null) {
+                    val body = reportBody(finished)
+                    val sent = body != null && runCatching { reportWithin(client, body, afterCancel) }
+                        .onFailure { if (it is CancellationException) throw it }
+                        .getOrDefault(false)
+                    if (sent) {
+                        saved = finished.copy(reported = 1)
+                        env.store.finishRun(saved)
+                    }
                 }
+            } catch (e: CancellationException) {
+                // T3 は閉じ済み。投げ直す前に 12 を行う。行わないと、T3 は結果を持つのに完了と通知が出ない
+                announceFinished(saved, resultText)
+                throw e
             }
 
-            // 12. 終了の通知
+            announceFinished(saved, resultText)
+            return saved
+        }
+
+        /** 12. 終了の通知。進行状態を Finished にし、通知を出す。呼ぶのは 1 回の実行につき 1 度だけ。 */
+        private fun announceFinished(saved: SyncRun, resultText: String) {
             val shortage = errors.filterIsInstance<SyncError.InsufficientStorage>().firstOrNull()?.shortfallBytes
             val finalProgress = progressNow(SyncStage.Finished).copy(
                 outcome = resultText,
@@ -798,7 +809,6 @@ class SyncRunner(private val env: SyncEnvironment) {
             )
             env.progress.value = finalProgress
             env.onFinished(saved, finalProgress, trigger)
-            return saved
         }
 
         private fun progressNow(stage: SyncStage, title: String? = null, shortage: Long? = null) = SyncProgress(

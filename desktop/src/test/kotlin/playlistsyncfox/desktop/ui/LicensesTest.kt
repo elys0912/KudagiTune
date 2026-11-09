@@ -34,7 +34,7 @@ private fun fakeJavaHome(files: Map<String, String>): Path {
 
 class LicensesTest {
     @Test
-    fun 名前の昇順で許諾の名前とURLを並べる() {
+    fun `TD-97 名前の昇順で許諾の名前とURLを並べる`() {
         val json = """[
             {"groupId":"b","artifactId":"b","version":"1","name":"B","spdxLicenses":[{"identifier":"Apache-2.0","name":"Apache License 2.0","url":"https://a"}]},
             {"groupId":"a","artifactId":"a","version":"2","unknownLicenses":[{"name":"X Licence","url":"https://x"}]}
@@ -46,18 +46,18 @@ class LicensesTest {
     }
 
     @Test
-    fun 読めない内容は読み込めないとして扱う() {
+    fun `TD-97 読めない内容は読み込めないとして扱う`() {
         assertNull(parseLicenses("not json"))
     }
 
     @Test
-    fun 配布物の資源にライセンスの一覧が入っている() {
+    fun `TD-97 配布物の資源にライセンスの一覧が入っている`() {
         val entries = loadBundledLicenses()
         assertTrue(!entries.isNullOrEmpty())
     }
 
     @Test
-    fun 全文を同梱している許諾は識別子かURLで見分けて持たない許諾は見分けない() {
+    fun `TD-97 全文を同梱している許諾は識別子かURLで見分けて持たない許諾は見分けない`() {
         val bundled = parseLicenses(SAMPLE_JSON)!!.associate { it.name to it.bundled }
 
         assertEquals(setOf(BundledLicense.Apache2), bundled["A"])
@@ -67,7 +67,7 @@ class LicensesTest {
     }
 
     @Test
-    fun 全文は許諾ごとに1件で持つ部品の名前を添えて最後にJava実行環境を置く() {
+    fun `TD-97 全文は許諾ごとに1件で持つ部品の名前を添えて最後にJava実行環境を置く`() {
         val javaHome = fakeJavaHome(mapOf("java.base/LICENSE" to "GPL"))
 
         val texts = bundledLicenseTexts(parseLicenses(SAMPLE_JSON)!!, javaHome)
@@ -78,7 +78,7 @@ class LicensesTest {
     }
 
     @Test
-    fun 同じ許諾の部品は1件の全文にまとめて名前の昇順で並べる() {
+    fun `TD-97 同じ許諾の部品は1件の全文にまとめて名前の昇順で並べる`() {
         val json = """[
             {"groupId":"z","artifactId":"z","version":"1","name":"Z","spdxLicenses":[{"identifier":"Apache-2.0","name":"Apache License 2.0","url":"https://a"}]},
             {"groupId":"a","artifactId":"a","version":"1","name":"A","spdxLicenses":[{"identifier":"Apache-2.0","name":"Apache License 2.0","url":"https://a"}]}
@@ -91,7 +91,7 @@ class LicensesTest {
     }
 
     @Test
-    fun 配布物の資源に全文が入っている() {
+    fun `TD-97 配布物の資源に全文が入っている`() {
         val texts = bundledLicenseTexts(parseLicenses(SAMPLE_JSON)!!).associate { it.title to it.text }
 
         assertContains(texts.getValue("Apache License 2.0"), "Version 2.0, January 2004")
@@ -100,7 +100,7 @@ class LicensesTest {
     }
 
     @Test
-    fun 許諾の一覧が空でも同梱のJava実行環境の通知は出る() {
+    fun `TD-97 許諾の一覧が空でも同梱のJava実行環境の通知は出る`() {
         val javaHome = fakeJavaHome(mapOf("java.base/ASSEMBLY_EXCEPTION" to "ASSEMBLY EXCEPTION"))
 
         val texts = bundledLicenseTexts(emptyList(), javaHome)
@@ -109,12 +109,12 @@ class LicensesTest {
     }
 
     @Test
-    fun 配布物の資源に依存部品のNOTICEの一覧が入っている() {
+    fun `TD-97 配布物の資源に依存部品のNOTICEの一覧が入っている`() {
         assertNotNull(LicenseEntry::class.java.getResourceAsStream("/dependency-notices/index.txt"))
     }
 
     @Test
-    fun 依存部品のNOTICEは一覧の順に読み同じ本文は1件にまとめて部品の名前を並べる() {
+    fun `TD-97 依存部品のNOTICEは一覧の順に読み同じ本文は1件にまとめて部品の名前を並べる`() {
         val resources = mapOf(
             "/dependency-notices/index.txt" to "a-1.0\nb-2.0\nc-3.0\n",
             "/dependency-notices/a-1.0.txt" to "NOTICE X",
@@ -129,13 +129,13 @@ class LicensesTest {
     }
 
     @Test
-    fun 依存部品のNOTICEが1件も集まっていなければ空を返す() {
+    fun `TD-97 依存部品のNOTICEが1件も集まっていなければ空を返す`() {
         assertTrue(dependencyNotices { if (it.endsWith("index.txt")) "" else null }.isEmpty())
         assertTrue(dependencyNotices { null }.isEmpty())
     }
 
     @Test
-    fun Java実行環境の通知はlegalの下のファイルをmdも含めてモジュールごとに読む() {
+    fun `TD-97 Java実行環境の通知はlegalの下のファイルをmdも含めてモジュールごとに読む`() {
         val javaHome = fakeJavaHome(
             mapOf("java.base/LICENSE" to "GPL", "java.base/aes.md" to "AES notice", "java.desktop/freetype.md" to "FreeType notice"),
         )
@@ -148,7 +148,7 @@ class LicensesTest {
     }
 
     @Test
-    fun 同じ本文のファイルは1件にまとめて持つモジュールの名前を並べる() {
+    fun `TD-97 同じ本文のファイルは1件にまとめて持つモジュールの名前を並べる`() {
         val javaHome = fakeJavaHome(mapOf("java.base/LICENSE" to "GPL", "java.desktop/LICENSE" to "GPL", "java.sql/LICENSE" to "GPL"))
 
         val texts = runtimeLegalTexts(javaHome)
@@ -157,7 +157,7 @@ class LicensesTest {
     }
 
     @Test
-    fun ファイル名が同じでも本文が違えば別の件で出す() {
+    fun `TD-97 ファイル名が同じでも本文が違えば別の件で出す`() {
         val javaHome = fakeJavaHome(mapOf("java.base/icu.md" to "ICU 1", "java.desktop/icu.md" to "ICU 2"))
 
         val texts = runtimeLegalTexts(javaHome)
@@ -167,7 +167,7 @@ class LicensesTest {
     }
 
     @Test
-    fun legalが無いときは読み込めない旨を1件だけ出して落ちない() {
+    fun `TD-97 legalが無いときは読み込めない旨を1件だけ出して落ちない`() {
         val javaHomeWithoutLegal = createTempDirectory("psfox-javahome")
 
         val texts = runtimeLegalTexts(javaHomeWithoutLegal)
@@ -177,7 +177,7 @@ class LicensesTest {
     }
 
     @Test
-    fun legalが空のときも読み込めない旨を1件だけ出す() {
+    fun `TD-97 legalが空のときも読み込めない旨を1件だけ出す`() {
         val javaHome = createTempDirectory("psfox-javahome")
         javaHome.resolve("legal").createDirectories()
 
