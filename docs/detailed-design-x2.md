@@ -351,7 +351,7 @@ X1、X3 への依頼は反映済み。未了は次の表のみ。X6、X7 への�
 | 1g | `Master` は libpytunes に出ない（見つからず）。設計は `Distinguished Kind` で成り立つ。実物では「ライブラリ」1 件に付いた（2026-11-06 の実物の確認） | libpytunes ソース |
 | 1h | `Smart Info` は値の有無だけでスマートプレイリストと判定され、値は解釈されない（一部） | libpytunes ソース |
 | 1i | XML の既定の場所は Apple の文書に無い（見つからず）。iTunes Media フォルダーの初期の場所は「Music\iTunes」で、XML の場所ではない。実物の XML は `%USERPROFILE%\Music\iTunes\iTunes Music Library.xml` にあった（2026-11-06 の実物の確認。ほかの版と OS は未確認） | Apple サポート「iTunes for Windows の詳細設定」 |
-| 1j | 設定名は「Share iTunes Library XML with other applications」（Edit > Preferences > Advanced）。既定の状態は Apple の文書に無い | Apple サポート「Change Advanced preferences in iTunes on PC」 |
+| 1j | 英語版の設定名は「Share iTunes Library XML with other applications」（Edit > Preferences > Advanced）。既定の状態は Apple の文書に無い。日本語名は実物で未確認（PC の案内は日英併記。X5-5。Q16-4） | Apple サポート「Change Advanced preferences in iTunes on PC」 |
 | 2 | `WatchService` は実装依存で、1 回の変更が 1 件にも複数件にもなる。取りこぼしは OVERFLOW で返り、状態の再確認の契機にする。ローカル以外の記憶域での検知は実装依存。ネイティブの機構が無いときは定期確認で代替する（一部。Windows 固有の記述は無い） | Java SE 21 API「WatchService」 |
 
 - 2026-11-06 の実物の確認（B2 の「実物の確認」）で、`Distinguished Kind` の値、`Location` の書式（ネットワーク上のドライブの形を除く）、XML の書き換えの方法（一時ファイルへ書いて改名で置き換える）が分かった

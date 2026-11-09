@@ -73,7 +73,7 @@ desktop ──▶ itunes ──▶ shared ◀── android
 <table>
   <tr><th>方式</th><th>端末がつなぐ先</th><th>発見の仕方</th><th>備考</th></tr>
   <tr><td>同一 LAN の Wi-Fi</td><td>PC の host:port</td><td>mDNS（PC が広告）／NSD（端末が発見）。自動で見つかる</td><td>3 方式とも 1 つの TCP に揃える</td></tr>
-  <tr><td>Tailscale</td><td>PC の host:port</td><td>MagicDNS 名を端末に手入力（PC の画面に表示される）</td><td>外出先からの同期に使う。名前が引けることは確認済み（2026-11-05）</td></tr>
+  <tr><td>Tailscale</td><td>PC の host:port</td><td>Tailscale のアプリで PC の名前を見て、MagicDNS 名を端末に手入力（PC は名前を取得せず、画面にも出さない）</td><td>外出先からの同期に使う。名前が引けることは確認済み（2026-11-05）</td></tr>
   <tr><td>USB テザリング</td><td>PC の host:port</td><td>mDNS で見つかる。見つからなければ PC の画面の IP（例：192.0.2.10）を手入力</td><td>LAN と同じ経路。adb は使わない</td></tr>
 </table>
 
@@ -187,11 +187,14 @@ Music/
   <tr><td class="num">Q6</td><td>同期の自動起動の条件</td><td class="s-decided">決定（D13）</td><td>概要設計</td></tr>
   <tr><td class="num">Q7</td><td>端末側の保存先</td><td class="s-decided">決定</td><td><code>Music/&lt;アプリ名&gt;/&lt;アーティスト&gt;/&lt;アルバム&gt;/</code> と名前の規則（基本設計 B3-1）</td></tr>
   <tr><td class="num">Q8</td><td>複数の端末</td><td class="s-decided">決定（D11）</td><td>概要設計</td></tr>
-  <tr><td class="num">Q9</td><td>複数の PC</td><td class="s-open">未決</td><td>未決のまま。library_id の確認で備える</td></tr>
+  <tr><td class="num">Q9</td><td>複数の PC</td><td class="s-decided">決定</td><td>最初の版は 1 台の PC で確定（2026-11-09 先生）。端末は library_id の確認で別の PC への付け替えを見分け、消す同期を確認なしに進めない</td></tr>
   <tr><td class="num">Q10</td><td>変更の検知</td><td class="s-decided">決定</td><td>サイズと更新日時（実ファイルの値）。ハッシュは使わない（基本設計）</td></tr>
   <tr><td class="num">Q11</td><td>Apple Music アプリのライブラリの読み方</td><td class="s-decided">決定（D1：保留）</td><td>保留のまま（D1、T11）</td></tr>
   <tr><td class="num">Q12</td><td>配布の形</td><td class="s-decided">決定（細部は未決）</td><td>jpackage の zip と署名つき APK を Releases に置く。公開は手動（基本設計）</td></tr>
-  <tr><td class="num">Q13</td><td>MagicDNS 名の取得方法</td><td class="s-open">未決</td><td>実装時に決める。取れないときは Tailscale の管理画面で調べた名前を入力する（説明書）</td></tr>
+  <tr><td class="num">Q13</td><td>MagicDNS 名の取得方法</td><td class="s-decided">決定</td><td>PC は MagicDNS 名を取得しない（2026-11-09 先生）。Tailscale のアプリで PC の名前を見て、端末に入力する（説明書）</td></tr>
+  <tr><td class="num">Q14</td><td>書体の同梱</td><td class="s-decided">決定</td><td>同梱せず OS の既定（2026-11-09 先生）</td></tr>
+  <tr><td class="num">Q15</td><td>ホームの同期ボタンの文言</td><td class="s-decided">決定</td><td>「同期」（2026-11-09 先生）</td></tr>
+  <tr><td class="num">Q16</td><td>設計とコードの食い違い 6 件</td><td class="s-decided">決定</td><td>解除は確認なし、ログのフォルダの項目は置かない、窓は 1 枚、iTunes の設定名は日英併記、等幅と窓の上は OS の既定（2026-11-09 先生）</td></tr>
 </table>
 <p class="meta">実機の確認は basic-design-b4b.md の C-1〜C-17（実装の後）。</p>
 

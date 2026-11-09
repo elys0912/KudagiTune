@@ -1,7 +1,7 @@
 # KudagiTune：iTunes のプレイリストを Android へ同期するツール（概要設計）
 
 - 起票：2026-11-05
-- 状態：概要設計 第 2 稿で区切り（2026-11-05。review-02 まで。実物の確認 1 の結果で D1 を直した）。基本設計 第 2 稿で区切り（2026-11-05。review-04 まで。J7〜J15 は決定済み）。詳細設計 第 2 稿で区切り（2026-11-05。review-06 まで。J16〜J21 は決定済み）。基本設計は詳細設計の差し戻し 19 件を当てて第 3 稿（2026-11-05。requirements の N1-4 も直した）。説明書 3 本（`manual/`）と overview.html を review-08 で区切り（2026-11-05）。設計の 4 段階は完了、次は実装。基本設計 5 本と詳細設計 X1〜X7 は第 5 稿（2026-11-06。review-13 を反映）、テスト計画は第 3 稿（2026-11-06。review-13 を反映）。2026-11-07 に、最初の実機確認を受けた先生の決定 D15〜D18 を全文書へ反映した（プレイリストの選択を端末へ移す、保存先を本体か SD に選ぶ、PC の画面を最小にする、用語「確認コード」）
+- 状態：概要設計 第 2 稿で区切り（2026-11-05。review-02 まで。実物の確認 1 の結果で D1 を直した）。基本設計 第 2 稿で区切り（2026-11-05。review-04 まで。J7〜J15 は決定済み）。詳細設計 第 2 稿で区切り（2026-11-05。review-06 まで。J16〜J21 は決定済み）。基本設計は詳細設計の差し戻し 19 件を当てて第 3 稿（2026-11-05。requirements の N1-4 も直した）。説明書 3 本（`manual/`）と overview.html を review-08 で区切り（2026-11-05）。設計の 4 段階は完了、次は実装。基本設計 5 本と詳細設計 X1〜X7 は第 5 稿（2026-11-06。review-13 を反映）、テスト計画は第 3 稿（2026-11-06。review-13 を反映）。2026-11-07 に、最初の実機確認を受けた先生の決定 D15〜D18 を全文書へ反映した（プレイリストの選択を端末へ移す、保存先を本体か SD に選ぶ、PC の画面を最小にする、用語「確認コード」）。2026-11-09 に review-15（実装との突き合わせ）と、先生の 2 周目の決定（再生できない形式は転送しない、Q9・Q13〜Q16 の決定）を反映した
 - 置き場：この repo の `docs/`（2026-11-05 に portfolio の `notes/ideas/playlist-sync-fox/` から移した）
 - 名前：KudagiTune（正式名。2026-11-09 先生。管狐と itune を重ねた名。Q1）。それまでの仮名は playlist-sync-fox。変えたのは表示名（アプリ名、窓の題、通知、説明書、README、設計書）と GitHub の repo 名で、コードの識別子（`playlistsyncfox`、アプリの ID、`psfox`）は変えない
 - レビューの記録：`reviews/`（概要設計は review-01・02、基本設計は review-03・04、詳細設計は review-05・06、以降は review-13 まで。公式文書の確認の結果は facts-android・facts-jvm。この repo には置かない）
@@ -51,7 +51,7 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 - 形式の変換（ALAC から AAC など）。最初の版はファイルをそのまま送る（D10、Q3）
 - COM の利用。XML だけを入口にする（D1）
 - iTunes 以外のライブラリ。Apple Music アプリ（Windows）は、ライブラリを読む手段が見つかるまで保留（D1、Q11）
-- 複数の PC からの同期（暫定、Q9）
+- 複数の PC からの同期（最初の版は 1 台の PC で確定。Q9）
 - 複数の端末への同期（最初の版。D11）
 
 ## 決定事項
@@ -149,7 +149,7 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 |---|---|
 | [design-overview.md](design-overview.md) | このファイル。動機、範囲、決定事項、用語 |
 | [requirements.md](requirements.md) | 機能要件（F1〜F6）と非機能要件（N1〜N5） |
-| [open-questions.md](open-questions.md) | 論点（Q1〜Q13。Q9・Q13 は未決、Q11 は保留、Q4 は暫定、ほかは決定。Q1 は 2026-11-09 に KudagiTune に決定） |
+| [open-questions.md](open-questions.md) | 論点（Q1〜Q16。Q11 は保留、Q4 は暫定、Q12 は細部が未決、ほかは決定。Q1 は 2026-11-09 に KudagiTune に、Q9・Q13〜Q16 は同日に決定） |
 | [basic-design.md](basic-design.md) | 基本設計 B1（索引、モジュール M、技術、ビルド、値の表 V、決定（未付番）） |
 | [basic-design-b2.md](basic-design-b2.md) | 基本設計 B2（ライブラリの読み取りと同期。エラーの種類 E） |
 | [basic-design-b3.md](basic-design-b3.md) | 基本設計 B3（端末側。表 T、画面 S、権限） |
