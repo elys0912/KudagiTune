@@ -61,6 +61,7 @@ class ScreenActions(
     val onRequestRead: () -> Unit,
     val onDeleteLeftovers: (List<StoredFile>) -> Unit,
     val onShareLog: (String) -> Unit,
+    val onSaveLog: () -> Unit,
     val onOpenStorageSettings: () -> Unit,
     val licenses: () -> List<LicenseEntry>?,
     /** 同梱の全文（[LicenseEntry.textFiles] の 1 件）。読めなければ null。 */
@@ -568,6 +569,7 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     val state by model.settings.collectAsState()
     var confirmUnpair by remember { mutableStateOf(false) }
     var confirmRelocated by remember { mutableStateOf(false) }
+    var confirmSaveLog by remember { mutableStateOf(false) }
     val syncing = isSyncing(SyncServices.progress.collectAsState().value)
     val ui = state
     if (ui == null) {
@@ -616,6 +618,10 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     }
     Label("ログ（${formatBytes(ui.logBytes)}）", bold = true)
     Action("ログを見る", model::openLog)
+    Action("ファイルに保存する") { confirmSaveLog = true }
+    if (confirmSaveLog) {
+        Confirm("ログには曲名が含まれます。ファイルに保存しますか？", "保存する", { confirmSaveLog = false; actions.onSaveLog() }, { confirmSaveLog = false })
+    }
     Action("ライセンス", model::openLicenses)
     Action("ホームへ", model::back)
 }
