@@ -211,6 +211,16 @@ private fun Confirm(text: String, ok: String, onOk: () -> Unit, onCancel: () -> 
     }
 }
 
+/** 押すと確認を出し、「ok」で [onConfirmed] を行うボタン。確認を出しているかは中で持つ。 */
+@Composable
+private fun ConfirmedAction(label: String, prompt: String, ok: String, onConfirmed: () -> Unit) {
+    var asking by remember { mutableStateOf(false) }
+    Action(label) { asking = true }
+    if (asking) {
+        Confirm(prompt, ok, { asking = false; onConfirmed() }, { asking = false })
+    }
+}
+
 @Composable
 private fun Back(model: AppViewModel) = Action("戻る", model::back)
 
@@ -571,9 +581,6 @@ private fun Issues(title: String, list: IssueList) {
 @Composable
 private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     val state by model.settings.state.collectAsState()
-    var confirmUnpair by remember { mutableStateOf(false) }
-    var confirmRelocated by remember { mutableStateOf(false) }
-    var confirmSaveLog by remember { mutableStateOf(false) }
     val syncing by model.syncing.collectAsState()
     val ui = state
     if (ui == null) {
@@ -594,9 +601,15 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     Label("保存先を変更すると、次の同期で新しい保存先へ全曲を転送し直します。前の保存先の曲は自動では削除されません")
     if (ui.relocatedCount > 0) {
         Label("前の保存先に残っている曲とプレイリスト：${ui.relocatedCount} 件")
-        if (syncing) Label("同期中は削除できません") else Action("前の保存先の曲を削除する") { confirmRelocated = true }
-        if (confirmRelocated) {
-            Confirm("前の保存先から、このアプリが保存した ${ui.relocatedCount} 件を削除します。よろしいですか？", "削除する", { confirmRelocated = false; model.settings.deleteRelocated() }, { confirmRelocated = false })
+        if (syncing) {
+            Label("同期中は削除できません")
+        } else {
+            ConfirmedAction(
+                label = "前の保存先の曲を削除する",
+                prompt = "前の保存先から、このアプリが保存した ${ui.relocatedCount} 件を削除します。よろしいですか？",
+                ok = "削除する",
+                onConfirmed = model.settings::deleteRelocated,
+            )
         }
     }
     if (ui.notificationsOff) {
@@ -606,10 +619,12 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     if (ui.pcName != null) {
         Label("ペアリング中の PC：${ui.pcName}", bold = true)
         ui.fingerprint?.let { Label("確認コード：$it") }
-        Action("解除する") { confirmUnpair = true }
-        if (confirmUnpair) {
-            Confirm("ペアリングを解除します。曲とプレイリストは端末に残ります。PC の画面の「端末」でも解除してください", "解除する", { confirmUnpair = false; model.unpair() }, { confirmUnpair = false })
-        }
+        ConfirmedAction(
+            label = "解除する",
+            prompt = "ペアリングを解除します。曲とプレイリストは端末に残ります。PC の画面の「端末」でも解除してください",
+            ok = "解除する",
+            onConfirmed = model::unpair,
+        )
     }
     Label("以前のインストールで保存した曲の整理", bold = true)
     when (val cleanup = ui.cleanup) {
@@ -622,10 +637,12 @@ private fun SettingsScreen(model: AppViewModel, actions: ScreenActions) {
     }
     Label("ログ（${formatBytes(ui.logBytes)}）", bold = true)
     Action("ログを見る", model::openLog)
-    Action("ファイルに保存する") { confirmSaveLog = true }
-    if (confirmSaveLog) {
-        Confirm("ログには曲名が含まれます。ファイルに保存しますか？", "保存する", { confirmSaveLog = false; actions.onSaveLog() }, { confirmSaveLog = false })
-    }
+    ConfirmedAction(
+        label = "ファイルに保存する",
+        prompt = "ログには曲名が含まれます。ファイルに保存しますか？",
+        ok = "保存する",
+        onConfirmed = actions.onSaveLog,
+    )
     Action("ライセンス", model::openLicenses)
     Action("ホームへ", model::back)
 }
