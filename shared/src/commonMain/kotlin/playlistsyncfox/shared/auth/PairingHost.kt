@@ -11,7 +11,10 @@ private const val SCALAR_BYTES = 32
 /** H0〜H2。H3（検証中）は 1 回の呼び出しの中で終わるため値を持たない。 */
 sealed interface PairingState {
     /** H0 閉。[lockedUntil] より前は V4 の待ちで、コードを作れない。 */
-    class Closed(val lockedUntil: Long? = null) : PairingState
+    class Closed(val lockedUntil: Long? = null) : PairingState {
+        /** [now] が [lockedUntil] より前、つまり V4 の待ちの間なら真。 */
+        fun isLockedAt(now: Long): Boolean = lockedUntil != null && now < lockedUntil
+    }
 
     /** H1 開（コード表示中）。[openedAt] は H1 に入った時刻、[failedAttempts] は MAC_d の不一致の回数。 */
     class Open(val code: String, val openedAt: Long, val failedAttempts: Int) : PairingState {
@@ -48,7 +51,7 @@ class PairingStep<out T>(val state: PairingState, val outcome: PairingOutcome<T>
 
 /** コードを作って H1 に入る。V4 の待ちの間は [PairingFailure.Locked]。 */
 fun openPairing(crypto: CryptoProvider, state: PairingState, now: Long): PairingStep<String> {
-    if (state is PairingState.Closed && state.lockedUntil != null && now < state.lockedUntil) {
+    if (state is PairingState.Closed && state.isLockedAt(now)) {
         return PairingStep(state, PairingOutcome.Failed(PairingFailure.Locked))
     }
     val code = generatePairingCode(crypto)
@@ -140,7 +143,7 @@ private fun openOf(state: PairingState): PairingState.Open? = when (state) {
 }
 
 private fun closedFailure(state: PairingState, now: Long): PairingFailure =
-    if (state is PairingState.Closed && state.lockedUntil != null && now < state.lockedUntil) {
+    if (state is PairingState.Closed && state.isLockedAt(now)) {
         PairingFailure.Locked
     } else {
         PairingFailure.Closed
