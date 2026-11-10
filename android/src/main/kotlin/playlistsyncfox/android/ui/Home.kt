@@ -28,10 +28,7 @@ data class HomeUiState(
     val playlists: List<PlaylistRow> = emptyList(),
     /** 選んだプレイリストの数（T8）。0 なら同期ボタンは S6 へ案内する。 */
     val selectedCount: Int = 0,
-) {
-    /** 同期ボタンの遷移先。未ペアリングだけ S2 で、同期中は S3 へ「進み具合を見る」。 */
-    val syncButtonGoesToPairing get() = kind == HomeKind.Unpaired
-}
+)
 
 /** 同期が動いているか。`finished` を過ぎた状態は動いていない。 */
 fun isSyncing(progress: SyncProgress?): Boolean = progress != null && progress.stage != SyncStage.Finished

@@ -31,7 +31,6 @@ import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.readByteArray
 import kotlinx.serialization.KSerializer
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import playlistsyncfox.desktop.DesktopValues
 import playlistsyncfox.desktop.vault.KeyRing
@@ -261,10 +260,13 @@ private fun decodeBase64Url(text: String): ByteArray? = try {
 /** 検査 1 で読んだ本文を文字列にしたもの。 */
 private fun ApplicationCall.bodyText(): String = attributes[BodyKey].decodeToString()
 
-/** 本文を JSON として読む。読めなければ 400 を返して null。本文の中身は応答にもログにも出さない。 */
+/**
+ * 本文を JSON として読む。読めなければ 400 を返して null。本文の中身は応答にもログにも出さない。
+ * `decodeFromString` は JSON の誤りで `SerializationException`、型の値にできないときに `IllegalArgumentException` を投げる。前者は後者の子なので、後者だけを捕まえる。
+ */
 private suspend fun <T> decodeBody(call: ApplicationCall, serializer: KSerializer<T>): T? = try {
     json.decodeFromString(serializer, call.bodyText())
-} catch (_: SerializationException) {
+} catch (_: IllegalArgumentException) {
     call.respond(HttpStatusCode.BadRequest)
     null
 }

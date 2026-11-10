@@ -154,7 +154,7 @@ JSON の中身（暗号化の前）
 5. 証明書の件名は固定の名前にする。人名と PC のホスト名を入れない。SAN は持たない（端末が照合しない。B4-3 の 1）
 6. 作った証明書は一時ファイル経由で置き換える（X5-4 と同じ手順）
 
-- 作成にはブラウザ向けの形式の厳密さが要らない（端末は SPKI のみ照合）。Ktor の `buildKeyStore`（`ktor-network-tls-certificates`。facts-jvm 7b）か Bouncy Castle（X4-1 で依存に入る）で作る。同じ鍵で作り直せる方を実装時に選ぶ（J21 の暫定どおり）
+- 作成にはブラウザ向けの形式の厳密さが要らない（端末は SPKI のみ照合）。Bouncy Castle（X4-1 で依存に入る）の `JcaX509v3CertificateBuilder` で作る（`TlsIdentity.kt` の `loadOrCreateTls`。J21 の暫定の 2 案のうち、Ktor の `buildKeyStore`（facts-jvm 7b）は使っていない）
 
 #### 起動時の読み込み
 

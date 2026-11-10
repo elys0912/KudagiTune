@@ -121,11 +121,16 @@ private fun Harness.completePairing() {
 class FakeRunKey : RunKey {
     val values = HashMap<String, String>()
 
+    /** 入れると、登録と解除がこの例外で失敗する。 */
+    var failure: Exception? = null
+
     override fun set(name: String, data: String) {
+        failure?.let { throw it }
         values[name] = data
     }
 
     override fun delete(name: String) {
+        failure?.let { throw it }
         values.remove(name)
     }
 }
@@ -450,5 +455,19 @@ class PcAppTest {
         runCurrent()
 
         assertTrue(h.runKey.values.isEmpty())
+    }
+
+    @Test
+    fun `TD-90 Run キーの窓口が失敗しても、警告をログに残して起動を続け、切り替えの設定は保存する`() = runTest {
+        val h = harness()
+        h.runKey.failure = IllegalStateException("拒否")
+
+        h.app.start()
+        runCurrent()
+        h.app.setLaunchOnLogin(false)
+
+        assertEquals(1, h.serverStarts)
+        assertFalse(h.app.settings.current.launchOnLogin)
+        assertEquals(2, h.app.logLines.value.count { it.level == LogLevel.Warn && it.module == "autostart" })
     }
 }
