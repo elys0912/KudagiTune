@@ -1102,7 +1102,20 @@ class SyncRunnerTest {
     }
 
     @Test
-    fun `TA-057 MediaStore から消えた曲は足すに戻り置き換えの途中の曲は state を見ず size の違いで置き換える`() = runTest {
+    fun `TA-076 自動でも、基準より新しい強制終了の跡があれば内容が同じでも抑止せず m3u8 を書く`() = runTest {
+        val h = Harness(SyncTrigger.Auto)
+        h.seedPlaced(tracks)
+        h.sync(tracks, listOf(ManifestPlaylist(id(50), "Mix", tracks.map { it.persistentId })))
+        h.addRun(digest = "digest-1", startedAt = h.clock - 500 * MIN)
+        h.addRun(result = SyncRun.RESULT_INTERRUPTED, startedAt = h.clock - 300 * MIN, endedAt = h.clock - 300 * MIN, digest = null)
+
+        h.run()
+
+        assertEquals(1, h.store.playlistRows.size)
+    }
+
+    @Test
+    fun `TA-057MediaStore から消えた曲は足すに戻り置き換えの途中の曲は state を見ず size の違いで置き換える`() = runTest {
         val h = Harness()
         h.seedPlaced(tracks)
         h.media.entries.remove(h.store.placed.getValue(id(2)).mediaUri)

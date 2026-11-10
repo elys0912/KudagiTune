@@ -27,7 +27,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
 import io.ktor.util.AttributeKey
-import io.ktor.utils.io.readRemaining
+import io.ktor.utils.io.readBuffer
 import kotlinx.coroutines.CancellationException
 import kotlinx.io.readByteArray
 import kotlinx.serialization.KSerializer
@@ -171,7 +171,7 @@ private fun parseSignatureHeaders(call: ApplicationCall): ParsedSignatureHeaders
 /** 検査 1〜7（P1〜P4、P7、P8）と、P5・P6 の前段。通ればルートへ進めるため真を返す。 */
 private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean {
     // 1. 本文の大きさ
-    val body = call.receiveChannel().readRemaining(DesktopValues.MAX_BODY_BYTES + 1L).readByteArray()
+    val body = call.receiveChannel().readBuffer(DesktopValues.MAX_BODY_BYTES + 1L).readByteArray()
     if (body.size > DesktopValues.MAX_BODY_BYTES) {
         call.respond(HttpStatusCode.PayloadTooLarge)
         return false
