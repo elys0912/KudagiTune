@@ -1,5 +1,6 @@
 package playlistsyncfox.desktop.discovery
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -32,6 +33,7 @@ private class FakeRegistrar : MdnsRegistrar {
     }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AdvertiserTest {
     @Test
     fun `TD-32 登録する TXT は版と pc_id の先頭 8 桁と pair だけで、名前は psfox- と先頭 8 桁`() {

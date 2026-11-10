@@ -1,6 +1,7 @@
 package playlistsyncfox.desktop
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -135,6 +136,7 @@ class FakeRunKey : RunKey {
     }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class PcAppTest {
     private fun TestScope.harness(store: SecretStore = MemorySecretStore(), addresses: List<InetAddress> = listOf(ADDRESS)) =
         Harness(backgroundScope, store, addresses)

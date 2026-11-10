@@ -1,6 +1,7 @@
 package playlistsyncfox.android.ui
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -21,6 +22,7 @@ private const val LEAF_B = "B000000000000002"
 private const val LEAF_C = "C000000000000003"
 private const val GONE = "D000000000000004"
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SelectionTest {
     private val tree = listOf(
         PlaylistNode(FOLDER, "フォルダ", children = listOf(PlaylistNode(LEAF_A, "A", trackCount = 1), PlaylistNode(LEAF_B, "B", trackCount = 2))),
