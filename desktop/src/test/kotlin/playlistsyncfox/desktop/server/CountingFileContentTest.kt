@@ -1,8 +1,8 @@
 package playlistsyncfox.desktop.server
 
 import io.ktor.http.ContentType
+import io.ktor.utils.io.readBuffer
 import io.ktor.utils.io.readByte
-import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -39,7 +39,7 @@ class CountingFileContentTest {
         assertEquals("track", midway.displayName)
         assertEquals(bytes.size.toLong(), midway.size)
 
-        val rest = channel.readRemaining().readByteArray()
+        val rest = channel.readBuffer().readByteArray()
         assertContentEquals(bytes.copyOfRange(1, bytes.size), rest)
         awaitSending { it.sentBytes == bytes.size.toLong() }
 
@@ -51,7 +51,7 @@ class CountingFileContentTest {
     fun `TD-83 範囲の読み出しは範囲の分だけ返して数える`() = runBlocking {
         val channel = content().readFrom(100L..199L)
 
-        assertContentEquals(bytes.copyOfRange(100, 200), channel.readRemaining().readByteArray())
+        assertContentEquals(bytes.copyOfRange(100, 200), channel.readBuffer().readByteArray())
         assertEquals(100L, awaitSending { it.sentBytes >= 100L }.sentBytes)
     }
 }

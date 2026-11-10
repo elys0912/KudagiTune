@@ -217,8 +217,11 @@ class SyncRunner(private val env: SyncEnvironment) {
             resendReports(connected.api, runs)
 
             if (trigger == SyncTrigger.Auto) {
+                // 基準より新しい強制終了の跡があれば、m3u8 の書き出しの途中だった可能性があるため抑止しない（B2-5）
                 val base = digestBase(runs)
-                if (base != null && matchesCompleted(base, connected.value) && !env.writer.relocationNeeded(env.volume)) {
+                if (base != null && matchesCompleted(base, connected.value) && !env.writer.relocationNeeded(env.volume) &&
+                    runs.none { isCrashTrace(it) && it.isAfter(base) }
+                ) {
                     env.log.line("内容が前回と同じため、何もせず終える")
                     return null
                 }
