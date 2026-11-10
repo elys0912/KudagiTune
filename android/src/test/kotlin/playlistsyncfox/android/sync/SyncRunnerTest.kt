@@ -2,6 +2,7 @@ package playlistsyncfox.android.sync
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -78,6 +79,7 @@ private fun Harness.addRun(
 
 private fun SyncRun.result() = decodeResult(resultJson!!)
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class SyncRunnerTest {
     private val tracks = (1..3).map { track(it) }
 

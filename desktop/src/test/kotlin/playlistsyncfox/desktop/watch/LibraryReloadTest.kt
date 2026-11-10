@@ -1,5 +1,6 @@
 package playlistsyncfox.desktop.watch
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.advanceTimeBy
@@ -28,6 +29,7 @@ import kotlin.test.assertTrue
 
 private val XML_BYTES = EMPTY_LIBRARY_XML.encodeToByteArray()
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class LibraryReloadTest {
     private val dir: Path = createTempDirectory("psfox-watch")
     private val xml: Path = dir.resolve("iTunes Music Library.xml").also { it.writeText(EMPTY_LIBRARY_XML) }
