@@ -93,7 +93,7 @@ abstract class CollectDependencyNotices : DefaultTask() {
     }
 }
 
-val collectDependencyNotices by tasks.registering(CollectDependencyNotices::class) {
+val collectDependencyNotices = tasks.register<CollectDependencyNotices>("collectDependencyNotices") {
     jars.from(configurations.named("runtimeClasspath"))
     outputDirectory.set(layout.buildDirectory.dir("generated/dependency-notices"))
 }

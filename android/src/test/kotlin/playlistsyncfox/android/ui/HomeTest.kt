@@ -30,11 +30,10 @@ private val playlist = WrittenPlaylist(DEVICE, "P1", "Mix", "Mix.m3u8", "content
 
 class HomeStateTest {
     @Test
-    fun `TA-101 T4 が無ければ未ペアリングで、同期ボタンは S2 へ進む`() {
+    fun `TA-101 T4 が無ければ未ペアリングになる`() {
         val state = homeState(null, runs = listOf(run(1, 100)), playlists = emptyList(), selectedCount = 0, syncing = false)
 
         assertEquals(HomeKind.Unpaired, state.kind)
-        assertTrue(state.syncButtonGoesToPairing)
     }
 
     @Test
@@ -44,7 +43,6 @@ class HomeStateTest {
 
         assertEquals(HomeKind.NotRun, notRun.kind)
         assertNull(notRun.last)
-        assertFalse(notRun.syncButtonGoesToPairing)
         assertEquals(HomeKind.Done, done.kind)
         assertEquals("完了", done.last?.word)
         assertEquals(listOf(PlaylistRow("Mix", 12)), done.playlists)

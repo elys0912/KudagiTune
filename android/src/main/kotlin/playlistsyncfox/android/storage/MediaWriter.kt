@@ -111,7 +111,7 @@ class MediaWriter(
     private suspend fun isRelocating() = store.setting(SyncValues.RELOCATING_KEY) == SyncValues.SETTING_ON
 
     /** 取り直しが完了で終わった。 */
-    suspend fun finishRelocation() = withContext(io) { store.putSetting(SyncValues.RELOCATING_KEY, "false") }
+    suspend fun finishRelocation() = withContext(io) { store.putSetting(SyncValues.RELOCATING_KEY, SyncValues.SETTING_OFF) }
 
     private suspend fun placedVolume() = store.setting(SyncValues.PLACED_VOLUME_KEY) ?: SyncValues.VOLUME_PRIMARY
 

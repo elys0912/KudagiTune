@@ -75,6 +75,9 @@ object SyncValues {
     /** T7 の真偽の値を ON と読む文字列（OFF は `false`、行が無いときも OFF）。 */
     const val SETTING_ON = "true"
 
+    /** T7 の真偽の値の OFF を書く文字列。 */
+    const val SETTING_OFF = "false"
+
     /** 本体の MediaStore のボリューム名（`MediaStore.VOLUME_EXTERNAL_PRIMARY`）。 */
     const val VOLUME_PRIMARY = "external_primary"
 
