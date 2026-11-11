@@ -17,8 +17,7 @@ import playlistsyncfox.android.sync.SyncStage
 enum class HomeKind { Unpaired, NotRun, Done, Syncing }
 
 /** 最後の同期。[interruptedTrace] は `ended_at` が NULL の行を「中断」として出すもの（日時は `started_at`）。 */
-/** [transportLabel] は接続した方式の表示語。`result_json` が無い行（強制終了の跡など）は null。 */
-data class LastRun(val run: SyncRun, val word: String, val atMillis: Long, val interruptedTrace: Boolean, val transportLabel: String? = null)
+data class LastRun(val run: SyncRun, val word: String, val atMillis: Long, val interruptedTrace: Boolean)
 
 data class PlaylistRow(val name: String, val trackCount: Int)
 
@@ -27,6 +26,8 @@ data class HomeUiState(
     val pcName: String? = null,
     val endpoint: String? = null,
     val last: LastRun? = null,
+    /** [last] で接続した方式の表示語。PC に届かずに終わった実行や `result_json` が無い行は null（X7-1-2）。 */
+    val lastTransport: String? = null,
     val playlists: List<PlaylistRow> = emptyList(),
     /** 選んだプレイリストの数（T8）。0 なら同期ボタンは S6 へ案内する。 */
     val selectedCount: Int = 0,
@@ -45,7 +46,7 @@ fun latestRun(runs: List<SyncRun>, syncing: Boolean): LastRun? {
     return if (ended == null) {
         LastRun(row, resultWord(SyncRun.RESULT_INTERRUPTED), row.startedAt, interruptedTrace = true)
     } else {
-        LastRun(row, resultWord(row.result), ended, interruptedTrace = false, transportLabel = transportLabelOf(row))
+        LastRun(row, resultWord(row.result), ended, interruptedTrace = false)
     }
 }
 
@@ -60,8 +61,15 @@ fun endpointText(pairing: Pairing): String {
     return value?.takeIf { it.isNotEmpty() } ?: "未接続"
 }
 
+/** 接続に成功する前に止まった実行の E の種別。この実行の `transport` は保存の列の種類で、判定した方式ではない（B4-1 の 3）。 */
+private val NOT_CONNECTED_ERROR_KINDS = setOf("E1", "E2", "E4")
+
 /** `result_json` の `transport` の表示語。JSON は DB から来るため、壊れていれば null。 */
-private fun transportLabelOf(row: SyncRun): String? = row.resultJson?.let { runCatching { transportWord(decodeResult(it).transport) }.getOrNull() }
+private fun transportLabelOf(row: SyncRun): String? {
+    if (row.errorKind in NOT_CONNECTED_ERROR_KINDS) return null
+
+    return row.resultJson?.let { runCatching { transportWord(decodeResult(it).transport) }.getOrNull() }
+}
 
 fun homeState(pairing: Pairing?, runs: List<SyncRun>, playlists: List<WrittenPlaylist>, selectedCount: Int, syncing: Boolean): HomeUiState {
     if (pairing == null) return HomeUiState(HomeKind.Unpaired)
@@ -75,6 +83,7 @@ fun homeState(pairing: Pairing?, runs: List<SyncRun>, playlists: List<WrittenPla
         pcName = pairing.pcName,
         endpoint = endpointText(pairing),
         last = last,
+        lastTransport = last?.takeIf { !it.interruptedTrace }?.let { transportLabelOf(it.run) },
         playlists = playlists.map { PlaylistRow(it.name, it.trackCount) },
         selectedCount = selectedCount,
     )

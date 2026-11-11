@@ -28,7 +28,14 @@ class TransportDetectTest {
     }
 
     @Test
-    fun `TA-268 名前でない宛先、同じ区画が無い、知らない名前なら保存の列の種類のまま`() {
+    fun `TA-268 同じ区画のインターフェースが複数なら prefix の最も長いものを採る`() {
+        val wide = LocalLink("wlan0", ipv4(192, 168, 0, 1), 16)
+
+        assertEquals(Transport.BluetoothTethering, detectTransport("192.168.44.10", Transport.UsbTethering, listOf(wide, bluetooth)))
+    }
+
+    @Test
+    fun `TA-268 IPv4 でない宛先（名前）、同じ区画が無い、知らない名前なら保存の列の種類のまま`() {
         assertEquals(Transport.Tailscale, detectTransport("pc.example.invalid", Transport.Tailscale, listOf(bluetooth)))
         assertEquals(Transport.UsbTethering, detectTransport("172.16.0.1", Transport.UsbTethering, listOf(bluetooth)))
         assertEquals(Transport.UsbTethering, detectTransport("192.168.44.10", Transport.UsbTethering, listOf(LocalLink("tun0", bluetooth.address, 24))))

@@ -117,13 +117,18 @@ class HomeStateTest {
     }
 
     @Test
-    fun `TA-269 前回の同期の行は result_json の方式を表示語で持ち、result_json が無い行は持たない`() {
-        val withResult = run(1, 1000).copy(resultJson = encodeResult(sampleResult(Transport.BluetoothTethering)))
-        val withoutResult = run(2, 2000, endedAt = null)
+    fun `TA-269 前回の同期の方式は result_json の表示語で、result_json が無い行と届かずに終わった行は出さない`() {
+        val json = encodeResult(sampleResult(Transport.BluetoothTethering))
+        val connected = run(1, 1000).copy(resultJson = json)
+        val withoutResult = run(2, 2000)
+        val unreachable = run(3, 3000, result = SyncRun.RESULT_FAILED).copy(resultJson = json, errorKind = "E1")
 
-        assertEquals("Bluetooth テザリング", latestRun(listOf(withResult), syncing = false)!!.transportLabel)
-        assertNull(latestRun(listOf(withoutResult), syncing = false)!!.transportLabel)
+        assertEquals("Bluetooth テザリング", stateOf(connected).lastTransport)
+        assertNull(stateOf(withoutResult).lastTransport)
+        assertNull(stateOf(unreachable).lastTransport)
     }
+
+    private fun stateOf(run: SyncRun) = homeState(pairing(), listOf(run), emptyList(), selectedCount = 0, syncing = false)
 
     @Test
     fun `TA-130 前の行が無く NULL の行だけで同期中なら、行を出さずまだ同期していませんにする`() {

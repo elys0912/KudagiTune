@@ -207,8 +207,8 @@
 | TA-265 | 6 | S2（`PairingPresenter` の「やり直す」。X7-1-2） | 失敗の段からの戻り先 | 失敗の段で「やり直す」。接続先を確定する前に「やり直す」 | 前者は直前の接続先の確定に戻り、前の指紋とコードの誤りは残さない。後者は発見の段のまま（review-15） | 単体 | ○ |
 | TA-266 | 6 | 容量の表示（`formatBytes`。X7） | 単位の境界と丸め | 0、1023、1024（1 KiB）、1 MiB、1 GiB。小数 1 桁に丸めて 1024 になる値（1 MiB の 1 バイト手前） | 1 KiB 未満は B、1 KiB から KiB、1 MiB から MiB。小数 1 桁。丸めて 1024 になる値は上の単位で出し、「1024.0 KiB」と出さない（review-15） | 単体 | ○ |
 | TA-267 | 6 | S5 の以前の場所の曲の整理（`SettingsPresenter`。X7-1-6） | 読み取りの権限の状態で表示が決まる | 読み取りの権限が、ある／求められる／拒否されている。以前の場所に曲が 1 件ある | ある：一覧（曲が出る）。求められる：許可の要求。拒否：拒否の表示（review-15） | 単体 | ○ |
-| TA-268 | 5 | 接続した方式の判定（`detectTransport`。B4-1 の 3） | PC の IPv4 と同じ区画のインターフェースの名前で方式が決まる | `bt-pan`・`rndis0`・`wlan0` の 3 つを持つ端末で、各区画の PC の IPv4。prefixLength の境界（25 で 127 と 128）。名前の宛先、同じ区画が無い、`tun0` | Bluetooth・USB・LAN。境界の 1 ビット違いは別の区画。当たらないときは保存の列の種類のまま（ADR 0014） | 単体 | ○ |
-| TA-269 | 6 | S1 の前回の同期の方式（`LastRun.transportWord`。X7-1-2） | `result_json` の `transport` を表示語で出す | `result_json` が Bluetooth の行、`result_json` が無い行 | 「Bluetooth テザリング」、無し（ADR 0014） | 単体 | ○ |
+| TA-268 | 5 | 接続した方式の判定（`detectTransport`。B4-1 の 3） | PC の IPv4 と同じ区画のインターフェースの名前で方式が決まる | `bt-pan`・`rndis0`・`wlan0` の 3 つを持つ端末で、各区画の PC の IPv4。prefixLength の境界（25 で 127 と 128）。`/16` の `wlan0` と `/24` の `bt-pan` が重なる宛先。名前の宛先、同じ区画が無い、`tun0` | Bluetooth・USB・LAN。境界の 1 ビット違いは別の区画。重なれば prefix の長い `bt-pan`。当たらないときは保存の列の種類のまま（ADR 0014） | 単体 | ○ |
+| TA-269 | 6 | S1 の前回の同期の方式（`HomeUiState.lastTransport`。X7-1-2） | `result_json` の `transport` を表示語で出す。届かずに終わった実行は出さない | `result_json` が Bluetooth の行、`result_json` が無い行、`error_kind` が E1 の行 | 「Bluetooth テザリング」、無し、無し（ADR 0014） | 単体 | ○ |
 
 削った ID：TA-008、TA-019、TA-020、TA-034、TA-123、TA-215（review-13）
 
