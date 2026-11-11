@@ -212,7 +212,7 @@ class SyncRunner(private val env: SyncEnvironment) {
                 is Reach.Stopped -> return closeEarly(stopFor(reach.failure))
             }
             api = connected.api
-            transport = connected.endpoint.transport
+            transport = detectTransport(connected.endpoint.host, connected.endpoint.transport, env.localLinks())
 
             resendReports(connected.api, runs)
 

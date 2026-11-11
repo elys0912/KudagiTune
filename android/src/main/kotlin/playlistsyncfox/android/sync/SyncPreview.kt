@@ -14,6 +14,8 @@ import playlistsyncfox.shared.manifest.Manifest
 import playlistsyncfox.shared.manifest.ManifestReadResult
 import playlistsyncfox.shared.manifest.readManifest
 import playlistsyncfox.shared.result.Transport
+import java.net.Inet4Address
+import java.net.NetworkInterface
 
 /** `last_endpoint` を先頭に、残りは LAN、Tailscale、USB（保存してあるものだけ）。 */
 internal fun endpointOrder(pairing: Pairing): List<String> {
@@ -25,6 +27,57 @@ internal fun endpointOrder(pairing: Pairing): List<String> {
     val last = pairing.lastEndpoint
     return if (last != null && last in saved) listOf(last) + saved.filter { it != last } else saved
 }
+
+/** 端末側の 1 つのインターフェースの IPv4。[address] は 4 バイト。 */
+class LocalLink(val interfaceName: String, val address: ByteArray, val prefixLength: Int)
+
+/** Android のテザリングのインターフェース名の先頭（B4-1 の 3）。実機で確かめる（C-5、C-18）。 */
+private val BLUETOOTH_PREFIXES = listOf("bt")
+private val USB_PREFIXES = listOf("rndis", "usb", "ncm")
+private val WLAN_PREFIXES = listOf("wlan")
+
+/**
+ * 接続した方式の判定（X3-5 の `transport`）。PC の [pcHost] と同じ区画の IPv4 を持つインターフェースの名前で決める。
+ * [pcHost] が IPv4 でない、または同じ区画のインターフェースが無い・名前が知らない形なら [saved]（保存の列の種類）のまま。
+ */
+internal fun detectTransport(pcHost: String, saved: Transport, links: List<LocalLink>): Transport {
+    val pcAddress = parseIpv4(pcHost) ?: return saved
+    val link = links.filter { sameSubnet(it.address, pcAddress, it.prefixLength) }.maxByOrNull { it.prefixLength } ?: return saved
+
+    val name = link.interfaceName
+    return when {
+        BLUETOOTH_PREFIXES.any(name::startsWith) -> Transport.BluetoothTethering
+        USB_PREFIXES.any(name::startsWith) -> Transport.UsbTethering
+        WLAN_PREFIXES.any(name::startsWith) -> Transport.Lan
+        else -> saved
+    }
+}
+
+private fun parseIpv4(host: String): ByteArray? {
+    val parts = host.split('.')
+    if (parts.size != 4) return null
+    val octets = parts.map { it.toIntOrNull()?.takeIf { octet -> octet in 0..255 } ?: return null }
+    return ByteArray(4) { octets[it].toByte() }
+}
+
+private fun sameSubnet(a: ByteArray, b: ByteArray, prefixLength: Int): Boolean {
+    for (bit in 0 until prefixLength) {
+        val mask = 0x80 ushr (bit % 8)
+        if (a[bit / 8].toInt() and mask != b[bit / 8].toInt() and mask) return false
+    }
+    return true
+}
+
+/** 起動中のインターフェースの IPv4 を列挙する。列挙に失敗したら空。 */
+fun listLocalLinks(): List<LocalLink> = runCatching {
+    NetworkInterface.getNetworkInterfaces().toList()
+        .filter { it.isUp && !it.isLoopback }
+        .flatMap { iface ->
+            iface.interfaceAddresses
+                .filter { it.address is Inet4Address }
+                .map { LocalLink(iface.name, it.address.address, it.networkPrefixLength.toInt()) }
+        }
+}.getOrDefault(emptyList())
 
 internal fun parseHostPort(transport: Transport, text: String?): Endpoint? {
     val host = text?.substringBeforeLast(':', "")?.takeIf { it.isNotEmpty() }

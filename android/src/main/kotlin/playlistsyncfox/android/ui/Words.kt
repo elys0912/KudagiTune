@@ -3,6 +3,7 @@ package playlistsyncfox.android.ui
 import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.sync.CatalogResult
 import playlistsyncfox.shared.result.ErrorDetail
+import playlistsyncfox.shared.result.Transport
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -47,6 +48,14 @@ fun resultWord(result: String): String = when (result) {
     SyncRun.RESULT_FAILED -> "失敗"
     SyncRun.RESULT_NOT_STARTED -> "開始できず"
     else -> result
+}
+
+/** `SyncResult` の `transport`（X3-5）の表示語。 */
+fun transportWord(transport: Transport): String = when (transport) {
+    Transport.Lan -> "LAN"
+    Transport.Tailscale -> "Tailscale"
+    Transport.UsbTethering -> "USB テザリング"
+    Transport.BluetoothTethering -> "Bluetooth テザリング"
 }
 
 /** `manual`、`auto` の 2 つだけ（J21）。 */

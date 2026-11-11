@@ -65,6 +65,8 @@ class SyncEnvironment(
     /** 同じプロセスで同時に走るのは 1 つだけ（X6-4）。 */
     val gate: Mutex = ProcessGate,
     val wait: suspend (Long) -> Unit = { delay(it) },
+    /** 端末側のインターフェースの IPv4。接続した方式の判定（[detectTransport]）に使う。 */
+    val localLinks: () -> List<LocalLink> = ::listLocalLinks,
 )
 
 val ProcessGate = Mutex()

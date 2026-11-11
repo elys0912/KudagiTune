@@ -31,7 +31,7 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 ```
 
 - PC がサーバー、端末がクライアント（pull）。端末は同期するときだけ接続して取りに行く（D6）
-- 同一 LAN の Wi-Fi、Tailscale、USB（USB テザリング）の 3 つの接続を、端末が host:port へつなぐ 1 つの TCP に揃える（D7）
+- 同一 LAN の Wi-Fi、Tailscale、USB（USB テザリング）、Bluetooth（Bluetooth テザリング）の 4 つの接続を、端末が host:port へつなぐ 1 つの TCP に揃える（D7）
 - プロトコルの型、差分の計算、m3u8 の生成、ペアリングは共有モジュール（Kotlin Multiplatform）に置き、PC と端末の両方から使う（D4）
 
 ## 範囲
@@ -66,7 +66,7 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 | D4 | 言語 | Kotlin（Java 系）。共有部分は Kotlin Multiplatform で書く | N5 | 2026-11-05 先生 |
 | D5 | 名前と置き場 | 仮名は playlist-sync-fox。設計は portfolio の notes に置き、repo を作るときに docs/ へ移す。正式名は 2026-11-09 に KudagiTune に決まった（Q1） | Q1 | 2026-11-05 先生。2026-11-09 に正式名を決定 |
 | D6 | 役割 | PC がサーバー、端末がクライアント（pull）。端末は同期するときだけ接続する | F2、F3 | 2026-11-05 先生（計画の承認） |
-| D7 | 接続方式 | 同一 LAN の Wi-Fi、Tailscale、USB の 3 方式を、1 つのサーバーへの TCP に揃える。方式ごとの違いは、つなぐ先の決め方だけ。USB は USB テザリング（端末が PC に IP を配る）で同じサーバーへつなぐ。adb の同梱はしない | F2、Q2 | 2026-11-05 先生（計画の承認）。USB の方式は review-01 の J3 |
+| D7 | 接続方式 | 同一 LAN の Wi-Fi、Tailscale、USB、Bluetooth の 4 方式を、1 つのサーバーへの TCP に揃える。方式ごとの違いは、つなぐ先の決め方だけ。USB は USB テザリング（端末が PC に IP を配る）で同じサーバーへつなぐ。adb の同梱はしない。Bluetooth は Bluetooth テザリング（PAN）で USB と同じ形につなぐ。結果に記録する方式は、端末が接続に使ったインターフェースで判定する | F2、Q2、Q17 | 2026-11-05 先生（計画の承認）。USB の方式は review-01 の J3。Bluetooth は 2026-11-11 先生（ADR 0014） |
 | D8 | 認証 | 初回に PC が表示するペアリングコードを端末へ入力し、鍵と PC の証明書を端末が保存する（trust on first use）。LAN の中でも鍵なしでは配信しない | F2、N1、Q5 | 2026-11-05 先生（計画の承認） |
 | D9 | 端末側の削除 | 端末は自分が置いた曲だけを消す。利用者が別に入れた曲には触れない | F4 | 2026-11-05 先生 |
 | D10 | 形式の変換 | 最初の版では行わない。変換を PC 側に置く余地だけ残す | F3、Q3 | 2026-11-05 先生（計画の承認） |
@@ -100,7 +100,7 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 | 同期状態 | 端末が持つ、自分が置いた曲とプレイリストの記録。差分と削除の対象の判定に使う（D9） |
 | ペアリング | 初回に PC と端末が互いを登録する手順。コードの入力と鍵の保存を含む（D8） |
 | ペアリングコード | PC が初回に表示する、利用者が端末へ入力する 6 桁の数字（確認コードとは別。D18） |
-| 接続方式 | 端末が PC へつながる経路。同一 LAN の Wi-Fi、Tailscale、USB の 3 つ（D7） |
+| 接続方式 | 端末が PC へつながる経路。同一 LAN の Wi-Fi、Tailscale、USB、Bluetooth の 4 つ（D7） |
 | サーバー | PC 側で動き、マニフェストと曲を配る部分（D6） |
 | クライアント | 端末側で動き、差分を取りに行く部分（D6） |
 | 共有モジュール | PC と端末の両方から使う、型と計算の部分（D4） |
@@ -119,6 +119,7 @@ Windows（JVM、Kotlin）                          Android（Kotlin）
 | JmDNS | Java で mDNS を扱うライブラリ |
 | NSD | Android の、LAN の中のサービスを見つける仕組み |
 | USB テザリング | 端末が PC に IP を配り、USB で LAN と同じ経路を作る機能。USB 接続の正の方式（D7） |
+| Bluetooth テザリング | 端末が PC に IP を配り、Bluetooth の PAN で LAN と同じ経路を作る機能。Bluetooth 接続の正の方式（D7）。速度は USB より桁で遅い |
 | Tailscale | 機器同士を安全につなぐ VPN の製品。外出先からの同期に使う |
 | MagicDNS | Tailscale が機器に付ける名前を引く仕組み |
 | TLS | 通信を暗号化する仕組み。PC 側は自己署名の証明書を使う |

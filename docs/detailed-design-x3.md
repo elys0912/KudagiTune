@@ -281,7 +281,7 @@
 |---|---|---|
 | `startedAt`、`finishedAt` | 日時 | 端末の時計 |
 | `trigger` | 手動、自動 | 起動の種別 |
-| `transport` | LAN、Tailscale、USB テザリング | 接続の方式 |
+| `transport` | LAN、Tailscale、USB テザリング、Bluetooth テザリング | 接続の方式。端末が、接続に成功した PC の IPv4 と同じ区画の IPv4 を持つインターフェースの名前で判定する（B4-1 の 3。`bt`→Bluetooth、`rndis`・`usb`・`ncm`→USB、`wlan`→LAN、不明なら保存の列の種類） |
 | `outcome` | 完了、一部、中断、失敗 | 下の関数で決める |
 | `hasMore` | 真偽 | 続きあり |
 | `counts` | `Counts`（足す、置き換える、消すの予定と完了、変更なしの件数（1 つ）。項目は下の表） | B2-5 |

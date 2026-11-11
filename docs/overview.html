@@ -69,12 +69,13 @@ desktop ──▶ itunes ──▶ shared ◀── android
    └────────────────────▲
 </pre>
 
-<h2>2. 接続 3 方式</h2>
+<h2>2. 接続 4 方式</h2>
 <table>
   <tr><th>方式</th><th>端末がつなぐ先</th><th>発見の仕方</th><th>備考</th></tr>
-  <tr><td>同一 LAN の Wi-Fi</td><td>PC の host:port</td><td>mDNS（PC が広告）／NSD（端末が発見）。自動で見つかる</td><td>3 方式とも 1 つの TCP に揃える</td></tr>
+  <tr><td>同一 LAN の Wi-Fi</td><td>PC の host:port</td><td>mDNS（PC が広告）／NSD（端末が発見）。自動で見つかる</td><td>4 方式とも 1 つの TCP に揃える</td></tr>
   <tr><td>Tailscale</td><td>PC の host:port</td><td>Tailscale のアプリで PC の名前を見て、MagicDNS 名を端末に手入力（PC は名前を取得せず、画面にも出さない）</td><td>外出先からの同期に使う。名前が引けることは確認済み（2026-11-05）</td></tr>
   <tr><td>USB テザリング</td><td>PC の host:port</td><td>mDNS で見つかる。見つからなければ PC の画面の IP（例：192.0.2.10）を手入力</td><td>LAN と同じ経路。adb は使わない</td></tr>
+  <tr><td>Bluetooth テザリング</td><td>PC の host:port</td><td>USB テザリングと同じ（PC を端末の PAN に参加させる）</td><td>LAN と同じ経路。転送は遅い（ADR 0014）</td></tr>
 </table>
 
 <h2>3. ペアリングの流れ</h2>
@@ -165,7 +166,7 @@ Music/
   <tr><td class="num">D4</td><td>言語</td><td>Kotlin。共有部分は Kotlin Multiplatform</td></tr>
   <tr><td class="num">D5</td><td>名前と置き場</td><td>仮名は playlist-sync-fox（正式名は 2026-11-09 に KudagiTune に決定）。設計は portfolio の notes、repo 作成時に docs/ へ移す</td></tr>
   <tr><td class="num">D6</td><td>役割</td><td>PC がサーバー、端末がクライアント（pull）。同期するときだけ接続する</td></tr>
-  <tr><td class="num">D7</td><td>接続方式</td><td>LAN の Wi-Fi、Tailscale、USB の 3 方式を 1 つのサーバーへの TCP に揃える。USB は USB テザリング。adb は同梱しない</td></tr>
+  <tr><td class="num">D7</td><td>接続方式</td><td>LAN の Wi-Fi、Tailscale、USB、Bluetooth の 4 方式を 1 つのサーバーへの TCP に揃える。USB は USB テザリング、Bluetooth は Bluetooth テザリング（PAN）。adb は同梱しない</td></tr>
   <tr><td class="num">D8</td><td>認証</td><td>初回に PC が出すペアリングコードを端末へ入力。鍵と PC の証明書を端末が保存（trust on first use）。LAN の中でも鍵なしでは配信しない</td></tr>
   <tr><td class="num">D9</td><td>端末側の削除</td><td>自分が置いた曲だけを消す。利用者が別に入れた曲には触れない</td></tr>
   <tr><td class="num">D10</td><td>形式の変換</td><td>最初の版では行わない。変換を PC 側に置く余地だけ残す</td></tr>
@@ -204,7 +205,7 @@ Music/
   <tr><td class="num">Q15</td><td>ホームの同期ボタンの文言</td><td class="s-decided">決定</td><td>「同期」（2026-11-09 先生）</td></tr>
   <tr><td class="num">Q16</td><td>設計とコードの食い違い 6 件</td><td class="s-decided">決定</td><td>解除は確認なし、ログのフォルダの項目は置かない、窓は 1 枚、iTunes の設定名は日英併記、等幅と窓の上は OS の既定（2026-11-09 先生）</td></tr>
 </table>
-<p class="meta">実機の確認は basic-design-b4b.md の C-1〜C-17（実装の後）。</p>
+<p class="meta">実機の確認は basic-design-b4b.md の C-1〜C-18（実装の後）。</p>
 
 </main>
 </body>
