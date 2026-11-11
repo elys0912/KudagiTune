@@ -31,7 +31,7 @@ internal fun endpointOrder(pairing: Pairing): List<String> {
 /** 端末側の 1 つのインターフェースの IPv4。[address] は 4 バイト。 */
 class LocalLink(val interfaceName: String, val address: ByteArray, val prefixLength: Int)
 
-/** Android のテザリングのインターフェース名の先頭（B4-1 の 3）。実機で確かめる（C-5、C-17）。 */
+/** Android のテザリングのインターフェース名の先頭（B4-1 の 3）。実機で確かめる（C-5、C-18）。 */
 private val BLUETOOTH_PREFIXES = listOf("bt")
 private val USB_PREFIXES = listOf("rndis", "usb", "ncm")
 private val WLAN_PREFIXES = listOf("wlan")
@@ -42,7 +42,7 @@ private val WLAN_PREFIXES = listOf("wlan")
  */
 internal fun detectTransport(pcHost: String, saved: Transport, links: List<LocalLink>): Transport {
     val pcAddress = parseIpv4(pcHost) ?: return saved
-    val link = links.firstOrNull { sameSubnet(it.address, pcAddress, it.prefixLength) } ?: return saved
+    val link = links.filter { sameSubnet(it.address, pcAddress, it.prefixLength) }.maxByOrNull { it.prefixLength } ?: return saved
 
     val name = link.interfaceName
     return when {
@@ -61,8 +61,7 @@ private fun parseIpv4(host: String): ByteArray? {
 }
 
 private fun sameSubnet(a: ByteArray, b: ByteArray, prefixLength: Int): Boolean {
-    val bits = prefixLength.coerceIn(0, 32)
-    for (bit in 0 until bits) {
+    for (bit in 0 until prefixLength) {
         val mask = 0x80 ushr (bit % 8)
         if (a[bit / 8].toInt() and mask != b[bit / 8].toInt() and mask) return false
     }
@@ -137,8 +136,7 @@ internal suspend fun <T> SyncEnvironment.reachPc(
         when (val result = probe(candidate)) {
             is ApiResult.Ok -> {
                 if (saved.lastEndpoint != kind) store.updatePairing(saved.copy(lastEndpoint = kind))
-                val detected = endpoint.copy(transport = detectTransport(endpoint.host, endpoint.transport, localLinks()))
-                return Reach.Connected(candidate, detected, result.value)
+                return Reach.Connected(candidate, endpoint, result.value)
             }
             is ApiResult.Fail -> when (val failure = result.failure) {
                 ApiFailure.Disconnected -> log.line("$kind は応えない")

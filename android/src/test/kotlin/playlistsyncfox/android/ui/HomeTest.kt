@@ -121,8 +121,8 @@ class HomeStateTest {
         val withResult = run(1, 1000).copy(resultJson = encodeResult(sampleResult(Transport.BluetoothTethering)))
         val withoutResult = run(2, 2000, endedAt = null)
 
-        assertEquals("Bluetooth テザリング", latestRun(listOf(withResult), syncing = false)!!.transportWord)
-        assertNull(latestRun(listOf(withoutResult), syncing = false)!!.transportWord)
+        assertEquals("Bluetooth テザリング", latestRun(listOf(withResult), syncing = false)!!.transportLabel)
+        assertNull(latestRun(listOf(withoutResult), syncing = false)!!.transportLabel)
     }
 
     @Test

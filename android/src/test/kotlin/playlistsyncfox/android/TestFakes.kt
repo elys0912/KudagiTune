@@ -508,6 +508,7 @@ class Harness(val trigger: SyncTrigger = SyncTrigger.Manual) {
 
     fun environment() = SyncEnvironment(
         store = store,
+        localLinks = { emptyList() },
         writer = writer,
         apis = provider,
         lan = LanResolver {

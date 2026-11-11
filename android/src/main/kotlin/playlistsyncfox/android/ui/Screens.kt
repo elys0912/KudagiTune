@@ -116,7 +116,7 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions) {
                 if (last == null) {
                     Label("まだ同期していません", color = colors.muted)
                 } else {
-                    val transport = last.transportWord?.let { "（$it）" }.orEmpty()
+                    val transport = last.transportLabel?.let { "（$it）" }.orEmpty()
                     Label("前回の同期：${formatTime(last.atMillis)} ${last.word}$transport", color = colors.muted)
                 }
             }

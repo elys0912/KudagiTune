@@ -17,10 +17,8 @@ import playlistsyncfox.android.sync.SyncStage
 enum class HomeKind { Unpaired, NotRun, Done, Syncing }
 
 /** 最後の同期。[interruptedTrace] は `ended_at` が NULL の行を「中断」として出すもの（日時は `started_at`）。 */
-data class LastRun(val run: SyncRun, val word: String, val atMillis: Long, val interruptedTrace: Boolean) {
-    /** 接続した方式の表示語。`result_json` が無い行（強制終了の跡など）は null。 */
-    val transportWord: String? get() = run.resultJson?.let { runCatching { transportWord(decodeResult(it).transport) }.getOrNull() }
-}
+/** [transportLabel] は接続した方式の表示語。`result_json` が無い行（強制終了の跡など）は null。 */
+data class LastRun(val run: SyncRun, val word: String, val atMillis: Long, val interruptedTrace: Boolean, val transportLabel: String? = null)
 
 data class PlaylistRow(val name: String, val trackCount: Int)
 
@@ -47,7 +45,7 @@ fun latestRun(runs: List<SyncRun>, syncing: Boolean): LastRun? {
     return if (ended == null) {
         LastRun(row, resultWord(SyncRun.RESULT_INTERRUPTED), row.startedAt, interruptedTrace = true)
     } else {
-        LastRun(row, resultWord(row.result), ended, interruptedTrace = false)
+        LastRun(row, resultWord(row.result), ended, interruptedTrace = false, transportLabel = transportLabelOf(row))
     }
 }
 
@@ -61,6 +59,9 @@ fun endpointText(pairing: Pairing): String {
     }
     return value?.takeIf { it.isNotEmpty() } ?: "未接続"
 }
+
+/** `result_json` の `transport` の表示語。JSON は DB から来るため、壊れていれば null。 */
+private fun transportLabelOf(row: SyncRun): String? = row.resultJson?.let { runCatching { transportWord(decodeResult(it).transport) }.getOrNull() }
 
 fun homeState(pairing: Pairing?, runs: List<SyncRun>, playlists: List<WrittenPlaylist>, selectedCount: Int, syncing: Boolean): HomeUiState {
     if (pairing == null) return HomeUiState(HomeKind.Unpaired)

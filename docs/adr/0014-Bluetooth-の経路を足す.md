@@ -34,6 +34,7 @@ Wi-Fi も USB ケーブルも無い場面で同期したいので、Bluetooth �
 ## 理由
 
 案 A は、PC と端末のコードに Bluetooth の実装を足さずに済む。端末が IP を配る点は USB テザリングと同じなので、宛先の決め方（mDNS で届けば自動、届かなければ PC の IPv4 の手入力）と保存の列をそのまま使える。違いは利用者の説明書と、同期の結果に記録する方式の名前だけになる。
+記録する方式は、保存の列の種類では USB と区別できないため、接続に成功した PC の IPv4 と同じ区画を持つ端末側のインターフェースの名前で判定する（`bt` は Bluetooth、`rndis`・`usb`・`ncm` は USB、`wlan` は LAN。当たらなければ保存の列の種類）。判定は接続に成功したときだけ行う。
 
 ## 悪い面
 
@@ -45,4 +46,4 @@ Wi-Fi も USB ケーブルも無い場面で同期したいので、Bluetooth �
 ## 参照
 
 - 0001（接続を 1 つのサーバーへの TCP に揃える）、0005（TLS の公開鍵の固定）、0008（自動の同期の起動条件）
-- 設計書：docs/design-overview.md の D7、docs/basic-design-b4a.md の B4-1 の 3（USB テザリング時の到達）、docs/open-questions.md の Q17
+- 設計書：docs/design-overview.md の D7、docs/basic-design-b4a.md の B4-1 の 3（USB／Bluetooth テザリング時の到達）、docs/open-questions.md の Q17
