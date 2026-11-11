@@ -5,12 +5,19 @@ import kotlinx.coroutines.test.runTest
 import playlistsyncfox.android.DEVICE
 import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.WrittenPlaylist
+import playlistsyncfox.android.db.encodeResult
 import playlistsyncfox.android.pairing
 import playlistsyncfox.android.sync.ManualStart
 import playlistsyncfox.android.sync.RemovalCheck
 import playlistsyncfox.android.sync.StartBlock
 import playlistsyncfox.android.sync.SyncProgress
 import playlistsyncfox.android.sync.SyncStage
+import playlistsyncfox.shared.result.Capacity
+import playlistsyncfox.shared.result.Counts
+import playlistsyncfox.shared.result.SyncOutcome
+import playlistsyncfox.shared.result.SyncResult
+import playlistsyncfox.shared.result.SyncTrigger
+import playlistsyncfox.shared.result.Transport
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -25,6 +32,27 @@ private fun run(
     endedAt: Long? = startedAt + 1000,
     result: String = SyncRun.RESULT_SUCCESS,
 ) = SyncRun(runId = id, deviceId = DEVICE, trigger = SyncRun.TRIGGER_MANUAL, startedAt = startedAt, endedAt = endedAt, result = result)
+
+private fun sampleResult(transport: Transport) = SyncResult(
+    startedAt = "2026-11-11T00:00:00.000Z",
+    finishedAt = "2026-11-11T00:01:00.000Z",
+    trigger = SyncTrigger.Manual,
+    transport = transport,
+    outcome = SyncOutcome.Completed,
+    hasMore = false,
+    counts = Counts(1, 0, 0, 0, 1, 0, 0, 0),
+    capacity = Capacity(100, 100, null, null),
+    errors = emptyList(),
+    excluded = emptyList(),
+    unplayable = emptyList(),
+    libraryId = "LIB1",
+    contentDigest = "d",
+    unresolvedPlaylists = emptyList(),
+    duplicatesDropped = 0,
+    removalSkipped = false,
+    keyMismatch = null,
+    errorDetail = null,
+)
 
 private val playlist = WrittenPlaylist(DEVICE, "P1", "Mix", "Mix.m3u8", "content://x", trackCount = 12, writtenAt = 0)
 
@@ -86,6 +114,15 @@ class HomeStateTest {
         assertEquals("中断", last.word)
         assertEquals(2000, last.atMillis)
         assertTrue(last.interruptedTrace)
+    }
+
+    @Test
+    fun `TA-269 前回の同期の行は result_json の方式を表示語で持ち、result_json が無い行は持たない`() {
+        val withResult = run(1, 1000).copy(resultJson = encodeResult(sampleResult(Transport.BluetoothTethering)))
+        val withoutResult = run(2, 2000, endedAt = null)
+
+        assertEquals("Bluetooth テザリング", latestRun(listOf(withResult), syncing = false)!!.transportWord)
+        assertNull(latestRun(listOf(withoutResult), syncing = false)!!.transportWord)
     }
 
     @Test

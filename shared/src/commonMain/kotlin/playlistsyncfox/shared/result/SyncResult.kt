@@ -5,7 +5,7 @@ import playlistsyncfox.shared.manifest.ManifestTrack
 
 enum class SyncTrigger { Manual, Auto }
 
-enum class Transport { Lan, Tailscale, UsbTethering }
+enum class Transport { Lan, Tailscale, UsbTethering, BluetoothTethering }
 
 /** 区分。T3 の `result` と P4 の `outcome` への写しは M4 が行う。 */
 enum class SyncOutcome { Completed, Partial, Interrupted, Failed }

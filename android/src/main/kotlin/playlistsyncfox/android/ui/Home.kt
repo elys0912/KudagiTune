@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.WrittenPlaylist
+import playlistsyncfox.android.db.decodeResult
 import playlistsyncfox.android.sync.ManualStart
 import playlistsyncfox.android.sync.PairingKeeper
 import playlistsyncfox.android.sync.RemovalCheck
@@ -16,7 +17,10 @@ import playlistsyncfox.android.sync.SyncStage
 enum class HomeKind { Unpaired, NotRun, Done, Syncing }
 
 /** 最後の同期。[interruptedTrace] は `ended_at` が NULL の行を「中断」として出すもの（日時は `started_at`）。 */
-data class LastRun(val run: SyncRun, val word: String, val atMillis: Long, val interruptedTrace: Boolean)
+data class LastRun(val run: SyncRun, val word: String, val atMillis: Long, val interruptedTrace: Boolean) {
+    /** 接続した方式の表示語。`result_json` が無い行（強制終了の跡など）は null。 */
+    val transportWord: String? get() = run.resultJson?.let { runCatching { transportWord(decodeResult(it).transport) }.getOrNull() }
+}
 
 data class PlaylistRow(val name: String, val trackCount: Int)
 
