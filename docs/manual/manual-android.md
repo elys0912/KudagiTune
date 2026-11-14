@@ -1,6 +1,6 @@
 # KudagiTune 説明書（Android 版）
 
-対象の版：KudagiTune 1.0.0
+対象の版：KudagiTune 1.1.0
 
 ## できること
 
