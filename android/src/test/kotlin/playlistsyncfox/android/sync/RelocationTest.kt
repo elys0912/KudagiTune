@@ -9,6 +9,7 @@ import playlistsyncfox.android.TrackScript
 import playlistsyncfox.android.db.PlacedTrack
 import playlistsyncfox.android.db.SelectedPlaylist
 import playlistsyncfox.android.db.SyncRun
+import playlistsyncfox.android.db.WrittenPlaylist
 import playlistsyncfox.android.id
 import playlistsyncfox.android.manifestOf
 import playlistsyncfox.android.net.ApiFailure
@@ -18,6 +19,7 @@ import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.result.SyncTrigger
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -50,6 +52,21 @@ class RelocationTest {
             assertEquals(0, h.lanApi.digestCalls)
             assertTrue(h.runs.isEmpty())
         }
+    }
+
+    @Test
+    fun `選択が空でも書いた m3u8 が残っていれば空の選択で同期し m3u8 と T2 の行を消す`() = runTest {
+        val h = Harness()
+        h.sync(emptyList())
+        h.store.selected = emptyList()
+        val uri = h.media.addExisting(ROOT, "Mix.m3u8", playlist = true)
+        h.store.playlistRows[id(50)] = WrittenPlaylist(DEVICE, id(50), "Mix", "Mix.m3u8", uri, 3, 0)
+
+        assertNotNull(h.run())
+
+        assertEquals(listOf(emptyList()), h.lanApi.manifestIds)
+        assertTrue(h.store.playlistRows.isEmpty())
+        assertFalse(h.media.exists(uri))
     }
 
     @Test

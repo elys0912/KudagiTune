@@ -19,7 +19,8 @@ enum class HomeKind { Unpaired, NotRun, Done, Syncing }
 /** 最後の同期。[interruptedTrace] は `ended_at` が NULL の行を「中断」として出すもの（日時は `started_at`）。 */
 data class LastRun(val run: SyncRun, val word: String, val atMillis: Long, val interruptedTrace: Boolean)
 
-data class PlaylistRow(val name: String, val trackCount: Int)
+/** [missingOnPc] は、マニフェストを取れた最後の同期で PC に見つからなかったもの。曲数の代わりに「PC に見つかりません」と出す。 */
+data class PlaylistRow(val name: String, val trackCount: Int, val missingOnPc: Boolean)
 
 data class HomeUiState(
     val kind: HomeKind,
@@ -71,9 +72,20 @@ private fun transportLabelOf(row: SyncRun): String? {
     return row.resultJson?.let { runCatching { transportWord(decodeResult(it).transport) }.getOrNull() }
 }
 
+/**
+ * マニフェストを取れた最後の同期（`content_digest` がある行）で、PC に見つからなかったプレイリストの ID。
+ * PC に届かなかった同期の行では判定しない。JSON は DB から来るため、壊れていれば空。[runs] は新しい順。
+ */
+private fun unresolvedPlaylistIds(runs: List<SyncRun>): Set<String> {
+    val json = runs.firstOrNull { it.contentDigest != null }?.resultJson ?: return emptySet()
+
+    return runCatching { decodeResult(json).unresolvedPlaylists.toSet() }.getOrDefault(emptySet())
+}
+
 fun homeState(pairing: Pairing?, runs: List<SyncRun>, playlists: List<WrittenPlaylist>, selectedCount: Int, syncing: Boolean): HomeUiState {
     if (pairing == null) return HomeUiState(HomeKind.Unpaired)
     val last = latestRun(runs, syncing)
+    val unresolved = unresolvedPlaylistIds(runs)
     return HomeUiState(
         kind = when {
             syncing -> HomeKind.Syncing
@@ -84,7 +96,7 @@ fun homeState(pairing: Pairing?, runs: List<SyncRun>, playlists: List<WrittenPla
         endpoint = endpointText(pairing),
         last = last,
         lastTransport = last?.takeIf { !it.interruptedTrace }?.let { transportLabelOf(it.run) },
-        playlists = playlists.map { PlaylistRow(it.name, it.trackCount) },
+        playlists = playlists.map { PlaylistRow(it.name, it.trackCount, missingOnPc = it.playlistId in unresolved) },
         selectedCount = selectedCount,
     )
 }

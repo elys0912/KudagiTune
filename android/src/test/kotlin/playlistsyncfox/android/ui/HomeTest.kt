@@ -73,7 +73,19 @@ class HomeStateTest {
         assertNull(notRun.last)
         assertEquals(HomeKind.Done, done.kind)
         assertEquals("完了", done.last?.word)
-        assertEquals(listOf(PlaylistRow("Mix", 12)), done.playlists)
+        assertEquals(listOf(PlaylistRow("Mix", 12, missingOnPc = false)), done.playlists)
+    }
+
+    @Test
+    fun `マニフェストを取れた最後の同期で PC に見つからなかったプレイリストは見つからないと出し、届かなかった同期では判定を変えない`() {
+        val json = encodeResult(sampleResult(Transport.Lan).copy(unresolvedPlaylists = listOf("P1")))
+        val loaded = run(1, 1000).copy(resultJson = json, contentDigest = "d")
+        val unreachable = run(2, 2000, result = SyncRun.RESULT_FAILED).copy(resultJson = encodeResult(sampleResult(Transport.Lan)), errorKind = "E1")
+        val other = playlist.copy(playlistId = "P2", name = "Other")
+
+        val state = homeState(pairing(), listOf(unreachable, loaded), listOf(playlist, other), selectedCount = 2, syncing = false)
+
+        assertEquals(listOf(PlaylistRow("Mix", 12, missingOnPc = true), PlaylistRow("Other", 12, missingOnPc = false)), state.playlists)
     }
 
     @Test

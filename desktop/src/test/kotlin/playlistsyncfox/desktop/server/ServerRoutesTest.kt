@@ -26,6 +26,7 @@ import kotlin.io.path.writeBytes
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -494,6 +495,20 @@ class ServerRoutesTest {
         assertEquals(3, saved.excludedCount)
         assertEquals(mapOf("E5" to 1), saved.failureCounts)
         assertEquals(100, saved.capacity.bytesTransferred)
+    }
+
+    @Test
+    fun `P4 を受けると V33 を待たずに同期中が終わり、送信中の P2 があれば同期中のまま`() = withServer(fixture) { client ->
+        fixture.activity.trackRequestStarted()
+        fixture.activity.trackRequestFinished()
+        assertTrue(fixture.activity.isSyncing(fixture.clock.instant()))
+
+        fixture.activity.trackRequestStarted()
+        client.signed(fixture, HttpMethod.Post, "/v1/reports", report.encodeToByteArray())
+        assertTrue(fixture.activity.isSyncing(fixture.clock.instant()))
+
+        fixture.activity.trackRequestFinished()
+        assertFalse(fixture.activity.isSyncing(fixture.clock.instant()))
     }
 
     @Test

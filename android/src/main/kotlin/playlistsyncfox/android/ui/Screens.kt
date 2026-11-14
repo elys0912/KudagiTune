@@ -153,7 +153,7 @@ private fun HomeScreen(model: AppViewModel, actions: ScreenActions) {
                     state.playlists.forEach {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Label(it.name)
-                            Label("${it.trackCount} 曲", color = colors.muted)
+                            Label(if (it.missingOnPc) "PC に見つかりません" else "${it.trackCount} 曲", color = colors.muted)
                         }
                     }
                 }
@@ -226,6 +226,7 @@ private fun PairingScreen(model: AppViewModel) {
         }
         is PairingStage.Done -> {
             Label("ペアリングしました：${stage.pcName}", bold = true)
+            stage.fingerprint?.let { Label("PC の確認コード：$it（PC の画面と同じか確かめてください）") }
             Label("接続先が違う場合は、PC の画面の「端末」とこのアプリの設定の両方で解除してください")
             if (stage.showCleanupHint) Label("以前このアプリを使っていた場合は、先に設定の「以前のインストールで保存した曲の整理」で古い曲を整理してください")
         }

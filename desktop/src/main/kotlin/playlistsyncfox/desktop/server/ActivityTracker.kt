@@ -42,6 +42,11 @@ class ActivityTracker(private val clock: Clock) {
         if (sending.decrementAndGet() == 0) sendingTrack.set(null)
     }
 
+    /** P4 を受けた。端末の同期は終わったので、V33 を待たずに同期中の判定を終える（ADR 0022）。送信中の P2 は終わるまで同期中のまま。 */
+    fun syncReported() {
+        lastTrackRequest = null
+    }
+
     /** P2 で送り始めた曲を登録する。戻りの関数に、応答へ渡したバイト数を足していく（X5-1。D22）。 */
     fun trackSendStarted(displayName: String, size: Long): (Int) -> Unit {
         val track = Sending(displayName, size)
@@ -64,7 +69,7 @@ class ActivityTracker(private val clock: Clock) {
     /** V33 ちょうどまでは接続中。 */
     fun isConnected(now: Instant): Boolean = within(lastSigned, now)
 
-    /** P2 の送信中、または P2 の最後の要求から V33 以内。P1 だけでは同期中にしない。 */
+    /** P2 の送信中、または P2 の最後の要求から V33 以内（P4 を受けた後は除く）。P1 だけでは同期中にしない。 */
     fun isSyncing(now: Instant): Boolean = sending.get() > 0 || within(lastTrackRequest, now)
 
     private fun within(at: Instant?, now: Instant) = at != null && Duration.between(at, now) <= DesktopValues.ACTIVITY_WINDOW
