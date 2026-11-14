@@ -25,6 +25,20 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // リリース用の鍵は repo の外に置き、場所とパスワードは利用者の ~/.gradle/gradle.properties から読む（ADR 0017）。
+    // 無い環境（CI など）では release は署名なしでビルドする
+    val releaseStoreFile = providers.gradleProperty("kudagitune.signing.storeFile").orNull
+    if (releaseStoreFile != null) {
+        val releaseSigning = signingConfigs.create("release") {
+            storeFile = file(releaseStoreFile)
+            storePassword = providers.gradleProperty("kudagitune.signing.storePassword").get()
+            // PKCS12 の鍵は、鍵のパスワードがストアのパスワードと同じ
+            keyAlias = "kudagitune"
+            keyPassword = storePassword
+        }
+        buildTypes.getByName("release").signingConfig = releaseSigning
+    }
+
     sourceSets {
         // 移行の試験の入力にする Room のスキーマ（X6-1）
         getByName("androidTest").assets.directories.add("$projectDir/schemas")
