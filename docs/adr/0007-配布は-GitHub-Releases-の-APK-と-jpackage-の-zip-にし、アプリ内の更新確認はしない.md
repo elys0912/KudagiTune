@@ -3,11 +3,11 @@ id: "0007"
 title: "配布は GitHub Releases の APK と jpackage の zip にし、アプリ内の更新確認はしない"
 kind: architecture
 form: full
-status: accepted
+status: superseded
 date: 2026-11-10
 approved: 2026-11-05
 supersedes:
-superseded-by:
+superseded-by: "0016"
 tags: [distribution, github, release]
 ---
 
