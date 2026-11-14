@@ -134,20 +134,19 @@ GitHub Actions で動かす。細部は変わりうる。
 | 契機 | 内容 |
 |---|---|
 | プルリクエストと main への push | ubuntu の環境に JDK と Android SDK を用意し（版は repo の定義が正）、`./gradlew build :android:assembleDebug`（全モジュールのコンパイルとテスト。端末が要る計測テストは含まない。android のデバッグビルド）、依存の向きの検査 |
-| タグの push | android のリリースビルド（署名つき APK）、desktop の MSI と zip、下書きの Release の作成と配布物の添付（未実装） |
 
-- APK の署名の鍵と資格情報は GitHub の Secrets に置き、環境変数で渡す。ログに出さない
-- Secrets の名前は未定
+- 配布物（署名つき APK、MSI、zip）は CI では作らない。鍵のある手元の PC で作る（第 6 節、ADR 0017）
 - repo が private の間も、同じ流れが動く
 
 ## 6. Release の手順
 
 1. `v<major>.<minor>.<patch>` の形で版のタグを打つ（手動）
-2. CI が desktop の MSI と zip と APK を作る。手元で作るときは `./gradlew :desktop:packageMsi :desktop:createDistributable`（MSI は `desktop/build/compose/binaries/main/msi/`、zip にするのは `app/KudagiTune/`）。版は `desktop/build.gradle.kts` の `packageVersion` と `android/build.gradle.kts` の `versionName` をそろえる。APK は署名の鍵が CI にあるときだけ署名する
-3. CI が下書きの Release を作り、配布物とチェックサム（SHA-256 の一覧）を付ける
-4. APK を実機に入れ、確認の表の該当項目を確かめる（手動）
-5. repo が public であることを確かめる
-6. 下書きを公開する（手動）。CI からは公開しない
+2. 手元で desktop の MSI と zip と APK を作る。`./gradlew :desktop:packageMsi :desktop:createDistributable :android:assembleRelease`（MSI は `desktop/build/compose/binaries/main/msi/`、zip にするのは `app/KudagiTune/`、APK は `android/build/outputs/apk/release/`）。版は `desktop/build.gradle.kts` の `packageVersion` と `android/build.gradle.kts` の `versionName` をそろえる。名前は `KudagiTune-<版>.msi`、`KudagiTune-<版>-windows.zip`、`KudagiTune-<版>.apk` にする
+3. APK の署名を `apksigner verify --print-certs` で確かめる。署名なし（鍵の設定が無い環境）の APK は添えない
+4. 下書きの Release を作り、配布物とチェックサム（SHA-256 の一覧）を付ける
+5. APK を実機に入れ、確認の表の該当項目を確かめる（手動）
+6. repo が public であることを確かめる
+7. 下書きを公開する（手動）
 
 - repo は最初 private。公開の前に public にする。手順は次のとおり
   1. 履歴と設定に、鍵、認証情報、個人の曲名・パス、実 IP、実ドメインが無いことを確かめる
@@ -156,7 +155,9 @@ GitHub Actions で動かす。細部は変わりうる。
 - Release の本文には、変更の要点、PC の導入手順、「提供元不明のアプリ」の許可の手順を書く。アプリ内で更新を確認しないため、案内は本文が担う
 - チェックサムは取り違えの確認用で、署名の代わりではない
 - PC の配布物はコード署名なし。SmartScreen の警告が出ることを本文に書く
-- APK の署名の鍵は repo に入れない。失うと更新できないため、別の場所にバックアップを 1 つ持つ
+- APK の署名の鍵は repo に入れない。失うと更新できないため、別の場所にバックアップを 1 つ持つ（ADR 0017）
+  - 鍵は PKCS12 で、別名は `kudagitune`。置き場所とパスワードは、利用者の `~/.gradle/gradle.properties` の `kudagitune.signing.storeFile` と `kudagitune.signing.storePassword` に書く。無ければ release は署名なしでビルドされる
+  - バックアップは AWS の Parameter Store の SecureString。鍵（base64）は `/kudagitune/release-keystore`、パスワードは `/kudagitune/release-keystore-password`。別の PC で作るときは、ここから戻して上の 2 つを書く
 
 ## 7. 設計書の場所と番号の読み方
 

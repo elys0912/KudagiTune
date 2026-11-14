@@ -19,4 +19,5 @@
 | [0014](0014-Bluetooth-の経路を足す.md) | Bluetooth の経路を足す | feature | short | accepted | 2026-11-11 |  |
 | [0015](0015-main-への-push-の-CI-は、PR-で検査済みのコミットでは流さない.md) | main への push の CI は、PR で検査済みのコミットでは流さない | cost | short | accepted | 2026-11-14 |  |
 | [0016](0016-PC-版を全ユーザー向けの-MSI-で配り、zip-も添える.md) | PC 版を全ユーザー向けの MSI で配り、zip も添える | architecture | full | accepted | 2026-11-14 | 0007 を置き換え |
+| [0017](0017-APK-はリリース用の鍵で手元で署名して-Release-に添付し、鍵のバックアップを-AWS-の-Parameter-Store-に置く.md) | APK はリリース用の鍵で手元で署名して Release に添付し、鍵のバックアップを AWS の Parameter Store に置く | architecture | full | accepted | 2026-11-14 |  |
 <!-- adr-index:end -->
