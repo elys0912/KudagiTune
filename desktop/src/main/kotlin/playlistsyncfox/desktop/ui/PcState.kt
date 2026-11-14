@@ -49,6 +49,8 @@ class PcState(
     val progress: ProgressReport?,
     /** P2 の送信中の曲。D22。 */
     val sending: SendingTrack?,
+    /** 同期中の転送速度（ADR 0019）。同期中でなければ null。 */
+    val speed: TransferSpeed?,
 )
 
 /** W1 のトレイの表示。優先順は上から。[ServerFailed] は鍵の保管以外の起動の失敗（ポートの使用中を含む）。 */
@@ -78,6 +80,7 @@ class PcInputs(
     val settingsReset: Boolean,
     val endpoints: List<String>,
     val fingerprint: String?,
+    val speed: TransferSpeed? = null,
 )
 
 private fun warningOf(kind: ServerFailureKind): Warning = when (kind) {
@@ -112,5 +115,6 @@ fun buildPcState(inputs: PcInputs, now: Instant): PcState {
         fingerprint = inputs.fingerprint,
         progress = inputs.progress.current(),
         sending = inputs.activity.sendingTrack(),
+        speed = inputs.speed,
     )
 }

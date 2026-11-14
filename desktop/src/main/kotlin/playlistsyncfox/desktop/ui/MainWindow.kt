@@ -1,5 +1,6 @@
 package playlistsyncfox.desktop.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -42,7 +43,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
@@ -350,6 +356,7 @@ private fun ProgressPanel(state: PcState, modifier: Modifier) {
         val sending = state.sending
         if (progress != null) OverallProgress(progress)
         if (sending != null) SendingProgress(sending)
+        state.speed?.let { SpeedSection(it, progress) }
         if (progress == null && sending == null) {
             Text(trayText(trayStatus(state)))
             state.device?.lastSync?.let { Text(lastSyncText(it), fontSize = 12.sp, color = colors.muted) }
@@ -382,6 +389,90 @@ private fun SendingProgress(sending: SendingTrack) {
         }
         Bar(sending.sentBytes, sending.size, 4.dp)
         Text("${megabytes(sending.sentBytes)} / ${megabytes(sending.size)}", fontSize = 12.sp, color = MaterialTheme.appColors.muted, fontFamily = FontFamily.Monospace)
+    }
+}
+
+/** 1 MB のバイト数（表記は Windows に合わせて MB）。 */
+private const val BYTES_PER_MB = 1_048_576.0
+
+/** 線の縦軸の上端の候補（MB/s）。線の最大値以上で最も小さいものを使う。 */
+private val SPEED_AXIS_TOPS = listOf(1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0)
+
+private val SPEED_CHART_HEIGHT = 120.dp
+
+/** 線の塗りの濃さ。線の色を薄めて使う。 */
+private const val SPEED_FILL_ALPHA = 0.18f
+
+private fun megabytesPerSecond(bytesPerSecond: Double): String = String.format(Locale.ROOT, "%.1f MB/s", bytesPerSecond / BYTES_PER_MB)
+
+/** 残りの時間の目安。1 分未満は秒、それ以上は分に切り上げる。 */
+private fun remainingText(seconds: Double): String =
+    if (seconds < 60) "${seconds.toInt().coerceAtLeast(1)} 秒" else "約 ${Math.ceil(seconds / 60).toInt()} 分"
+
+/** 同期中の転送速度（ADR 0019）。現在速度、平均、残りの目安と、直近 60 秒の線。 */
+@Composable
+private fun SpeedSection(speed: TransferSpeed, progress: ProgressReport?) {
+    val remainingBytes = progress?.let { it.totalBytes - it.doneBytes }?.takeIf { it > 0 }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+            SpeedFigure("現在速度", megabytesPerSecond(speed.currentBytesPerSecond))
+            SpeedFigure("平均", megabytesPerSecond(speed.averageBytesPerSecond))
+            if (remainingBytes != null && speed.averageBytesPerSecond > 0) {
+                SpeedFigure("残りの目安", remainingText(remainingBytes / speed.averageBytesPerSecond))
+            }
+        }
+        SpeedChart(speed.points)
+    }
+}
+
+@Composable
+private fun SpeedFigure(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, fontSize = 11.sp, color = MaterialTheme.appColors.muted)
+        Text(value, fontSize = 20.sp, fontFamily = FontFamily.Monospace)
+    }
+}
+
+@Composable
+private fun SpeedChart(points: List<SpeedPoint>) {
+    val colors = MaterialTheme.appColors
+    val maxMegabytes = points.maxOfOrNull { it.bytesPerSecond / BYTES_PER_MB } ?: 0.0
+    val top = SPEED_AXIS_TOPS.firstOrNull { it >= maxMegabytes } ?: SPEED_AXIS_TOPS.last()
+    val windowSeconds = SPEED_LINE_WINDOW.seconds.toDouble()
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("直近 ${SPEED_LINE_WINDOW.seconds} 秒（上端 ${top.toInt()} MB/s）", fontSize = 11.sp, color = colors.muted)
+        Canvas(Modifier.fillMaxWidth().height(SPEED_CHART_HEIGHT)) {
+            // 目盛りの線は上端・半分・0 の 3 本
+            listOf(0f, 0.5f, 1f).forEach { fraction ->
+                val y = size.height * fraction
+                drawLine(colors.track, Offset(0f, y), Offset(size.width, y), 1.dp.toPx())
+            }
+            if (points.isEmpty()) return@Canvas
+
+            val offsets = points.map { point ->
+                val x = size.width * (1 - point.secondsAgo / windowSeconds).toFloat()
+                val y = size.height * (1 - (point.bytesPerSecond / BYTES_PER_MB / top).toFloat().coerceIn(0f, 1f))
+                Offset(x, y)
+            }
+            val line = Path().apply {
+                moveTo(offsets.first().x, offsets.first().y)
+                offsets.drop(1).forEach { lineTo(it.x, it.y) }
+            }
+            val fill = Path().apply {
+                addPath(line)
+                lineTo(offsets.last().x, size.height)
+                lineTo(offsets.first().x, size.height)
+                close()
+            }
+            drawPath(fill, colors.accent.copy(alpha = SPEED_FILL_ALPHA))
+            drawPath(line, colors.accent, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            drawCircle(colors.accent, 4.dp.toPx(), offsets.last())
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("${SPEED_LINE_WINDOW.seconds} 秒前", fontSize = 11.sp, color = colors.muted)
+            Text("今", fontSize = 11.sp, color = colors.muted)
+        }
     }
 }
 
