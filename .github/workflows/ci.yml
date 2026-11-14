@@ -30,8 +30,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          count="$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '[.[] | select(.merged_at != null)] | length' || echo 0)"
-          if [ "$count" -gt 0 ]; then echo "merged=true" >> "$GITHUB_OUTPUT"; else echo "merged=false" >> "$GITHUB_OUTPUT"; fi
+          # マージの直後は、コミットと PR の紐づけがまだ API に出ないことがある（2026-11-14 の #30 で 0 件だった）。
+          # 10 秒おきに 4 回まで聞き直す（合わせて 40 秒弱。ジョブの 1 分の切り上げに収まる）
+          merged=false
+          for attempt in 1 2 3 4; do
+            count="$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" --jq '[.[] | select(.merged_at != null)] | length' || echo 0)"
+            if [ "$count" -gt 0 ]; then merged=true; break; fi
+            if [ "$attempt" -lt 4 ]; then sleep 10; fi
+          done
+          echo "merged=$merged" >> "$GITHUB_OUTPUT"
 
   build:
     needs: from-merged-pr
