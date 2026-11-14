@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -42,8 +43,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -282,25 +290,46 @@ private fun LicenseDialog(entries: List<LicenseEntry>, onClose: () -> Unit) {
         onDismissRequest = onClose,
         title = { Text("ライセンス") },
         text = {
-            Column(Modifier.heightIn(max = LICENSE_DIALOG_MAX_HEIGHT).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                if (entries.isEmpty()) Text("ライセンスの一覧を読み込めません")
-                entries.forEach { e ->
-                    Column {
-                        Text("${e.name} ${e.version}", style = MaterialTheme.typography.bodyMedium)
-                        e.licenses.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
+            // 文字を選んでコピーできるようにする。URL は押すとブラウザで開く
+            SelectionContainer {
+                Column(Modifier.heightIn(max = LICENSE_DIALOG_MAX_HEIGHT).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    if (entries.isEmpty()) Text("ライセンスの一覧を読み込めません")
+                    entries.forEach { e ->
+                        Column {
+                            Text("${e.name} ${e.version}", style = MaterialTheme.typography.bodyMedium)
+                            e.licenses.forEach { Text(linkUrls(it), style = MaterialTheme.typography.bodySmall) }
+                        }
                     }
-                }
-                texts.forEach { t ->
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(t.title, fontWeight = FontWeight.Bold)
-                        Text("対象：${t.componentNames.joinToString("、")}", fontSize = 12.sp, color = MaterialTheme.appColors.muted)
-                        Text(t.text, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    texts.forEach { t ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(t.title, fontWeight = FontWeight.Bold)
+                            Text("対象：${t.componentNames.joinToString("、")}", fontSize = 12.sp, color = MaterialTheme.appColors.muted)
+                            Text(linkUrls(t.text), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                        }
                     }
                 }
             }
         },
         confirmButton = { PrimaryButton("閉じる", onClick = onClose) },
     )
+}
+
+/** 文中の http・https の URL。末尾の句読点と閉じ括弧は URL に含めない。 */
+private val urlPattern = Regex("""https?://[^\s<>"'）)]+[^\s<>"'）).,;:]""")
+
+/** 文中の URL を、押すとブラウザで開くリンクにする。 */
+@Composable
+private fun linkUrls(text: String): AnnotatedString {
+    val linkStyle = TextLinkStyles(SpanStyle(color = MaterialTheme.appColors.accent, textDecoration = TextDecoration.Underline))
+    return buildAnnotatedString {
+        var start = 0
+        urlPattern.findAll(text).forEach { match ->
+            append(text.substring(start, match.range.first))
+            withLink(LinkAnnotation.Url(match.value, linkStyle)) { append(match.value) }
+            start = match.range.last + 1
+        }
+        append(text.substring(start))
+    }
 }
 
 // ---- 右：同期の進行状況 ----

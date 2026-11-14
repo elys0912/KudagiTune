@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.triStateToggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -41,8 +42,15 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import playlistsyncfox.android.R
@@ -543,11 +551,43 @@ private fun LicensesScreen(model: AppViewModel, actions: ScreenActions) {
         chosen != null -> {
             // 全文と NOTICE は選ばれたときに読む。再描画のたびには読まない
             val texts = remember(chosen) { licenseTexts(chosen, actions.licenseText, actions.licenseNotice) }
-            Label("${chosen.name} ${chosen.version}", bold = true)
-            Label(chosen.body)
-            texts.forEach { Label(it, mono = true) }
+            // 文字を長押しで選んでコピーできるようにする
+            SelectionContainer {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Label("${chosen.name} ${chosen.version}", bold = true)
+                    LinkedLabel(chosen.body, mono = false)
+                    texts.forEach { LinkedLabel(it, mono = true) }
+                }
+            }
             Action("一覧へ") { openIndex = null }
         }
         else -> entries.forEachIndexed { index, entry -> Action("${entry.name} ${entry.version}　${entry.license}") { openIndex = index } }
     }
+}
+
+/** 文中の http・https の URL。末尾の句読点と閉じ括弧は URL に含めない。 */
+private val urlPattern = Regex("""https?://[^\s<>"'）)]+[^\s<>"'）).,;:]""")
+
+/** [Label] と同じ見た目で、文中の URL を押すとブラウザで開く。ライセンスの全文と URL に使う。 */
+@Composable
+private fun LinkedLabel(text: String, mono: Boolean) {
+    val colors = LocalPsfoxColors.current
+    val linkStyle = TextLinkStyles(SpanStyle(color = colors.accent, textDecoration = TextDecoration.Underline))
+    val linked = buildAnnotatedString {
+        var start = 0
+        urlPattern.findAll(text).forEach { match ->
+            append(text.substring(start, match.range.first))
+            withLink(LinkAnnotation.Url(match.value, linkStyle)) { append(match.value) }
+            start = match.range.last + 1
+        }
+        append(text.substring(start))
+    }
+    BasicText(
+        linked,
+        style = TextStyle(
+            color = colors.text,
+            fontSize = if (mono) 13.sp else 15.sp,
+            fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
+        ),
+    )
 }
