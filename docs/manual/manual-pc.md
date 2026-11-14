@@ -1,6 +1,6 @@
 # KudagiTune 説明書（PC 版）
 
-対象の版：KudagiTune 1.0.0
+対象の版：KudagiTune 1.1.0
 旧称は playlist-sync-fox です。設定・ログ・鍵のフォルダ名と、ログイン時の起動の登録名は旧称のままです（下の「データの置き場と削除」）。
 
 ## できること

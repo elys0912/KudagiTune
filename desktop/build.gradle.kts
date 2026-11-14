@@ -59,7 +59,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi)
             packageName = "KudagiTune"
-            packageVersion = "1.0.0"
+            packageVersion = "1.1.0"
             description = "iTunes のプレイリストを Android へ同期する"
             vendor = "elys0912"
             windows {
