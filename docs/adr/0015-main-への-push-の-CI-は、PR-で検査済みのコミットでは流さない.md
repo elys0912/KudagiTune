@@ -3,11 +3,11 @@ id: "0015"
 title: "main への push の CI は、PR で検査済みのコミットでは流さない"
 kind: cost
 form: short
-status: accepted
+status: superseded
 date: 2026-11-14
 approved: 2026-11-14
 supersedes:
-superseded-by:
+superseded-by: "0018"
 tags: [ci, github-actions, cost]
 ---
 
