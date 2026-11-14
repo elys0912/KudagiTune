@@ -84,11 +84,12 @@ fun reasonWord(reason: String?): String = when (reason) {
     else -> reason
 }
 
-private val BYTE_UNITS = listOf("B", "KiB", "MiB", "GiB")
+// 1 KB = 1024 バイトで数え、表記は Windows のエクスプローラーに合わせて KB・MB・GB にする
+private val BYTE_UNITS = listOf("B", "KB", "MB", "GB")
 private const val BYTE_UNIT_STEP = 1024.0
 
 /**
- * 人が読む単位。小数 1 桁に丸めて 1024 に達するときは、上の単位で出す。例：1 MiB の 1 バイト手前は「1.0 MiB」（「1024.0 KiB」にしない）。
+ * 人が読む単位。小数 1 桁に丸めて 1024 に達するときは、上の単位で出す。例：1 MB の 1 バイト手前は「1.0 MB」（「1024.0 KB」にしない）。
  */
 fun formatBytes(bytes: Long): String {
     var value = bytes.toDouble()
