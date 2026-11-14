@@ -1,6 +1,8 @@
 package playlistsyncfox.android.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,11 +10,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.triStateToggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
@@ -25,7 +30,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -226,6 +241,8 @@ private fun SelectionScreen(model: AppViewModel, current: Screen.Selection) {
         SelectionStage.Loading -> Label("読み込んでいます")
         is SelectionStage.Loaded -> {
             s.nodes.forEach { NodeRow(model, s, it, 0) }
+            val chosen = s.nodes.flatMap(::leafNodes).filter { it.id in s.selectedIds }
+            Label("選んだプレイリスト：${chosen.size} 件（${chosen.sumOf { it.trackCount ?: 0 }} 曲）", color = LocalPsfoxColors.current.muted)
             s.missing.forEach { row ->
                 Label("PC に見つかりません：${row.name}")
                 Action("外す") { model.selection.remove(row.playlistId) }
@@ -250,17 +267,101 @@ private fun NodeRow(model: AppViewModel, stage: SelectionStage.Loaded, node: Pla
     val children = node.children
     if (children == null) {
         val on = node.id in stage.selectedIds
-        Label("${"　".repeat(depth)}${if (on) "[x]" else "[ ]"} ${node.name}（${node.trackCount ?: 0} 曲）")
-        Action(if (on) "外す：${node.name}" else "選ぶ：${node.name}") { model.selection.setLeaf(node.id, !on) }
-    } else {
-        val leaves = leafIds(node)
-        val all = leaves.isNotEmpty() && leaves.all { it in stage.selectedIds }
-        Label("${"　".repeat(depth)}${if (open) "▼" else "▶"} ${node.name}")
-        Action(if (open) "閉じる：${node.name}" else "開く：${node.name}") { open = !open }
-        Action(if (all) "フォルダ内をすべて外す：${node.name}" else "フォルダ内をすべて選ぶ：${node.name}") { model.selection.setFolder(node, !all) }
-        if (open) children.forEach { NodeRow(model, stage, it, depth + 1) }
+        CheckRow(ToggleableState(on), node.name, "${node.trackCount ?: 0} 曲", depth) { model.selection.setLeaf(node.id, !on) }
+        return
+    }
+
+    val leaves = leafIds(node)
+    val chosen = leaves.count { it in stage.selectedIds }
+    val state = when {
+        leaves.isNotEmpty() && chosen == leaves.size -> ToggleableState.On
+        chosen == 0 -> ToggleableState.Off
+        else -> ToggleableState.Indeterminate
+    }
+    // 一部だけ選んだフォルダを押すと、残りも選ぶ（全部選んだときだけ外す）
+    CheckRow(state, node.name, "$chosen/${leaves.size}", depth, open = open, onToggleOpen = { open = !open }) {
+        model.selection.setFolder(node, state != ToggleableState.On)
+    }
+    if (open) children.forEach { NodeRow(model, stage, it, depth + 1) }
+}
+
+/** 選択の画面の 1 行の高さの下限。指で押しやすい 48dp。 */
+private val CHECK_ROW_MIN_HEIGHT = 48.dp
+
+/** チェックの箱の一辺。フォルダの開閉の印の幅も同じにする。 */
+private val CHECK_BOX_SIZE = 22.dp
+
+/** 行の中の部品の間。 */
+private val CHECK_ROW_GAP = 12.dp
+
+/** フォルダの中の行を、1 段ごとに右へずらす幅。開閉の印と間の分で、中の行のチェックがフォルダのチェックの真下に来る。 */
+private val CHECK_ROW_INDENT = CHECK_BOX_SIZE + CHECK_ROW_GAP
+
+/**
+ * 選択の画面の 1 行（チェック、名前、曲数）。行のどこを押しても [onToggle] が走る。
+ * 選んだ行は背景に色が付く。フォルダは [open] を渡すと、頭に開閉の印を出し、印だけは [onToggleOpen] を走らせる。
+ */
+@Composable
+private fun CheckRow(
+    state: ToggleableState,
+    name: String,
+    count: String,
+    depth: Int,
+    open: Boolean? = null,
+    onToggleOpen: () -> Unit = {},
+    onToggle: () -> Unit,
+) {
+    val colors = LocalPsfoxColors.current
+    val rowColor = if (state == ToggleableState.On) colors.transferringRow else Color.Transparent
+    Row(
+        Modifier.fillMaxWidth()
+            .background(rowColor, RoundedCornerShape(6.dp))
+            .triStateToggleable(state = state, role = Role.Checkbox, onClick = onToggle)
+            .heightIn(min = CHECK_ROW_MIN_HEIGHT)
+            .padding(start = 10.dp + CHECK_ROW_INDENT * depth, end = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(CHECK_ROW_GAP),
+    ) {
+        if (open != null) {
+            Box(Modifier.width(CHECK_BOX_SIZE).height(CHECK_ROW_MIN_HEIGHT).clickable(role = Role.Button, onClick = onToggleOpen), contentAlignment = Alignment.Center) {
+                Label(if (open) "▼" else "▶", color = colors.muted)
+            }
+        }
+        CheckBox(state)
+        Box(Modifier.weight(1f)) { Label(name) }
+        Label(count, color = colors.muted)
     }
 }
+
+@Composable
+private fun CheckBox(state: ToggleableState) {
+    val colors = LocalPsfoxColors.current
+    Canvas(Modifier.size(CHECK_BOX_SIZE)) {
+        val corner = CornerRadius(4.dp.toPx())
+        if (state == ToggleableState.Off) {
+            // 枠の線は内側に収める（線の太さの半分だけ内へ寄せる）
+            val inset = 1.dp.toPx()
+            drawRoundRect(colors.buttonBorder, Offset(inset, inset), Size(size.width - 2 * inset, size.height - 2 * inset), corner, Stroke(2 * inset))
+            return@Canvas
+        }
+
+        drawRoundRect(colors.accent, cornerRadius = corner)
+        val mark = Stroke(2.4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        if (state == ToggleableState.On) {
+            val check = Path().apply {
+                moveTo(size.width * 0.22f, size.height * 0.53f)
+                lineTo(size.width * 0.42f, size.height * 0.72f)
+                lineTo(size.width * 0.80f, size.height * 0.30f)
+            }
+            drawPath(check, Color.White, style = mark)
+        } else {
+            drawLine(Color.White, Offset(size.width * 0.27f, size.height / 2), Offset(size.width * 0.73f, size.height / 2), mark.width, StrokeCap.Round)
+        }
+    }
+}
+
+/** フォルダの中を辿った、プレイリスト（葉）の一覧。 */
+private fun leafNodes(node: PlaylistNode): List<PlaylistNode> = node.children?.flatMap(::leafNodes) ?: listOf(node)
 
 @Composable
 private fun ResultScreen(model: AppViewModel, actions: ScreenActions) {
