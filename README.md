@@ -1,21 +1,54 @@
 # KudagiTune
 
-Windows の iTunes（12.x）のプレイリストを、曲ごと Android 端末へ同期するツール。PC がサーバー、端末が取りに行く一方向の同期。接続は同一 LAN、Tailscale、USB テザリング、Bluetooth テザリングの 4 方式。
+Windows の iTunes のプレイリストを、曲ごと Android のスマホへ同期するアプリです。
 
-状態：設計と実装まで完了。実機の確認は未（PC の C-13、端末の C-1〜C-18）。
+PC のアプリはトレイで待機し、スマホのアプリが PC から曲を取りに行きます。クラウドは使いません。PC とスマホのあいだで直接やりとりします。
 
-## 文書
+## できること
 
-| 文書 | 内容 |
+- **プレイリスト単位で同期**：同期するプレイリストはスマホで選びます。プレイリストは m3u8 としてスマホに作られ、m3u8 に対応した音楽プレイヤーで再生できます。
+- **差分だけ転送**：前回から増えた曲・変わった曲だけを送ります。途中で切れても、続きから再開します。
+- **自動の同期**：Wi-Fi など従量制でないネットワークにつながっている間は、スマホが 6 時間ごとに同期します。PC のアプリが動いていることが条件です。手動でも同期できます。
+- **つなぎ方は 4 通り**：同じ Wi-Fi（LAN）、Tailscale、USB テザリング、Bluetooth テザリング。
+- **ペアリングした端末だけ**：最初に 6 桁のコードでペアリングします。通信は暗号化され、ペアリングしていない端末には同じ LAN の中でも曲を渡しません。
+- **形式はそのまま**：曲の変換はしません。保護付き（.m4p）の曲だけは転送しません。iTunes のライブラリは読むだけで、書き換えません。
+
+## 動作環境
+
+| 対象 | 条件 |
 |---|---|
-| [docs/design-overview.md](docs/design-overview.md) | 概要設計。動機、範囲、決定 D1〜D22、用語 |
-| [docs/requirements.md](docs/requirements.md) | 要件 F1〜F6、N1〜N5 |
-| [docs/open-questions.md](docs/open-questions.md) | 論点 Q1〜Q16 と結論 |
-| [docs/basic-design.md](docs/basic-design.md) | 基本設計の索引（B1）。B2〜B4 は同じフォルダの `basic-design-*.md` |
-| [docs/detailed-design.md](docs/detailed-design.md) | 詳細設計の索引（X1）。X2〜X7 は `detailed-design-x*.md` |
-| [docs/overview.html](docs/overview.html) | 設計の視覚資料（単体の HTML） |
-| [docs/manual/manual-pc.md](docs/manual/manual-pc.md) | 説明書 PC 版 |
-| [docs/manual/manual-android.md](docs/manual/manual-android.md) | 説明書 Android 版 |
-| [docs/manual/development.md](docs/manual/development.md) | 開発者向け（構成、ビルド、CI、Release、番号の読み方） |
+| PC | Windows 11、iTunes 12.x（Windows 版）。Apple Music アプリには対応していません |
+| スマホ | Android 11 以降 |
 
-レビューの記録と公式文書の確認の結果は、この repo には置かない。
+## ダウンロード
+
+[Releases](https://github.com/elys0912/KudagiTune/releases/latest) から入手できます。
+
+| ファイル | 内容 |
+|---|---|
+| `KudagiTune-<バージョン>.msi` | PC 版のインストーラー（おすすめ） |
+| `KudagiTune-<バージョン>-windows.zip` | PC 版の zip。管理者の権限が無い PC 向け |
+| `SHA256SUMS.txt` | 取り違えの確認用のチェックサム |
+
+## はじめかた
+
+1. PC 版を入れる：MSI を実行します。コード署名をしていないため、SmartScreen の警告が出ます。「詳細情報」→「実行」で進めてください。
+2. iTunes の設定：iTunes の「編集」→「環境設定」→「詳細」で、「iTunes ライブラリ XML をほかのアプリケーションと共有」（英語版では Share iTunes Library XML with other applications）を有効にします。
+3. スマホ版を入れる：APK をスマホで開いてインストールします。
+4. ペアリング：PC のトレイのメニューで「ペアリングコードを表示」を選び、出てきた 6 桁のコードをスマホに入力します。両方の画面に出る確認コードが同じなら完了です。
+5. 同期：スマホでプレイリストを選び、「同期」を押します。
+
+詳しい使い方は説明書を見てください。
+
+- [PC 版の説明書](docs/manual/manual-pc.md)
+- [Android 版の説明書](docs/manual/manual-android.md)
+
+## 更新とアンインストール
+
+アプリの中では更新を確認しません。新しいバージョンは [Releases](https://github.com/elys0912/KudagiTune/releases) で確認してください。PC 版を更新するときは、トレイの「終了」でアプリを止めてから、新しい MSI を実行します。設定とペアリングはそのまま引き継がれます。
+
+アンインストールは Windows の「設定」→「アプリ」から行います。設定や鍵のファイルは残ります。消し方は [PC 版の説明書](docs/manual/manual-pc.md#アンインストール) にあります。
+
+## 開発者向け
+
+ビルドの方法、構成、Release の手順は [開発者向けの説明書](docs/manual/development.md) にあります。設計書は [docs/](docs/) にあります。

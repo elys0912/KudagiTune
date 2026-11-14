@@ -1,3 +1,4 @@
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.io.File
 import java.util.zip.ZipFile
 
@@ -54,9 +55,20 @@ compose.desktop {
         mainClass = "playlistsyncfox.desktop.MainKt"
 
         // jpackage が実行ファイルに付けるアイコン。トレイと窓の画像は資源の `icons/`（Main.kt が読む）
+        // 配布は全ユーザー向けの MSI（C:\Program Files に入る）と、同じ中身の zip（createDistributable の出力）。ADR 0016
         nativeDistributions {
+            targetFormats(TargetFormat.Msi)
+            packageName = "KudagiTune"
+            packageVersion = "1.0.0"
+            description = "iTunes のプレイリストを Android へ同期する"
+            vendor = "elys0912"
             windows {
                 iconFile.set(project.file("packaging/kudagitune.ico"))
+                menu = true
+                // 指定しないとスタートメニューのフォルダが「不明」（jpackage の既定の Unknown）になる
+                menuGroup = "KudagiTune"
+                // 版を上げた MSI で上書きして更新するための固定の ID。変えると別の製品として入る
+                upgradeUuid = "ee34408f-6d98-40dd-9508-cb71421d9047"
             }
         }
     }

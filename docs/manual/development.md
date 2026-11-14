@@ -1,7 +1,6 @@
 # KudagiTune 開発者向け説明書
 
 対象の版：設計の第 5 稿（2026-11-06）に review-15（2026-11-09）と、同日の 2 周目の決定（再生できない形式は転送しない、ライセンスの NOTICE と Java 実行環境の `legal/`）を反映したもの。土台は 2026-11-06
-この説明書は設計を元に書いた。実機での確認は未。
 
 設計の版が進んだら、ここも合わせて直す。
 
@@ -69,7 +68,7 @@ desktop ──▶ itunes ──▶ shared ◀── android
 | JDK | 定義ファイルで版を固定する（版は repo の定義が正。ここには書かない） |
 | Android SDK | 同上。全モジュールの構成に要る（shared が Android の対象を持つため。desktop だけの作業でも要る） |
 | Gradle | repo の wrapper（`gradlew`）を使う。手元に Gradle を入れない |
-| Windows | desktop の配布物（zip）は Windows の実行環境で作る。実行も Windows |
+| Windows | desktop の配布物（MSI と zip）は Windows の実行環境で作る。実行も Windows |
 | 実機 | Android 11 以降の端末。実機の確認の表を埋めるのに要る。最初の実機確認は Android 14 の端末。C-6・C-10 は 15・16 の端末を用意してから |
 
 - Kotlin、Ktor、Compose の版は version catalog の 1 か所で持つ
@@ -135,7 +134,7 @@ GitHub Actions で動かす。細部は変わりうる。
 | 契機 | 内容 |
 |---|---|
 | プルリクエストと main への push | ubuntu の環境に JDK と Android SDK を用意し（版は repo の定義が正）、`./gradlew build :android:assembleDebug`（全モジュールのコンパイルとテスト。端末が要る計測テストは含まない。android のデバッグビルド）、依存の向きの検査 |
-| タグの push | android のリリースビルド（署名つき APK）、desktop の zip、下書きの Release の作成と配布物の添付（未実装） |
+| タグの push | android のリリースビルド（署名つき APK）、desktop の MSI と zip、下書きの Release の作成と配布物の添付（未実装） |
 
 - APK の署名の鍵と資格情報は GitHub の Secrets に置き、環境変数で渡す。ログに出さない
 - Secrets の名前は未定
@@ -144,7 +143,7 @@ GitHub Actions で動かす。細部は変わりうる。
 ## 6. Release の手順
 
 1. `v<major>.<minor>.<patch>` の形で版のタグを打つ（手動）
-2. CI が desktop の zip と APK を作る。APK は署名の鍵が CI にあるときだけ署名する
+2. CI が desktop の MSI と zip と APK を作る。手元で作るときは `./gradlew :desktop:packageMsi :desktop:createDistributable`（MSI は `desktop/build/compose/binaries/main/msi/`、zip にするのは `app/KudagiTune/`）。版は `desktop/build.gradle.kts` の `packageVersion` と `android/build.gradle.kts` の `versionName` をそろえる。APK は署名の鍵が CI にあるときだけ署名する
 3. CI が下書きの Release を作り、配布物とチェックサム（SHA-256 の一覧）を付ける
 4. APK を実機に入れ、確認の表の該当項目を確かめる（手動）
 5. repo が public であることを確かめる
