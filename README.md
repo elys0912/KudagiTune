@@ -51,4 +51,4 @@ PC のアプリはトレイで待機し、スマホのアプリが PC から曲�
 
 ## 開発者向け
 
-ビルドの方法、構成、Release の手順は [開発者向けの説明書](docs/manual/development.md) にあります。設計書は [docs/](docs/) にあります。
+ビルドの方法、構成、Release の手順は [開発者向けの説明書](docs/manual/development.md) にあります。
