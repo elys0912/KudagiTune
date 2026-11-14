@@ -421,7 +421,7 @@ XML 欄（`xml`）
 - 登録先は現在のユーザーの Run キー（`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`）。管理者権限が要らない（B4-6 の場所の規則）
 - 値の名前は `playlist-sync-fox`。値は配布物の実行ファイルのパスと `--background`（置いた値でなく定数）。パスが変わったとき（更新、移動）は、起動のたびに現在のパスで書き直す
 - 無効にするときは値を消す。無ければ失敗にしない
-- 登録先は Run キーで、zip 配布（J13）と合う
+- 登録先は Run キーで、zip 配布（J13）と合う。全ユーザー向けの MSI（ADR 0016）で入れたときも、登録は利用者ごとの Run キーで、値は `C:\Program Files\KudagiTune` の実行ファイルを指す
 
 ### X5-7 テストの観点
 
