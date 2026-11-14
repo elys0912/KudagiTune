@@ -33,6 +33,7 @@ import playlistsyncfox.desktop.ui.PcInputs
 import playlistsyncfox.desktop.ui.PcState
 import playlistsyncfox.desktop.ui.ServerFailureKind
 import playlistsyncfox.desktop.ui.ServerStatus
+import playlistsyncfox.desktop.ui.TransferSpeedMeter
 import playlistsyncfox.desktop.ui.buildPcState
 import playlistsyncfox.desktop.watch.DirectoryEventsOpener
 import playlistsyncfox.desktop.watch.HeldLibrary
@@ -100,6 +101,7 @@ class PcApp(
     private val holder = LibraryHolder(clock) { settings.current.staleDays }
     private val activity = ActivityTracker(clock)
     private val progress = ProgressBoard(clock)
+    private val speedMeter = TransferSpeedMeter()
     private val tracks = TrackTable()
     private var pairing: PairingService? = null
     private var tls: TlsIdentity? = null
@@ -291,6 +293,7 @@ class PcApp(
 
     private fun snapshot(): PcState {
         val advertised = pcAdvertiser?.addresses?.value.orEmpty()
+        val now = clock.instant()
         return buildPcState(
             PcInputs(
                 server = serverStatus,
@@ -304,8 +307,9 @@ class PcApp(
                 settingsReset = settingsReset,
                 endpoints = advertised.map { "${it.hostAddress}:${settings.current.port}" },
                 fingerprint = tls?.let { formatFingerprint(crypto, it.spkiDer) },
+                speed = speedMeter.sample(now, activity.totalSentBytes, activity.isSyncing(now)),
             ),
-            clock.instant(),
+            now,
         )
     }
 }

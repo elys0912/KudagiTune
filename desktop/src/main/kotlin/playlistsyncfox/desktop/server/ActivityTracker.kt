@@ -23,6 +23,7 @@ class ActivityTracker(private val clock: Clock) {
     private var lastTrackRequest: Instant? = null
     private val sending = AtomicInteger(0)
     private val sendingTrack = AtomicReference<Sending?>(null)
+    private val totalSent = AtomicLong(0)
 
     private class Sending(val displayName: String, val size: Long) {
         val sent = AtomicLong(0)
@@ -45,8 +46,14 @@ class ActivityTracker(private val clock: Clock) {
     fun trackSendStarted(displayName: String, size: Long): (Int) -> Unit {
         val track = Sending(displayName, size)
         sendingTrack.set(track)
-        return { track.sent.addAndGet(it.toLong()) }
+        return {
+            track.sent.addAndGet(it.toLong())
+            totalSent.addAndGet(it.toLong())
+        }
     }
+
+    /** 起動してから P2 で送ったバイト数の合計。転送速度の計測に使う（ADR 0019）。 */
+    val totalSentBytes: Long get() = totalSent.get()
 
     /** P2 の送信中の曲。無ければ null。 */
     fun sendingTrack(): SendingTrack? = sendingTrack.get()?.let { SendingTrack(it.displayName, it.sent.get(), it.size) }
