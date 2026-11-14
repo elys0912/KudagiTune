@@ -17,4 +17,5 @@
 | [0012](0012-最初の版は端末-1-台と-PC-1-台で確定する.md) | 最初の版は端末 1 台と PC 1 台で確定する | spec-change | short | accepted | 2026-11-09 |  |
 | [0013](0013-再生できるかの判定をやめ、保護付き以外は形式を問わず転送する.md) | 再生できるかの判定をやめ、保護付き以外は形式を問わず転送する | design-fix | short | accepted | 2026-11-09 |  |
 | [0014](0014-Bluetooth-の経路を足す.md) | Bluetooth の経路を足す | feature | short | accepted | 2026-11-11 |  |
+| [0015](0015-main-への-push-の-CI-は、PR-で検査済みのコミットでは流さない.md) | main への push の CI は、PR で検査済みのコミットでは流さない | cost | short | accepted | 2026-11-14 |  |
 <!-- adr-index:end -->
