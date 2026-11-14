@@ -160,7 +160,7 @@ class SyncRunner(private val env: SyncEnvironment) {
                 return null
             }
             deviceId = pairing.deviceId
-            // 0. 選択が空、または保存先が無いときは始めない（D15、D16）
+            // 0. 選択が空で m3u8 も残っていない、または保存先が無いときは始めない（D15、D16、ADR 0021）
             when (env.startBlock()) {
                 StartBlock.NoSelection -> {
                     env.log.line("同期するプレイリストが選ばれていないため、何もせず終える")

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -505,7 +506,8 @@ private fun LogPanel(app: PcApp, onOpenLogDir: () -> Unit) {
     Column(Modifier.fillMaxWidth().height(LOG_PANEL_HEIGHT)) {
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.border))
         Row(Modifier.fillMaxWidth().height(32.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.fillMaxHeight()) {
+            // 幅を「ログ」の文字に合わせる。指定が無いと下線の fillMaxWidth が行の幅を取り切り、右の操作が押し出される
+            Box(Modifier.fillMaxHeight().width(IntrinsicSize.Max)) {
                 Text("ログ", fontSize = 11.sp, modifier = Modifier.align(Alignment.Center))
                 Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(1.dp).background(colors.accent))
             }

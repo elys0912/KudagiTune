@@ -101,6 +101,19 @@ class PairingPresenterTest {
     }
 
     @Test
+    fun `完了の段に P5 の応答で出した確認コードが残る`() = runTest {
+        val gateway = Gateway {
+            it.emit(PairingEvent.Fingerprint("0a1b 2c3d"))
+            it.emit(PairingEvent.Completed(DEVICE, "pc"))
+        }
+        val presenter = targeted(InMemoryStore(), gateway)
+        presenter.submitCode("123456")
+        runCurrent()
+
+        assertEquals("0a1b 2c3d", assertIs<PairingStage.Done>(presenter.state.value.stage).fingerprint)
+    }
+
+    @Test
     fun `TA-127 完了の段は T1 と T2 がともに空のときだけ以前の曲の整理の案内を出す`() = runTest {
         val empty = InMemoryStore()
         val emptyPresenter = targeted(empty, Gateway { it.emit(PairingEvent.Completed(DEVICE, "pc")) })

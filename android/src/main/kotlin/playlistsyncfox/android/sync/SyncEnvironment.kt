@@ -74,9 +74,18 @@ val ProcessGate = Mutex()
 /** 同期を始められない理由（X6-3 の手順 0）。 */
 enum class StartBlock { NoSelection, StorageMissing }
 
-/** 選択が空、または保存先が無いとき、同期を始めない（D15、D16）。画面側も同じ判定を先に行う。 */
+/**
+ * 選択が空、または保存先が無いとき、同期を始めない（D15、D16）。画面側も同じ判定を先に行う。
+ * 選択が空でも、書いた m3u8（T2）が残っていれば始める。空のマニフェストで同期し、m3u8 を片付ける（ADR 0021）。
+ */
 suspend fun SyncEnvironment.startBlock(): StartBlock? = when {
-    store.selectedPlaylists().isEmpty() -> StartBlock.NoSelection
+    store.selectedPlaylists().isEmpty() && !hasWrittenPlaylists() -> StartBlock.NoSelection
     !volumeAvailable -> StartBlock.StorageMissing
     else -> null
+}
+
+private suspend fun SyncEnvironment.hasWrittenPlaylists(): Boolean {
+    val deviceId = store.pairing()?.deviceId ?: return false
+
+    return store.playlists(deviceId).isNotEmpty()
 }

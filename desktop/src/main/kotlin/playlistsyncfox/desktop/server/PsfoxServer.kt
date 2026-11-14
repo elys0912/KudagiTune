@@ -343,6 +343,7 @@ private suspend fun saveReport(env: ServerEnv, call: ApplicationCall) {
         )
     }
     env.progress.clear()
+    env.activity.syncReported()
     env.log.info("server", "P4 を受けた outcome=${report.outcome.name.lowercase()}")
     call.respond(HttpStatusCode.NoContent)
 }

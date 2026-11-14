@@ -53,7 +53,8 @@ sealed interface PairingStage {
     /** 宛先の確定。コードの入力欄。[fingerprint] は P5 の応答が返った後。 */
     data class Target(val target: PairingTarget, val fingerprint: String? = null, val codeError: String? = null) : PairingStage
 
-    data class Done(val pcName: String, val showCleanupHint: Boolean) : PairingStage
+    /** [fingerprint] は P5 の応答で出した確認コード。完了の後も PC の画面と見比べられるように残す。 */
+    data class Done(val pcName: String, val fingerprint: String?, val showCleanupHint: Boolean) : PairingStage
 
     data object AttemptsExhausted : PairingStage
 
@@ -163,7 +164,12 @@ class PairingPresenter(
     private suspend fun handle(current: PairingStage.Target, event: PairingEvent) {
         val stage = when (event) {
             is PairingEvent.Fingerprint -> current.copy(fingerprint = event.text)
-            is PairingEvent.Completed -> PairingStage.Done(event.pcName, showCleanupHint = nothingPlaced(event.deviceId))
+            // [current] は送信の時点の段で、確認コードを持たない。Fingerprint の後の今の段から引き継ぐ
+            is PairingEvent.Completed -> PairingStage.Done(
+                event.pcName,
+                fingerprint = (mutableState.value.stage as? PairingStage.Target)?.fingerprint,
+                showCleanupHint = nothingPlaced(event.deviceId),
+            )
             PairingEvent.CodeMismatch -> {
                 mismatches++
                 if (mismatches >= CODE_ATTEMPTS) PairingStage.AttemptsExhausted else current.copy(codeError = "ペアリングコードが違います")
