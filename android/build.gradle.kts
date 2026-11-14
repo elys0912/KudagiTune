@@ -51,6 +51,8 @@ licensee {
     allowUrl("https://opensource.org/license/mit")
     allowUrl("https://www.bouncycastle.org/licence.html")
     bundleAndroidAsset.set(true)
+    // 画面（MainActivity の licenses）は資産の直下の artifacts.json を読む。Licensee の既定は app/cash/licensee/ の下
+    androidAssetReportPath.set("artifacts.json")
 }
 
 /**
