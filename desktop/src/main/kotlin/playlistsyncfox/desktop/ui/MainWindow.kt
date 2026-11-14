@@ -113,7 +113,8 @@ private fun lastSyncText(sync: LastSync): String {
     return "前回の同期：$startedAt　$outcome　追加 ${counts.added} 更新 ${counts.replaced} 削除 ${counts.removed}　$failures"
 }
 
-private fun mib(bytes: Long): String = String.format(Locale.ROOT, "%.1f MiB", bytes / 1_048_576.0)
+// 1 MB = 1,048,576 バイトで数え、表記は Windows のエクスプローラーに合わせて MB にする
+private fun megabytes(bytes: Long): String = String.format(Locale.ROOT, "%.1f MB", bytes / 1_048_576.0)
 
 private fun percent(done: Long, total: Long): Int = if (total <= 0) 0 else (done * 100 / total).toInt().coerceIn(0, 100)
 
@@ -338,7 +339,7 @@ private fun OverallProgress(progress: ProgressReport) {
         Bar(progress.doneBytes, progress.totalBytes, 8.dp)
         Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             Text("${progress.doneTracks} / ${progress.totalTracks} 曲", fontSize = 12.sp, color = colors.muted, fontFamily = FontFamily.Monospace)
-            Text("${mib(progress.doneBytes)} / ${mib(progress.totalBytes)}", fontSize = 12.sp, color = colors.muted, fontFamily = FontFamily.Monospace)
+            Text("${megabytes(progress.doneBytes)} / ${megabytes(progress.totalBytes)}", fontSize = 12.sp, color = colors.muted, fontFamily = FontFamily.Monospace)
         }
     }
 }
@@ -351,7 +352,7 @@ private fun SendingProgress(sending: SendingTrack) {
             Text("${percent(sending.sentBytes, sending.size)}%", fontFamily = FontFamily.Monospace)
         }
         Bar(sending.sentBytes, sending.size, 4.dp)
-        Text("${mib(sending.sentBytes)} / ${mib(sending.size)}", fontSize = 12.sp, color = MaterialTheme.appColors.muted, fontFamily = FontFamily.Monospace)
+        Text("${megabytes(sending.sentBytes)} / ${megabytes(sending.size)}", fontSize = 12.sp, color = MaterialTheme.appColors.muted, fontFamily = FontFamily.Monospace)
     }
 }
 

@@ -124,8 +124,8 @@ class TrackRowUiTest {
         // 地の色が付くのは転送中だけ。薄い文字は完了だけ
         assertEquals(listOf(false, true, false, false), listOf(done, transferring, waiting, failed).map { it.highlighted })
         assertEquals(listOf(true, false, false, false), listOf(done, transferring, waiting, failed).map { it.dimmed })
-        assertEquals("10.0 MiB", done.sizeText)
-        assertEquals("5.0 MiB / 10.0 MiB", transferring.sizeText)
+        assertEquals("10.0 MB", done.sizeText)
+        assertEquals("5.0 MB / 10.0 MB", transferring.sizeText)
         assertEquals(0.5f, transferring.fraction)
         assertNull(waiting.fraction)
         assertEquals("端末への保存に失敗しました", failed.reason)
@@ -143,20 +143,20 @@ class TrackRowUiTest {
 
 class FormatBytesTest {
     @Test
-    fun `TA-266 1 KiB 未満は B、1 KiB から KiB、1 MiB から MiB で、小数 1 桁に丸める`() {
+    fun `TA-266 1 KB 未満は B、1 KB から KB、1 MB から MB で、小数 1 桁に丸める`() {
         assertEquals("0 B", formatBytes(0))
         assertEquals("1023 B", formatBytes(1023))
-        assertEquals("1.0 KiB", formatBytes(1024))
-        assertEquals("1.0 MiB", formatBytes(1L shl 20))
-        assertEquals("1.0 GiB", formatBytes(1L shl 30))
+        assertEquals("1.0 KB", formatBytes(1024))
+        assertEquals("1.0 MB", formatBytes(1L shl 20))
+        assertEquals("1.0 GB", formatBytes(1L shl 30))
     }
 
     @Test
     fun `TA-266 小数 1 桁に丸めて 1024 になる値は、上の単位で出す`() {
-        assertEquals("1023.9 KiB", formatBytes(1048524))
-        assertEquals("1.0 MiB", formatBytes(1048525))
-        assertEquals("1.0 MiB", formatBytes((1L shl 20) - 1))
-        assertEquals("1.0 GiB", formatBytes((1L shl 30) - 1))
+        assertEquals("1023.9 KB", formatBytes(1048524))
+        assertEquals("1.0 MB", formatBytes(1048525))
+        assertEquals("1.0 MB", formatBytes((1L shl 20) - 1))
+        assertEquals("1.0 GB", formatBytes((1L shl 30) - 1))
     }
 }
 
