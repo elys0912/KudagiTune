@@ -282,7 +282,7 @@ class ServerRoutesTest {
     }
 
     @Test
-    fun `TD-10 曲の表が空（P1 より前や再起動後）のときは 404 でなく 503 の E4`() = withServer(fixture) { client ->
+    fun `TD-10 曲の表がまだ無い（P1 より前や再起動後）ときは 404 でなく 503 の E4`() = withServer(fixture) { client ->
         val response = client.signed(fixture, HttpMethod.Get, trackUri())
 
         assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
