@@ -41,6 +41,7 @@ import playlistsyncfox.shared.crypto.SigningKeyRef
 import java.nio.file.Path
 import java.security.SecureRandom
 import java.time.Duration
+import java.time.Instant
 
 const val DEVICE = "00000000-0000-4000-8000-000000000001"
 const val OTHER_DEVICE = "00000000-0000-4000-8000-000000000002"
@@ -54,7 +55,7 @@ val SPKI_HASH = ByteArray(32) { it.toByte() }
 val SELECTION = """{"playlist_ids":["$PLAYLIST_ID"]}""".encodeToByteArray()
 
 /** サーバーのルートを試すための部品一式。実ネットワークは使わず、鍵の保管は記憶の中、時刻は固定。 */
-class ServerFixture(val root: Path, val store: SecretStore = MemorySecretStore(), now: java.time.Instant = T0.plusSeconds(60)) {
+class ServerFixture(val root: Path, val store: SecretStore = MemorySecretStore(), now: Instant = T0.plusSeconds(60)) {
     val clock = MutableClock(now)
     val crypto = PcCrypto()
     val settings = SettingsStore(root.resolve("settings.json")) { PC_ID }.also { it.load() }

@@ -45,9 +45,11 @@ import playlistsyncfox.itunes.plist.readLibrary
 import playlistsyncfox.shared.auth.NonceStore
 import playlistsyncfox.shared.crypto.CryptoProvider
 import playlistsyncfox.shared.crypto.formatFingerprint
+import java.io.IOException
 import java.net.BindException
 import java.net.InetAddress
 import java.nio.file.Files
+import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import java.time.Clock
 
@@ -175,16 +177,32 @@ class PcApp(
 
     private fun startServer(identity: TlsIdentity) {
         val service = PairingService(
-            crypto, clock, settings.current.pcId, crypto.sha256(identity.spkiDer), settings, registry,
+            crypto = crypto,
+            clock = clock,
+            pcId = settings.current.pcId,
+            spkiHash = crypto.sha256(identity.spkiDer),
+            settings = settings,
+            registry = registry,
             onViewChanged = { pcAdvertiser?.setPair(pairing?.view?.value is PairingView.Open); refreshState() },
             // 端末が新しい証明書でペアリングし直したので、作り直しの警告は要らない
             onPaired = { certificateRegenerated = false; refreshState() },
         )
         pairing = service
         val env = ServerEnv(
-            crypto, clock, clock.instant(), NonceStore(), keyRing, SignatureFailureCounter(clock), service,
-            settings.current.pcId, settings, ManifestService(crypto, clock, settings, tracks, ::libraryForRequest),
-            tracks, activity, progress, log,
+            crypto = crypto,
+            clock = clock,
+            serverStartedAt = clock.instant(),
+            nonces = NonceStore(),
+            keyRing = keyRing,
+            failures = SignatureFailureCounter(clock),
+            pairing = service,
+            pcId = settings.current.pcId,
+            settings = settings,
+            manifests = ManifestService(crypto, clock, settings, tracks, ::libraryForRequest),
+            tracks = tracks,
+            activity = activity,
+            progress = progress,
+            log = log,
         )
         launchServer(identity, env)
     }
@@ -240,12 +258,12 @@ class PcApp(
     fun setXmlPath(text: String): XmlPathResult {
         val path = try {
             Path.of(text)
-        } catch (_: java.nio.file.InvalidPathException) {
+        } catch (_: InvalidPathException) {
             return XmlPathResult.Unreadable
         }
         val readable = try {
             readLibrary(Files.readAllBytes(path)) is LibraryReadOutcome.Read
-        } catch (_: java.io.IOException) {
+        } catch (_: IOException) {
             false
         }
         if (!readable) return XmlPathResult.Unreadable

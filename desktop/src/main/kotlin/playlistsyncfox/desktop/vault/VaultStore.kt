@@ -9,6 +9,7 @@ import playlistsyncfox.desktop.settings.writeAtomically
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Base64
+import java.util.concurrent.ConcurrentHashMap
 
 /** 復号に失敗した（別の利用者の暗号化、破損）。空として扱わず、呼び出し側がサーバーを起動しない。 */
 class SecretStoreException(message: String) : Exception(message)
@@ -111,7 +112,7 @@ class FileSecretStore(private val file: Path, private val cipher: SecretCipher) 
 
 /** K1：device_id から署名鍵 K を引く。起動時に端末の表から読み込む（X5-2）。 */
 class KeyRing(private val store: SecretStore) {
-    private val keys = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+    private val keys = ConcurrentHashMap<String, ByteArray>()
 
     /** 鍵が読めなかった device_id。W3 に警告を出す。 */
     @Volatile

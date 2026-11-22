@@ -45,9 +45,9 @@ private class StructureException : Exception()
 fun readLibrary(xml: ByteArray): LibraryReadOutcome =
     try {
         LibraryReadOutcome.Read(PlistLibraryReader(newStreamReader(xml)).read())
-    } catch (e: XMLStreamException) {
+    } catch (_: XMLStreamException) {
         LibraryReadOutcome.Failed(LibraryReadError.InvalidSyntax)
-    } catch (e: StructureException) {
+    } catch (_: StructureException) {
         LibraryReadOutcome.Failed(LibraryReadError.InvalidStructure)
     }
 
@@ -349,7 +349,7 @@ private class PlistLibraryReader(private val xml: XMLStreamReader) {
     private fun parseInstant(text: String): Instant? =
         try {
             Instant.parse(text)
-        } catch (e: DateTimeParseException) {
+        } catch (_: DateTimeParseException) {
             null
         }
 

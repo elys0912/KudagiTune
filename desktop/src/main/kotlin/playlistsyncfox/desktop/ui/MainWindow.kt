@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -128,8 +128,10 @@ private fun lastSyncText(sync: LastSync): String {
     return "前回の同期：$startedAt　$outcome　追加 ${counts.added} 更新 ${counts.replaced} 削除 ${counts.removed}　$failures"
 }
 
-// 1 MB = 1,048,576 バイトで数え、表記は Windows のエクスプローラーに合わせて MB にする
-private fun megabytes(bytes: Long): String = String.format(Locale.ROOT, "%.1f MB", bytes / 1_048_576.0)
+/** 1 MB のバイト数。Windows のエクスプローラーと同じく 1,048,576 バイトを MB と表記する（大きさと転送速度の表示で共通）。 */
+private const val BYTES_PER_MB = 1_048_576.0
+
+private fun megabytes(bytes: Long): String = String.format(Locale.ROOT, "%.1f MB", bytes / BYTES_PER_MB)
 
 private fun percent(done: Long, total: Long): Int = if (total <= 0) 0 else (done * 100 / total).toInt().coerceIn(0, 100)
 
@@ -393,9 +395,6 @@ private fun SendingProgress(sending: SendingTrack) {
     }
 }
 
-/** 1 MB のバイト数（表記は Windows に合わせて MB）。 */
-private const val BYTES_PER_MB = 1_048_576.0
-
 /** 線の縦軸の上端の候補（MB/s）。線の最大値以上で最も小さいものを使う。 */
 private val SPEED_AXIS_TOPS = listOf(1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0, 1000.0)
 
@@ -515,7 +514,7 @@ private fun LogPanel(app: PcApp, onOpenLogDir: () -> Unit) {
             Text("ログの場所を開く", fontSize = 11.sp, color = colors.muted, modifier = Modifier.clickable(onClick = onOpenLogDir))
         }
         LazyColumn(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, bottom = 10.dp), state = listState) {
-            itemsIndexed(lines) { _, line ->
+            items(lines) { line ->
                 val levelColor = when (line.level) {
                     LogLevel.Info -> colors.success
                     LogLevel.Warn -> colors.caution

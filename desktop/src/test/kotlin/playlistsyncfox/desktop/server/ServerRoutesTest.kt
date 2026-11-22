@@ -20,6 +20,7 @@ import playlistsyncfox.desktop.settings.LogLine
 import playlistsyncfox.shared.auth.SignatureHeaderNames
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
 import java.time.Duration
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeBytes
@@ -281,7 +282,7 @@ class ServerRoutesTest {
     }
 
     @Test
-    fun `TD-10 曲の表が空（P1 より前や再起動後）のときは 404 でなく 503 の E4`() = withServer(fixture) { client ->
+    fun `TD-10 曲の表がまだ無い（P1 より前や再起動後）ときは 404 でなく 503 の E4`() = withServer(fixture) { client ->
         val response = client.signed(fixture, HttpMethod.Get, trackUri())
 
         assertEquals(HttpStatusCode.ServiceUnavailable, response.status)
@@ -378,7 +379,7 @@ class ServerRoutesTest {
         client.signed(fixture, HttpMethod.Post, "/v1/digest", SELECTION)
         // 実ファイルを P1 の時の大きさに戻す。P3 の再計測の値が表を置き換えていれば、P1 の size では 409 になる
         trackFile.writeBytes(TRACK_BYTES)
-        Files.setLastModifiedTime(trackFile, java.nio.file.attribute.FileTime.fromMillis(trackModified))
+        Files.setLastModifiedTime(trackFile, FileTime.fromMillis(trackModified))
 
         val response = client.signed(fixture, HttpMethod.Get, query)
 

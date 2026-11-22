@@ -100,7 +100,7 @@ class LibraryRefresher(
         rereadRequested = false
         val cycle = scope.launch {
             var wait = waitForStability
-            do {
+            while (true) {
                 if (wait) waiter.awaitStable()
                 synchronized(lock) {
                     phase = Phase.Loading
@@ -108,7 +108,8 @@ class LibraryRefresher(
                 }
                 applyUnlessStopped(loader.load())
                 wait = true
-            } while (rereadAfterPass())
+                if (!rereadAfterPass()) break
+            }
         }
         // 停止済みの scope では本体が走らずに終わるため、本体の finally ではなく完了の通知で待ちを解く
         cycle.invokeOnCompletion {

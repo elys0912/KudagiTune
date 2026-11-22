@@ -36,14 +36,14 @@ class LibraryReloadTest {
     private val clock = MutableClock(T0)
     private val log = AppLog(dir.resolve("logs"), clock)
 
-    private val stable = StabilityWaiter({ FileStamp(1, 1) })
+    private val stable = StabilityWaiter { FileStamp(1, 1) }
 
     private fun holder(staleDays: Int = 7) = LibraryHolder(clock) { staleDays }
 
     @Test
     fun `TD-37 安定待ちの途中でサイズか更新日時が変わると、待ちを最初からやり直す`() = runTest {
         val stamps = ArrayDeque(listOf(FileStamp(1, 1), FileStamp(2, 2), FileStamp(2, 2), FileStamp(2, 2)))
-        val waiter = StabilityWaiter({ stamps.removeFirst() })
+        val waiter = StabilityWaiter { stamps.removeFirst() }
 
         waiter.awaitStable()
 
@@ -54,7 +54,7 @@ class LibraryReloadTest {
     @Test
     fun `TD-37 ファイルが無い瞬間も変化とみなして待ちをやり直す`() = runTest {
         val stamps = ArrayDeque(listOf(FileStamp(1, 1), null, FileStamp(1, 1), FileStamp(1, 1)))
-        val waiter = StabilityWaiter({ stamps.removeFirst() })
+        val waiter = StabilityWaiter { stamps.removeFirst() }
 
         waiter.awaitStable()
 
@@ -172,7 +172,7 @@ class LibraryReloadTest {
         var reads = 0
         var present = false
         val holder = holder()
-        val waiter = StabilityWaiter({ if (present) FileStamp(1, 1) else null })
+        val waiter = StabilityWaiter { if (present) FileStamp(1, 1) else null }
         val refresher = LibraryRefresher(backgroundScope, LibraryLoader(xml, log) { reads++; XML_BYTES }, waiter, holder, { if (present) T0 else null })
         refresher.notifyChanged()
 

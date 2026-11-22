@@ -35,7 +35,8 @@ object NoRunKey : RunKey {
 }
 
 private const val RUN_VALUE_NAME = "playlist-sync-fox"
-private const val BACKGROUND_FLAG = "--background"
+/** ログイン時の起動であることを示す引数。Run キーに書き、Main が読む。 */
+internal const val BACKGROUND_FLAG = "--background"
 
 /**
  * ログイン時の起動の登録（X5-6）。値は配布物の実行ファイルのパスと `--background`。

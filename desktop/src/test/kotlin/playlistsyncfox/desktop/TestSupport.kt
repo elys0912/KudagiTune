@@ -6,15 +6,16 @@ import playlistsyncfox.desktop.vault.SecretStoreException
 import playlistsyncfox.itunes.library.LibraryReadResult
 import playlistsyncfox.itunes.library.ReadDiagnostics
 import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 
 /** 試験が進める時計。 */
 class MutableClock(var now: Instant) : Clock() {
     override fun getZone() = ZoneOffset.UTC
 
-    override fun withZone(zone: java.time.ZoneId?) = this
+    override fun withZone(zone: ZoneId?) = this
 
     override fun instant(): Instant = now
 

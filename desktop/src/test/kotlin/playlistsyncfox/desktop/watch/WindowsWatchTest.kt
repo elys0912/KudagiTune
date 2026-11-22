@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Tag
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import kotlin.io.path.createTempDirectory
 import kotlin.io.path.writeText
 import kotlin.test.Test
@@ -46,7 +47,7 @@ class WindowsWatchTest {
     fun `TD-43 既存の XML への追記で XML の名前の通知が 1 回以上届く`() {
         dir.resolve(XML_NAME).writeText("a")
 
-        val (xml, _) = observe { Files.writeString(it.resolve(XML_NAME), "b", java.nio.file.StandardOpenOption.APPEND) }
+        val (xml, _) = observe { Files.writeString(it.resolve(XML_NAME), "b", StandardOpenOption.APPEND) }
 
         assertTrue(xml.isNotEmpty())
     }
