@@ -95,7 +95,7 @@ fun logTime(entry: LogEntry, zone: ZoneId = ZoneId.systemDefault()): String =
     logTimeFormat.format(Instant.ofEpochMilli(entry.at).atZone(zone))
 
 /** ログの欄のメッセージ。E の番号があれば添える。 */
-fun logMessage(entry: LogEntry): String = entry.errorNumber?.let { "${entry.message}（E$it）" } ?: entry.message
+fun logMessage(entry: LogEntry): String = entry.errorNumber?.let { "${entry.message}（${errorKindText(it)}）" } ?: entry.message
 
 fun stageHeading(stage: SyncStage): String = when (stage) {
     SyncStage.Connecting -> "PC に接続しています"

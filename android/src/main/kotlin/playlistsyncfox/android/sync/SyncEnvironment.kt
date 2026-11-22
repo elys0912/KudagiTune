@@ -23,7 +23,7 @@ fun interface SyncLogger {
     fun line(text: String)
 
     /** 曲の保存の失敗（E の番号つき。X6-3 の手順 7）。既定は番号を文に添えて [line] に書く。 */
-    fun failure(text: String, errorNumber: Int) = line("$text（E$errorNumber）")
+    fun failure(text: String, errorNumber: Int) = line("$text（${errorKindText(errorNumber)}）")
 }
 
 /** 同期の入力（X6-3 の入口。承認の 2 項目は手動のときだけ使う）。[rerun] は OS が止めた仕事の走り直し。 */
