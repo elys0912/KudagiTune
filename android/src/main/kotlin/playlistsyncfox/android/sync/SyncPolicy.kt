@@ -69,8 +69,9 @@ fun errorKindText(number: Int): String = "E$number"
 
 /**
  * T3 の `error_kind` のうち、自動の抑止・画面・通知が値で判定に使うもの。E1（接続できない）、E2（鍵の不一致を含む）、
- * E3（容量不足。この中の判定だけで使う）、E4（XML を読めない）、E7（時間上限。前面サービスの上限に当たった。B2 の E 表）。
- * 表示語の表（ui/Words.kt の errorWord）は対象の外。
+ * E3（容量不足）、E4（XML を読めない）、E7（時間上限。前面サービスの上限に当たった。B2 の E 表）。
+ * E3 は [autoSuppression] の中だけで使うので private にする。
+ * 表示語の表（ui/Words.kt の errorWord）は E1〜E9 の全部に語を当てる表なので、この定数を使わず文字列のまま並べる。
  */
 internal const val ERROR_KIND_E1 = "E1"
 internal const val ERROR_KIND_E2 = "E2"
