@@ -32,7 +32,7 @@ class XmlWatch(
     private val refresher = LibraryRefresher(
         scope,
         LibraryLoader(path, log),
-        StabilityWaiter({ statOf(path) }),
+        StabilityWaiter { statOf(path) },
         holder,
         { statOf(path)?.let { Instant.ofEpochMilli(it.modifiedAtMillis) } },
     )
