@@ -74,7 +74,6 @@ class ServerEnv(
     val activity: ActivityTracker,
     val progress: ProgressBoard,
     val log: AppLog,
-    val clientAddress: (ApplicationCall) -> String = { it.request.origin.remoteAddress },
 )
 
 private val BodyKey = AttributeKey<ByteArray>("psfox.body")
@@ -204,7 +203,7 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
     }
 
     // 3. 署名失敗の待ち
-    val address = env.clientAddress(call)
+    val address = call.request.origin.remoteAddress
     if (env.failures.isBlocked(address)) {
         call.fail(HttpStatusCode.TooManyRequests, ERROR_AUTH_REJECTED)
         return false
