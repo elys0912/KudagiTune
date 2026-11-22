@@ -29,18 +29,17 @@ desktop ──▶ itunes ──▶ shared ◀── android
 
 ### パッケージの概要
 
-ルートのパッケージ名は `playlistsyncfox`。製品の正式名は KudagiTune に決まったが（review-15）、改めたのは表示名（アプリ名、画面、通知、文書）だけで、パッケージ名、アプリの ID、`psfox`（ヘッダ名、mDNS のサービス名）、保存先のフォルダ名（V22）などの識別子は変えない。下は、その下の相対名。
+ルートのパッケージ名は `playlistsyncfox`。製品の正式名は KudagiTune に決まったが（review-15）、改めたのは表示名（アプリ名、画面、通知、文書）だけで、パッケージ名、アプリの ID、`psfox`（ヘッダ名、mDNS のサービス名）、保存先のフォルダ名（V22）などの識別子は変えない。下はその下の相対名。
 
 | モジュール | パッケージ | 責務 |
 |---|---|---|
-| shared | `shared.manifest` | マニフェストと応答の型 |
+| shared | `shared.manifest` | マニフェストと、P1・P3 の要求と P7 の応答の本文の型 |
 | shared | `shared.diff` | 差分の計算（足す、置き換える、消す） |
 | shared | `shared.path` | 保存先のパスの組み立て、使えない文字の置き換え |
 | shared | `shared.m3u8` | m3u8 の生成 |
-| shared | `shared.result` | エラーの種類と同期の結果の型 |
+| shared | `shared.result` | エラーの種類、同期の結果、P8 の要求の本文の型 |
 | shared | `shared.auth` | ペアリングの手順、署名、再送防止 |
 | shared | `shared.crypto` | `CryptoProvider` の定義、確認コードの表示形式 |
-| shared | `shared.api` | API の要求と応答の型 |
 | itunes | `itunes.plist` | plist XML の読み手 |
 | itunes | `itunes.location` | `file://` の復号 |
 | itunes | `itunes.library` | トラックとプレイリストの型、展開 |
@@ -76,7 +75,7 @@ desktop ──▶ itunes ──▶ shared ◀── android
 
 ## 3. ビルドと実行
 
-コマンドはプロジェクト名を指定して実行する。2 と 4 は CI で確認済み（2026-11-06）。1 は未確認。手元では Android SDK が要る。
+コマンドはプロジェクト名を指定して実行する。2 と 4 は CI で確認済み（2026-11-06）。1 は 2026-11-09 の実機の確認で使った。手元では Android SDK が要る。
 
 1. desktop を実行する：`./gradlew :desktop:run`
 2. android のデバッグビルドを作る：`./gradlew :android:assembleDebug`
@@ -182,7 +181,7 @@ GitHub Actions で動かす。細部は変わりうる。
 | S | Android の画面 |
 | W | PC の画面 |
 | K | 鍵と保管場所 |
-| P | API のルート（P1〜P7） |
+| P | API のルート（P1〜P8） |
 | C | 実機の確認の表（C-1〜C-18） |
 | H | PC 側のペアリングの状態（H0〜H3。詳細設計の X4） |
 | TS、TD、TA | テスト計画のケースの番号（shared と itunes、desktop、android）。束ごとの範囲はテスト計画にある |
@@ -195,12 +194,11 @@ GitHub Actions で動かす。細部は変わりうる。
 
 - Gradle のプラグイン Licensee（`app.cash.licensee`）で、使う OSS の一覧をビルド時に生成する
 - Licensee は `artifacts.json` を出力する。Android ではアセットに同梱する
-- 一覧に含めるもの：Kotlin、Ktor、Room、Compose、JmDNS など、同梱する JVM（OpenJDK のビルド）
+- Licensee の一覧に出るもの：Kotlin、Ktor、Room、Compose、JmDNS など。PC が同梱する JVM（OpenJDK のビルド）は Licensee の一覧に出ないため、PC の画面ではライセンスの最後に足して出す（下の `legal/` の項目）
 - 依存の jar の `META-INF/NOTICE*`（Apache 系の NOTICE）は、ビルドのときに集めて配布物に同梱する（PC と端末の両方）。画面では部品の全文と一緒に出す
 - PC の同梱の Java 実行環境は、実行環境の `legal/` を実行時に読み、モジュールごとの全文を出す。全文の写しは repo に置かない
 - 表示の場所：PC は画面の「ライセンス」ボタン、Android は設定の画面
 - 内容は名前、版、ライセンスの種類、全文。全文は配布物に同梱し、名前と URL だけにしない（`artifacts.json` は許諾の名前と URL を持つが全文は持たないため、全文は別に同梱する。review-15）
-- JSON の項目の一覧は未確認。実装時に確かめる
 - 依存を足したときは、一覧に入ることをビルドで確かめる
 
 ## 9. やらないこと
