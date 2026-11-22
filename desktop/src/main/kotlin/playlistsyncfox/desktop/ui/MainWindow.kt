@@ -128,10 +128,9 @@ private fun lastSyncText(sync: LastSync): String {
     return "前回の同期：$startedAt　$outcome　追加 ${counts.added} 更新 ${counts.replaced} 削除 ${counts.removed}　$failures"
 }
 
-/** 1 MB のバイト数（1,048,576）。 */
+/** 1 MB のバイト数。Windows のエクスプローラーと同じく 1,048,576 バイトを MB と表記する（大きさと転送速度の表示で共通）。 */
 private const val BYTES_PER_MB = 1_048_576.0
 
-// 表記は Windows のエクスプローラーに合わせて MB にする
 private fun megabytes(bytes: Long): String = String.format(Locale.ROOT, "%.1f MB", bytes / BYTES_PER_MB)
 
 private fun percent(done: Long, total: Long): Int = if (total <= 0) 0 else (done * 100 / total).toInt().coerceIn(0, 100)
