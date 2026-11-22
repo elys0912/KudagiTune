@@ -103,7 +103,7 @@ private const val SIGNATURE_BYTES = 32
 /** E2：署名・ペアリングの不一致（401）、ペアリングの拒否（403）、署名失敗の待ち（429）。 */
 private const val ERROR_AUTH_REJECTED = 2
 
-/** E4：XML を読めずマニフェストを作れない、または P1 の曲の表がまだ無い（503）。 */
+/** E4：XML を読めずマニフェストかプレイリストの木を作れない、または P1 の曲の表がまだ無い（503）。 */
 private const val ERROR_XML_UNREADABLE = 4
 
 /** E5：マニフェストに無い ID、またはファイルが無い（404）。 */
@@ -137,17 +137,17 @@ fun Application.psfoxModule(env: ServerEnv) {
     routing {
         post(PATH_MANIFEST) {
             val ids = selectedIds(call) ?: return@post
-            val manifest = env.manifests.forManifest(ids) ?: return@post call.failServiceUnavailable()
+            val manifest = env.manifests.forManifest(ids) ?: return@post call.failLibraryUnavailable()
             call.respondText(writeManifest(manifest), ContentType.Application.Json)
             env.log.info("server", "P1 を返した tracks=${manifest.tracks.size}")
         }
         post(PATH_DIGEST) {
             val ids = selectedIds(call) ?: return@post
-            val digest = env.manifests.forDigest(ids) ?: return@post call.failServiceUnavailable()
+            val digest = env.manifests.forDigest(ids) ?: return@post call.failLibraryUnavailable()
             call.respondText(json.encodeToString(DigestResponse.serializer(), DigestResponse(digest)), ContentType.Application.Json)
         }
         get(PATH_PLAYLISTS) {
-            val tree = env.manifests.forPlaylists() ?: return@get call.failServiceUnavailable()
+            val tree = env.manifests.forPlaylists() ?: return@get call.failLibraryUnavailable()
             call.respondText(writePlaylistTree(tree), ContentType.Application.Json)
         }
         get("$PATH_TRACKS{id}") { sendTrack(env, call) }
@@ -273,8 +273,8 @@ private suspend fun <T> decodeBody(call: ApplicationCall, serializer: KSerialize
 private suspend fun ApplicationCall.fail(status: HttpStatusCode, errorNumber: Int, detail: String? = null) =
     respondText(json.encodeToString(ErrorBody.serializer(), ErrorBody("E$errorNumber", detail)), ContentType.Application.Json, status)
 
-/** E4（503）を返す。返す場合は [ERROR_XML_UNREADABLE] の説明のとおり。 */
-private suspend fun ApplicationCall.failServiceUnavailable() = fail(HttpStatusCode.ServiceUnavailable, ERROR_XML_UNREADABLE)
+/** E4（503）を返す。P1・P3・P7 でライブラリを読めていないときと、P2 で P1 の曲の表がまだ無いときに呼ぶ。 */
+private suspend fun ApplicationCall.failLibraryUnavailable() = fail(HttpStatusCode.ServiceUnavailable, ERROR_XML_UNREADABLE)
 
 /** P1・P3 の本文（選んだ ID の配列）の検査。署名の検証の後に、境界で行う。誤りは 400 で、本文の中身は応答にもログにも出さない。 */
 private suspend fun selectedIds(call: ApplicationCall): List<String>? =
@@ -293,7 +293,7 @@ private suspend fun sendTrack(env: ServerEnv, call: ApplicationCall) {
 
     env.activity.trackRequestStarted()
     try {
-        val table = env.tracks.snapshot() ?: return call.failServiceUnavailable()
+        val table = env.tracks.snapshot() ?: return call.failLibraryUnavailable()
         val entry = table[id] ?: return call.fail(HttpStatusCode.NotFound, ERROR_TRACK_NOT_FOUND)
 
         val query = call.request.queryParameters
