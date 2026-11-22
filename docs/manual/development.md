@@ -181,7 +181,7 @@ GitHub Actions で動かす。細部は変わりうる。
 | S | Android の画面 |
 | W | PC の画面 |
 | K | 鍵と保管場所 |
-| P | API のルート（P1〜P7） |
+| P | API のルート（P1〜P8） |
 | C | 実機の確認の表（C-1〜C-18） |
 | H | PC 側のペアリングの状態（H0〜H3。詳細設計の X4） |
 | TS、TD、TA | テスト計画のケースの番号（shared と itunes、desktop、android）。束ごとの範囲はテスト計画にある |
