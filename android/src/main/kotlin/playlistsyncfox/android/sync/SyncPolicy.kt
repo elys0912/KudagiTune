@@ -64,7 +64,7 @@ fun decideStop(cause: StopCause): StopDecision = when (cause) {
 
 enum class SuppressReason { RecentManual, KeyMismatch, StorageShortage }
 
-/** T3 の `error_kind` と P4 の `failure_counts` のキーに書く E の番号の表記（例：5 → `E5`）。 */
+/** E の番号の表記（例：5 → `E5`）。T3 の `error_kind`、P4 の `failure_counts` のキー、ログの行、画面の語の引き当てで共通に使う。 */
 fun errorKindText(number: Int): String = "E$number"
 
 // T3 の `error_kind` のうち、自動の抑止・画面・通知が値で判定に使うもの。
