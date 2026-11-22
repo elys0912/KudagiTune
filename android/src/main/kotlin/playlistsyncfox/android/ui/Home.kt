@@ -5,6 +5,9 @@ import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.WrittenPlaylist
 import playlistsyncfox.android.db.decodeResult
+import playlistsyncfox.android.sync.ERROR_KIND_E1
+import playlistsyncfox.android.sync.ERROR_KIND_E2
+import playlistsyncfox.android.sync.ERROR_KIND_E4
 import playlistsyncfox.android.sync.ManualStart
 import playlistsyncfox.android.sync.PairingKeeper
 import playlistsyncfox.android.sync.RemovalCheck
@@ -63,7 +66,7 @@ fun endpointText(pairing: Pairing): String {
 }
 
 /** 接続に成功する前に止まった実行の E の種別。この実行の `transport` は保存の列の種類で、判定した方式ではない（B4-1 の 3）。 */
-private val NOT_CONNECTED_ERROR_KINDS = setOf("E1", "E2", "E4")
+private val NOT_CONNECTED_ERROR_KINDS = setOf(ERROR_KIND_E1, ERROR_KIND_E2, ERROR_KIND_E4)
 
 /** `result_json` の `transport` の表示語。JSON は DB から来るため、壊れていれば null。 */
 private fun transportLabelOf(row: SyncRun): String? {

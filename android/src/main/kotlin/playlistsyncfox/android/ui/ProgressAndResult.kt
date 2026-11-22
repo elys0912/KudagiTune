@@ -5,6 +5,7 @@ import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.SyncStore
 import playlistsyncfox.android.db.decodeResult
 import playlistsyncfox.android.log.LogEntry
+import playlistsyncfox.android.sync.ERROR_KIND_E2
 import playlistsyncfox.android.sync.SyncProgress
 import playlistsyncfox.android.sync.SyncStage
 import playlistsyncfox.android.sync.TrackRow
@@ -157,7 +158,7 @@ private fun issueList(lines: List<IssueLine>) = IssueList(lines.take(ISSUE_LIMIT
 fun resultUi(run: SyncRun, issues: List<RunIssue>): ResultUiState {
     val stored = run.resultJson?.takeIf { it.isNotEmpty() }?.let { runCatching { decodeResult(it) }.getOrNull() }
     // E2 は原因欄も詳細も `error_detail` の語で出す（S3 と同じ関数）。`error_detail` が無い行は E の番号の語
-    val e2Notice = stored?.errorDetail.takeIf { run.errorKind == "E2" }?.let(::noticeOf)
+    val e2Notice = stored?.errorDetail.takeIf { run.errorKind == ERROR_KIND_E2 }?.let(::noticeOf)
     return ResultUiState(
         runId = run.runId,
         word = resultWord(if (run.endedAt == null) SyncRun.RESULT_INTERRUPTED else run.result),
