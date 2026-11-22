@@ -88,7 +88,7 @@ fun main(args: Array<String>) {
     )
     app.start()
 
-    val startInBackground = "--background" in args
+    val startInBackground = BACKGROUND_FLAG in args
     application {
         val state by app.state.collectAsState()
         var windowOpen by remember { mutableStateOf(!startInBackground || app.firstRun) }
