@@ -80,12 +80,12 @@ fun keyAliasOf(deviceId: String) = "psfox-k3-$deviceId"
 /** S5 の自動起動の切り替え。T7 を更新してから [register] を呼び、失敗したら T7 を戻す。成功なら真。 */
 suspend fun SyncStore.switchAutoSync(enabled: Boolean, register: () -> Unit): Boolean {
     val before = setting(SyncScheduler.AUTO_ENABLED_KEY)
-    putSetting(SyncScheduler.AUTO_ENABLED_KEY, enabled.toString())
+    putSetting(SyncScheduler.AUTO_ENABLED_KEY, if (enabled) SyncValues.SETTING_ON else SyncValues.SETTING_OFF)
     return try {
         register()
         true
     } catch (_: Exception) {
-        putSetting(SyncScheduler.AUTO_ENABLED_KEY, before ?: false.toString())
+        putSetting(SyncScheduler.AUTO_ENABLED_KEY, before ?: SyncValues.SETTING_OFF)
         false
     }
 }
