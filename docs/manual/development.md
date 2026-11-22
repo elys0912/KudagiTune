@@ -75,7 +75,7 @@ desktop ──▶ itunes ──▶ shared ◀── android
 
 ## 3. ビルドと実行
 
-コマンドはプロジェクト名を指定して実行する。2 と 4 は CI で確認済み（2026-11-06）。1 は未確認。手元では Android SDK が要る。
+コマンドはプロジェクト名を指定して実行する。2 と 4 は CI で確認済み（2026-11-06）。1 は 2026-11-09 の実機の確認で使った。手元では Android SDK が要る。
 
 1. desktop を実行する：`./gradlew :desktop:run`
 2. android のデバッグビルドを作る：`./gradlew :android:assembleDebug`
