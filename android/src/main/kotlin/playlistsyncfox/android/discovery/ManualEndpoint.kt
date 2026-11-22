@@ -4,10 +4,8 @@ import playlistsyncfox.android.sync.PairingKeeper
 
 /** 手入力の宛先（X7-2-3）。[host] は IPv4 か名前。 */
 data class ManualEndpoint(val host: String, val port: Int) {
-    private val hostIsIpv4 get() = host.all { it.isDigit() || it == '.' }
-
     /** 保存する列の方式（X7-2-4）。名前は `tailscale`、IPv4 は `usb`。ネットワークの種別では決めない。 */
-    val kind: String get() = if (hostIsIpv4) PairingKeeper.USB else PairingKeeper.TAILSCALE
+    val kind: String get() = if (looksLikeIpv4(host)) PairingKeeper.USB else PairingKeeper.TAILSCALE
 
     /** T4 の列に書く値。 */
     val savedValue: String get() = "$host:$port"
@@ -61,11 +59,14 @@ fun checkManualEndpoint(input: String): ManualCheck {
         port = DEFAULT_PORT
     }
 
-    val reason = if (host.all { it.isDigit() || it == '.' }) ipv4Problem(host) else nameProblem(host)
+    val reason = if (looksLikeIpv4(host)) ipv4Problem(host) else nameProblem(host)
     return if (reason == null) ManualCheck.Valid(ManualEndpoint(host, port)) else invalid(reason)
 }
 
 private fun invalid(reason: ManualReason) = ManualCheck.Invalid(reason)
+
+/** 数字と `.` だけなら IPv4 として扱う。検査（[checkManualEndpoint]）と保存する列の方式（[ManualEndpoint.kind]）で同じ判定を使う。 */
+private fun looksLikeIpv4(host: String) = host.all { it.isDigit() || it == '.' }
 
 private fun ipv4Problem(host: String): ManualReason? {
     val parts = host.split('.')
