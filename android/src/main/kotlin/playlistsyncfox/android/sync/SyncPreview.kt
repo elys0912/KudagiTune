@@ -217,7 +217,7 @@ class SyncPreview(private val env: SyncEnvironment) {
         val body = (api.manifest(selectedIds) as? ApiResult.Ok)?.value ?: return RemovalCheck.Failed(reachFailed = false)
         val manifest = (readManifest(body) as? ManifestReadResult.Loaded)?.manifest ?: return RemovalCheck.Failed(reachFailed = false)
         val placed = env.store.placedTracks(pairing.deviceId)
-        // 使うのは toRemove の件数だけ。再生できるかの判定は、端末のデコーダの列挙が走るため渡さない（X6-10）
+        // 使うのは toRemove の件数だけ
         val diff = env.diffFor(manifest, placed, recordedLibraryId(env.store.runs()))
         // 手動は 1 件でも消すなら確認を出す（D19）。`removalGate` は自動の判定に使う
         return if (diff.toRemove.isEmpty()) RemovalCheck.Allowed else RemovalCheck.NeedsConfirmation(diff.toRemove.size)
