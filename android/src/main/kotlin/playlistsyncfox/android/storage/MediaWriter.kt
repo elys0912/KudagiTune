@@ -419,8 +419,4 @@ class MediaWriter(
         val stem = expected.removeSuffix(M3U8_EXTENSION)
         return Regex("${Regex.escape(stem)} \\(\\d+\\)${Regex.escape(M3U8_EXTENSION)}").matches(existing)
     }
-
-    private companion object {
-        const val M3U8_EXTENSION = ".m3u8"
-    }
 }

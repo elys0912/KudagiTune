@@ -59,11 +59,11 @@ class ResolverMediaStoreFiles(context: Context, volume: String) : MediaStoreFile
     }
 
     override fun ownedTrackPaths(): Set<String> =
-        queryUnderRoot(MediaStore.MATCH_INCLUDE, ownedOnly = true).filterNot { it.displayName.endsWith(".m3u8") }
+        queryUnderRoot(MediaStore.MATCH_INCLUDE, ownedOnly = true).filterNot { it.displayName.endsWith(M3U8_EXTENSION) }
             .mapTo(HashSet()) { it.pathUnderRoot(SyncValues.MEDIA_ROOT) }
 
     override fun ownedPendingPlaylistUris(): List<String> =
-        queryUnderRoot(MediaStore.MATCH_ONLY, ownedOnly = true).filter { it.displayName.endsWith(".m3u8") }.map { it.uri }
+        queryUnderRoot(MediaStore.MATCH_ONLY, ownedOnly = true).filter { it.displayName.endsWith(M3U8_EXTENSION) }.map { it.uri }
 
     override fun listUnderRoot(): List<StoredFile> = queryUnderRoot(MediaStore.MATCH_EXCLUDE, ownedOnly = false)
 
