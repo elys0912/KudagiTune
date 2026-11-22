@@ -10,7 +10,6 @@ import playlistsyncfox.itunes.plist.readLibrary
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Duration
 import java.time.Instant
 import kotlin.io.path.getLastModifiedTime
 
@@ -21,14 +20,11 @@ data class FileStamp(val size: Long, val modifiedAtMillis: Long)
  * 書き込みが終わるまで待つ（X2-4）。V18 の間、サイズと更新日時が変わらなければ安定。
  * ファイルが無い間（置き換えの数ミリ秒）は変化とみなして待ちを最初からにする。
  */
-class StabilityWaiter(
-    private val stat: () -> FileStamp?,
-    private val interval: Duration = DesktopValues.XML_STABLE_WAIT,
-) {
+class StabilityWaiter(private val stat: () -> FileStamp?) {
     suspend fun awaitStable() {
         while (true) {
             val before = stat()
-            delay(interval.toMillis())
+            delay(DesktopValues.XML_STABLE_WAIT.toMillis())
             if (before != null && before == stat()) return
         }
     }
