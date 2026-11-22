@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -514,7 +514,7 @@ private fun LogPanel(app: PcApp, onOpenLogDir: () -> Unit) {
             Text("ログの場所を開く", fontSize = 11.sp, color = colors.muted, modifier = Modifier.clickable(onClick = onOpenLogDir))
         }
         LazyColumn(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, bottom = 10.dp), state = listState) {
-            itemsIndexed(lines) { _, line ->
+            items(lines) { line ->
                 val levelColor = when (line.level) {
                     LogLevel.Info -> colors.success
                     LogLevel.Warn -> colors.caution
