@@ -26,7 +26,7 @@ fun interface SyncLogger {
     fun failure(text: String, errorNumber: Int) = line("$text（${errorKindText(errorNumber)}）")
 }
 
-/** 同期の入力（X6-3 の入口。承認の 2 項目は手動のときだけ使う）。[rerun] は OS が止めた仕事の走り直し。 */
+/** 同期の入力（X6-3 の入口。承認の 2 項目と [reachFailed] は手動のときだけ使う）。[rerun] は OS が止めた仕事の走り直し。 */
 class RunInput(
     val trigger: SyncTrigger,
     val deleteApproved: Boolean = false,
