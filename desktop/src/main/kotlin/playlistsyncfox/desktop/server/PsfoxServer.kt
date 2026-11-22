@@ -103,7 +103,7 @@ private const val SIGNATURE_BYTES = 32
 /** E2：署名・ペアリングの不一致（401）、ペアリングの拒否（403）、署名失敗の待ち（429）。 */
 private const val ERROR_AUTH_REJECTED = 2
 
-/** E4：XML を読めずマニフェストを作れない、または曲の表が空（503）。 */
+/** E4：XML を読めずマニフェストを作れない、または P1 の曲の表がまだ無い（503）。 */
 private const val ERROR_XML_UNREADABLE = 4
 
 /** E5：マニフェストに無い ID、またはファイルが無い（404）。 */
