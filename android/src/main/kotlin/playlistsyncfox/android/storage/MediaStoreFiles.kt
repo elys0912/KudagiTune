@@ -2,7 +2,7 @@ package playlistsyncfox.android.storage
 
 import java.io.IOException
 
-/** m3u8 のファイル名の拡張子。曲と m3u8 を名前で見分けるのに使う。 */
+/** m3u8 のファイル名の拡張子。曲と m3u8 を名前で見分けることと、入れ直し後の別名（`名前 (n).m3u8`）の判定に使う。 */
 internal const val M3U8_EXTENSION = ".m3u8"
 
 /** 書き込みの開き方。`Append` は `"wa"`、`Truncate` は `"wt"`（X6-2）。 */
