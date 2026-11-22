@@ -183,7 +183,7 @@ private suspend fun SyncEnvironment.resolveLan(pairing: Pairing): LanService? {
 sealed interface RemovalCheck {
     data object Allowed : RemovalCheck
 
-    /** `toRemove` が 1 件以上（`removalGate` によらない。D19）。[toRemove] は消す件数。 */
+    /** 差分の `toRemove` が 1 件以上（`removalGate` によらない。D19）。[toRemove] はその件数。 */
     data class NeedsConfirmation(val toRemove: Int) : RemovalCheck
 
     /** P1 の取得か差分の計算に失敗した。[reachFailed] は全部の接続先が応えず、証明書の不一致が無いとき。 */
@@ -191,7 +191,7 @@ sealed interface RemovalCheck {
 }
 
 /**
- * 手動の同期の前に、画面側が P1 と差分で「消す」の確認の要否を得る（X7-1-2 の手順 1〜4 の判定。実行中の自動の確認と、確認の画面は画面側が行う）。
+ * 同期ボタンの後に、画面側が P1 と差分で「消す」の確認の要否を得る（X7-1-2 の手順 1〜4 の判定。実行中の自動の確認と、確認の画面は画面側が行う）。
  * 接続先は同期本体と同じ選び方（[reachPc]）で試し、P3 が通った 1 件で P1 を取る。書くのは、つながった接続先の記録だけ。
  */
 class SyncPreview(private val env: SyncEnvironment) {
