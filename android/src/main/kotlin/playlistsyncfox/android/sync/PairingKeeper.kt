@@ -3,7 +3,7 @@ package playlistsyncfox.android.sync
 import playlistsyncfox.android.db.Pairing
 import playlistsyncfox.android.db.SyncStore
 
-/** 署名用の共有の鍵（K3）を Android Keystore に置く入口。実体は vault/DeviceVault。 */
+/** 署名用の共有の鍵（K3）を Android Keystore に置く入口。実体は [playlistsyncfox.android.vault.DeviceVault]。 */
 interface KeyVault {
     /** 別名の鍵が Keystore にあるか。 */
     fun exists(alias: String): Boolean
