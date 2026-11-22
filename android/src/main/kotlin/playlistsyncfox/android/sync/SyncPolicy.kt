@@ -67,16 +67,22 @@ enum class SuppressReason { RecentManual, KeyMismatch, StorageShortage }
 /** T3 の `error_kind` と P4 の `failure_counts` のキーに書く E の番号の表記（例：5 → `E5`）。 */
 fun errorKindText(number: Int): String = "E$number"
 
-/**
- * T3 の `error_kind` のうち、自動の抑止・画面・通知が値で判定に使うもの。E1（接続できない）、E2（鍵の不一致を含む）、
- * E3（容量不足）、E4（XML を読めない）、E7（時間上限。前面サービスの上限に当たった。B2 の E 表）。
- * E3 は [autoSuppression] の中だけで使うので private にする。
- * 表示語の表（ui/Words.kt の errorWord）は E1〜E9 の全部に語を当てる表なので、この定数を使わず文字列のまま並べる。
- */
+// T3 の `error_kind` のうち、自動の抑止・画面・通知が値で判定に使うもの。
+// 表示語の表（ui/Words.kt の errorWord）は E1〜E9 の全部に語を当てる表なので、この定数を使わず文字列のまま並べる。
+
+/** E1：接続できない。 */
 internal const val ERROR_KIND_E1 = "E1"
+
+/** E2：鍵の不一致を含む。 */
 internal const val ERROR_KIND_E2 = "E2"
+
+/** E3：容量不足。[autoSuppression] の中だけで使うので private にする。 */
 private const val ERROR_KIND_E3 = "E3"
+
+/** E4：XML を読めない。 */
 internal const val ERROR_KIND_E4 = "E4"
+
+/** E7：時間上限。前面サービスの上限に当たった（B2 の E 表）。 */
 internal const val ERROR_KIND_E7 = "E7"
 
 /**
