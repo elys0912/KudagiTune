@@ -78,7 +78,7 @@ private fun percentDecode(encoded: String): String? {
         .onUnmappableCharacter(CodingErrorAction.REPORT)
     return try {
         decoder.decode(ByteBuffer.wrap(bytes.toByteArray())).toString()
-    } catch (e: CharacterCodingException) {
+    } catch (_: CharacterCodingException) {
         null
     }
 }
