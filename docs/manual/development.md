@@ -194,7 +194,7 @@ GitHub Actions で動かす。細部は変わりうる。
 
 - Gradle のプラグイン Licensee（`app.cash.licensee`）で、使う OSS の一覧をビルド時に生成する
 - Licensee は `artifacts.json` を出力する。Android ではアセットに同梱する
-- 一覧に含めるもの：Kotlin、Ktor、Room、Compose、JmDNS など、同梱する JVM（OpenJDK のビルド）
+- Licensee の一覧に出るもの：Kotlin、Ktor、Room、Compose、JmDNS など。PC が同梱する JVM（OpenJDK のビルド）は Licensee の一覧に出ないため、PC の画面ではライセンスの最後に足して出す（下の `legal/` の項目）
 - 依存の jar の `META-INF/NOTICE*`（Apache 系の NOTICE）は、ビルドのときに集めて配布物に同梱する（PC と端末の両方）。画面では部品の全文と一緒に出す
 - PC の同梱の Java 実行環境は、実行環境の `legal/` を実行時に読み、モジュールごとの全文を出す。全文の写しは repo に置かない
 - 表示の場所：PC は画面の「ライセンス」ボタン、Android は設定の画面
