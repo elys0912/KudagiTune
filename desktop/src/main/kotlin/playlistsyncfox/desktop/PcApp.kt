@@ -177,16 +177,32 @@ class PcApp(
 
     private fun startServer(identity: TlsIdentity) {
         val service = PairingService(
-            crypto, clock, settings.current.pcId, crypto.sha256(identity.spkiDer), settings, registry,
+            crypto = crypto,
+            clock = clock,
+            pcId = settings.current.pcId,
+            spkiHash = crypto.sha256(identity.spkiDer),
+            settings = settings,
+            registry = registry,
             onViewChanged = { pcAdvertiser?.setPair(pairing?.view?.value is PairingView.Open); refreshState() },
             // 端末が新しい証明書でペアリングし直したので、作り直しの警告は要らない
             onPaired = { certificateRegenerated = false; refreshState() },
         )
         pairing = service
         val env = ServerEnv(
-            crypto, clock, clock.instant(), NonceStore(), keyRing, SignatureFailureCounter(clock), service,
-            settings.current.pcId, settings, ManifestService(crypto, clock, settings, tracks, ::libraryForRequest),
-            tracks, activity, progress, log,
+            crypto = crypto,
+            clock = clock,
+            serverStartedAt = clock.instant(),
+            nonces = NonceStore(),
+            keyRing = keyRing,
+            failures = SignatureFailureCounter(clock),
+            pairing = service,
+            pcId = settings.current.pcId,
+            settings = settings,
+            manifests = ManifestService(crypto, clock, settings, tracks, ::libraryForRequest),
+            tracks = tracks,
+            activity = activity,
+            progress = progress,
+            log = log,
         )
         launchServer(identity, env)
     }
