@@ -36,6 +36,9 @@ private const val CERTIFICATE_SUBJECT = "CN=playlist-sync-fox"
 /** V30：証明書の有効期間（年）。 */
 private const val CERTIFICATE_VALID_YEARS = 10L
 
+/** サーバーの鍵の曲線（P-256）。鍵の生成と、秘密鍵から公開鍵を求めるところで同じ曲線を使う。 */
+private const val KEY_CURVE = "secp256r1"
+
 /**
  * K2：サーバーの鍵と証明書（X5-2）。
  * [spkiDer] は証明書の SubjectPublicKeyInfo の DER。[keyIsNew] が真なら SPKI が変わったので、ペアリング済みの端末は再ペアリングが要る。
@@ -56,7 +59,7 @@ private val bouncyCastle = BouncyCastleProvider()
 fun loadOrCreateTls(store: SecretStore, certFile: Path, now: Instant): TlsIdentity {
     val keyBytes = store.read(TLS_KEY)
     if (keyBytes == null) {
-        val pair = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec("secp256r1"), SecureRandom()) }.generateKeyPair()
+        val pair = KeyPairGenerator.getInstance("EC").apply { initialize(ECGenParameterSpec(KEY_CURVE), SecureRandom()) }.generateKeyPair()
         store.write(TLS_KEY, pair.private.encoded)
         return writeNewCertificate(pair.private, certFile, now, keyIsNew = true)
     }
@@ -101,6 +104,6 @@ private fun readCertificate(file: Path): X509Certificate? {
 
 // PKCS#8 の EC 秘密鍵は公開鍵を持たないことがあるので、d・G から求める
 private fun derivePublicKey(privateKey: ECPrivateKey): PublicKey {
-    val spec = ECNamedCurveTable.getParameterSpec("secp256r1")
+    val spec = ECNamedCurveTable.getParameterSpec(KEY_CURVE)
     return KeyFactory.getInstance("EC", bouncyCastle).generatePublic(ECPublicKeySpec(spec.g.multiply(privateKey.s).normalize(), spec))
 }
