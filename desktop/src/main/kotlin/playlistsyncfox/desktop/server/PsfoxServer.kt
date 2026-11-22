@@ -103,7 +103,7 @@ private const val SIGNATURE_BYTES = 32
 /** E2：署名・ペアリングの不一致（401）、ペアリングの拒否（403）、署名失敗の待ち（429）。 */
 private const val ERROR_AUTH_REJECTED = 2
 
-/** E4：ライブラリ（XML）を読めておらずマニフェストかプレイリストの木を作れない、または P1 の曲の表がまだ無い（503）。 */
+/** E4：XML を読めずマニフェストかプレイリストの木を作れない、または P1 の曲の表がまだ無い（503）。 */
 private const val ERROR_LIBRARY_UNAVAILABLE = 4
 
 /** E5：マニフェストに無い ID、またはファイルが無い（404）。 */
@@ -273,7 +273,7 @@ private suspend fun <T> decodeBody(call: ApplicationCall, serializer: KSerialize
 private suspend fun ApplicationCall.fail(status: HttpStatusCode, errorNumber: Int, detail: String? = null) =
     respondText(json.encodeToString(ErrorBody.serializer(), ErrorBody("E$errorNumber", detail)), ContentType.Application.Json, status)
 
-/** [ERROR_LIBRARY_UNAVAILABLE]（503）を返す。P1・P3・P7 でライブラリ（XML）を読めていないときと、P2 で P1 の曲の表がまだ無いときに呼ぶ。 */
+/** [ERROR_LIBRARY_UNAVAILABLE]（503）を返す。P1・P3・P7 で XML を読めないときと、P2 で P1 の曲の表がまだ無いときに呼ぶ。 */
 private suspend fun ApplicationCall.failLibraryUnavailable() = fail(HttpStatusCode.ServiceUnavailable, ERROR_LIBRARY_UNAVAILABLE)
 
 /** P1・P3 の本文（選んだ ID の配列）の検査。署名の検証の後に、境界で行う。誤りは 400 で、本文の中身は応答にもログにも出さない。 */
