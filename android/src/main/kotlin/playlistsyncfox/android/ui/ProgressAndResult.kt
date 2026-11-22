@@ -203,4 +203,3 @@ suspend fun loadResult(store: SyncStore, runId: Long?, syncing: Boolean): Result
         past = runs.mapNotNull { run -> run.endedAt?.let { PastRun(run.runId, resultWord(run.result), it) } },
     )
 }
-
