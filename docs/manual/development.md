@@ -33,14 +33,13 @@ desktop ──▶ itunes ──▶ shared ◀── android
 
 | モジュール | パッケージ | 責務 |
 |---|---|---|
-| shared | `shared.manifest` | マニフェストと応答の型 |
+| shared | `shared.manifest` | マニフェストと、P1・P3・P7 の本文の型 |
 | shared | `shared.diff` | 差分の計算（足す、置き換える、消す） |
 | shared | `shared.path` | 保存先のパスの組み立て、使えない文字の置き換え |
 | shared | `shared.m3u8` | m3u8 の生成 |
-| shared | `shared.result` | エラーの種類と同期の結果の型 |
+| shared | `shared.result` | エラーの種類、同期の結果、P8 の本文の型 |
 | shared | `shared.auth` | ペアリングの手順、署名、再送防止 |
 | shared | `shared.crypto` | `CryptoProvider` の定義、確認コードの表示形式 |
-| shared | `shared.api` | API の要求と応答の型 |
 | itunes | `itunes.plist` | plist XML の読み手 |
 | itunes | `itunes.location` | `file://` の復号 |
 | itunes | `itunes.library` | トラックとプレイリストの型、展開 |
