@@ -45,9 +45,11 @@ import playlistsyncfox.itunes.plist.readLibrary
 import playlistsyncfox.shared.auth.NonceStore
 import playlistsyncfox.shared.crypto.CryptoProvider
 import playlistsyncfox.shared.crypto.formatFingerprint
+import java.io.IOException
 import java.net.BindException
 import java.net.InetAddress
 import java.nio.file.Files
+import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import java.time.Clock
 
@@ -240,12 +242,12 @@ class PcApp(
     fun setXmlPath(text: String): XmlPathResult {
         val path = try {
             Path.of(text)
-        } catch (_: java.nio.file.InvalidPathException) {
+        } catch (_: InvalidPathException) {
             return XmlPathResult.Unreadable
         }
         val readable = try {
             readLibrary(Files.readAllBytes(path)) is LibraryReadOutcome.Read
-        } catch (_: java.io.IOException) {
+        } catch (_: IOException) {
             false
         }
         if (!readable) return XmlPathResult.Unreadable

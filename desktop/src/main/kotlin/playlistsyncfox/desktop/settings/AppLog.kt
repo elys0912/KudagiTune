@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import playlistsyncfox.desktop.DesktopValues
 import playlistsyncfox.desktop.formatIsoMillis
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
@@ -54,7 +55,7 @@ class AppLog(
             Files.createDirectories(dir)
             val file = fileFor(bytes.size)
             Files.write(file, bytes, StandardOpenOption.CREATE, StandardOpenOption.APPEND)
-        } catch (e: java.io.IOException) {
+        } catch (e: IOException) {
             System.err.println("ログを書けない：${e.javaClass.simpleName}")
         }
     }

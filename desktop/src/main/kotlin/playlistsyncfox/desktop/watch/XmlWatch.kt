@@ -5,6 +5,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import playlistsyncfox.desktop.settings.AppLog
+import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.Instant
@@ -12,7 +13,7 @@ import kotlin.io.path.getLastModifiedTime
 
 private fun statOf(path: Path): FileStamp? = try {
     FileStamp(Files.size(path), path.getLastModifiedTime().toMillis())
-} catch (_: java.io.IOException) {
+} catch (_: IOException) {
     null
 }
 

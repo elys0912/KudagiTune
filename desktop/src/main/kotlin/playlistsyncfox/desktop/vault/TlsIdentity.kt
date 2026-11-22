@@ -15,6 +15,7 @@ import java.nio.file.Path
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.PrivateKey
+import java.security.PublicKey
 import java.security.SecureRandom
 import java.security.cert.CertificateFactory
 import java.security.cert.X509Certificate
@@ -99,7 +100,7 @@ private fun readCertificate(file: Path): X509Certificate? {
 }
 
 // PKCS#8 の EC 秘密鍵は公開鍵を持たないことがあるので、d・G から求める
-private fun derivePublicKey(privateKey: ECPrivateKey): java.security.PublicKey {
+private fun derivePublicKey(privateKey: ECPrivateKey): PublicKey {
     val spec = ECNamedCurveTable.getParameterSpec("secp256r1")
     return KeyFactory.getInstance("EC", bouncyCastle).generatePublic(ECPublicKeySpec(spec.g.multiply(privateKey.s).normalize(), spec))
 }
