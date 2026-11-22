@@ -96,6 +96,23 @@ private const val PATH_PAIRING_START = "/v1/pairing/start"
 private const val PATH_PAIRING_CONFIRM = "/v1/pairing/confirm"
 private const val PATH_TRACKS = "/v1/tracks/"
 
+private const val NONCE_BYTES = 16
+private const val SIGNATURE_BYTES = 32
+
+// 応答の本文 `{"error":"E<n>"}` の番号。HTTP の状態との対応は B4-4 の 8
+
+/** E2：署名・ペアリングの不一致（401）、ペアリングの拒否（403）、署名失敗の待ち（429）。 */
+private const val ERROR_AUTH_REJECTED = 2
+
+/** E4：XML を読めずマニフェストを作れない、または曲の表が空（503）。 */
+private const val ERROR_XML_UNREADABLE = 4
+
+/** E5：マニフェストに無い ID、またはファイルが無い（404）。 */
+private const val ERROR_TRACK_NOT_FOUND = 5
+
+/** E8：`size`・`modified_at` が P1 の値と合わない（409）。 */
+private const val ERROR_TRACK_CHANGED = 8
+
 fun Application.psfoxModule(env: ServerEnv) {
     install(Compression) {
         gzip {
@@ -233,23 +250,6 @@ private suspend fun checkRequest(env: ServerEnv, call: ApplicationCall): Boolean
     call.attributes.put(DeviceKey, headers.deviceId)
     return true
 }
-
-private const val NONCE_BYTES = 16
-private const val SIGNATURE_BYTES = 32
-
-// 応答の本文 `{"error":"E<n>"}` の番号。HTTP の状態との対応は B4-4 の 8
-
-/** E2：署名・ペアリングの不一致（401）、ペアリングの拒否（403）、署名失敗の待ち（429）。 */
-private const val ERROR_AUTH_REJECTED = 2
-
-/** E4：XML を読めずマニフェストを作れない、または曲の表が空（503）。 */
-private const val ERROR_XML_UNREADABLE = 4
-
-/** E5：マニフェストに無い ID、またはファイルが無い（404）。 */
-private const val ERROR_TRACK_NOT_FOUND = 5
-
-/** E8：`size`・`modified_at` が P1 の値と合わない（409）。 */
-private const val ERROR_TRACK_CHANGED = 8
 
 private fun decodeBase64Url(text: String): ByteArray? = try {
     Base64.getUrlDecoder().decode(text)
