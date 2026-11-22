@@ -9,6 +9,7 @@ import playlistsyncfox.android.sync.SyncProgress
 import playlistsyncfox.android.sync.SyncStage
 import playlistsyncfox.android.sync.TrackRow
 import playlistsyncfox.android.sync.TrackState
+import playlistsyncfox.android.sync.errorKindText
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -80,7 +81,7 @@ fun trackRowUi(row: TrackRow): TrackRowUi = TrackRowUi(
     dimmed = row.state == TrackState.Done,
     sizeText = if (row.state == TrackState.Transferring) "${formatBytes(row.receivedBytes)} / ${formatBytes(row.size)}" else formatBytes(row.size),
     fraction = fraction(row.receivedBytes, row.size).takeIf { row.state == TrackState.Transferring },
-    reason = row.errorNumber.takeIf { row.state == TrackState.Failed }?.let { errorWord("E$it") },
+    reason = row.errorNumber.takeIf { row.state == TrackState.Failed }?.let { errorWord(errorKindText(it)) },
 )
 
 /** 棒の割合。全体が 0 なら 0、超えても 1 で切る。 */

@@ -4,6 +4,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import playlistsyncfox.android.sync.SyncLogger
+import playlistsyncfox.android.sync.errorKindText
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -35,7 +36,7 @@ class AppLog(
     fun log(level: LogLevel, module: String, message: String, errorNumber: Int? = null) {
         val at = now()
         val text = clean(message)
-        val line = listOf(Instant.ofEpochMilli(at).toString(), level.text, module, text, errorNumber?.let { "E$it" }.orEmpty())
+        val line = listOf(Instant.ofEpochMilli(at).toString(), level.text, module, text, errorNumber?.let(::errorKindText).orEmpty())
             .joinToString("\t")
         // ファイルの書き込みに失敗しても、画面の欄には入れる
         screenLines.update { (it + LogEntry(at, level, module, text, errorNumber)).takeLast(SCREEN_LINES) }
