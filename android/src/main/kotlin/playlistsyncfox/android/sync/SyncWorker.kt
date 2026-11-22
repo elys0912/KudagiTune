@@ -1,5 +1,6 @@
 package playlistsyncfox.android.sync
 
+import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -88,7 +89,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
         coroutineScope {
             val throttle = NotificationThrottle()
-            val manager = applicationContext.getSystemService(android.app.NotificationManager::class.java)
+            val manager = applicationContext.getSystemService(NotificationManager::class.java)
             // 前面へ昇格した後の更新は V28 の間隔以上にする
             val updates = launch {
                 environment.progress.collect { progress ->

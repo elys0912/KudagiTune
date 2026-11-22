@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Context
+import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
@@ -109,7 +110,7 @@ class ResolverMediaStoreFiles(context: Context, volume: String) : MediaStoreFile
     private fun pendingArgs(mode: Int) = Bundle().apply { putInt(MediaStore.QUERY_ARG_MATCH_PENDING, mode) }
 
     /** [item] は行そのものの URI（ID まで付いたもの）。ここで ID を足さない。 */
-    private fun android.database.Cursor.toStored(item: Uri) = StoredFile(
+    private fun Cursor.toStored(item: Uri) = StoredFile(
         uri = item.toString(),
         displayName = getString(getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)).orEmpty(),
         relativePath = getString(getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)).orEmpty(),
