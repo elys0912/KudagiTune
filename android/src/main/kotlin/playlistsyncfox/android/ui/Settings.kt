@@ -158,7 +158,7 @@ class SettingsPresenter(
     /** 「PC に無い曲を端末から消す」の切り替え。 */
     fun setDeleteMissing(enabled: Boolean) {
         scope.launch {
-            store.putSetting(SyncValues.DELETE_MISSING_KEY, enabled.toString())
+            store.putSetting(SyncValues.DELETE_MISSING_KEY, if (enabled) SyncValues.SETTING_ON else SyncValues.SETTING_OFF)
             mutableState.update { it?.copy(deleteMissing = enabled) }
         }
     }

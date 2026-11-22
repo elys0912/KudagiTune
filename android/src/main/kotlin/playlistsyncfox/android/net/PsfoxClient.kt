@@ -19,6 +19,7 @@ import io.ktor.http.contentType
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import playlistsyncfox.android.storage.SourceDisconnectedException
@@ -249,7 +250,7 @@ class PsfoxClient(
         }
     }
 
-    private suspend fun <T> parse(response: HttpResponse, read: (kotlinx.serialization.json.JsonElement) -> T): ApiResult<T> = try {
+    private suspend fun <T> parse(response: HttpResponse, read: (JsonElement) -> T): ApiResult<T> = try {
         ApiResult.Ok(read(json.parseToJsonElement(response.bodyAsText())))
     } catch (e: CancellationException) {
         throw e

@@ -52,8 +52,7 @@ class PsfoxApp : Application() {
 }
 
 /** 部品の組み立て（本番）。 */
-class AppGraph(val application: Application) {
-    private val app = application
+class AppGraph(private val app: Application) {
     val store = RoomSyncStore(
         Room.databaseBuilder(app, AppDatabase::class.java, "playlist-sync-fox.db").addMigrations(MIGRATION_1_2).build().syncDao(),
     )

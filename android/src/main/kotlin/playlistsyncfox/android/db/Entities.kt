@@ -6,7 +6,7 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-// T1〜T7（X6-1）。日時は UTC のエポックのミリ秒。
+// T1〜T9（X6-1）。日時は UTC のエポックのミリ秒。
 // 列挙の text（state、result、trigger、kind）は文字列のまま持つ。未知の語は読むだけで書き換えない。
 
 /** T1 置いた曲。この表の行が「自分が置いた」の定義。 */
@@ -150,7 +150,7 @@ data class RelocatedFile(
     @PrimaryKey @ColumnInfo(name = "media_uri") val mediaUri: String,
 )
 
-/** T7 設定。既知の `key` は auto_sync_enabled、device_id、storage_volume、placed_volume。 */
+/** T7 設定。既知の `key` は auto_sync_enabled、device_id、storage_volume、placed_volume、delete_missing_enabled、relocating。 */
 @Entity(tableName = "app_settings")
 data class AppSetting(
     @PrimaryKey val key: String,

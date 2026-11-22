@@ -3,7 +3,7 @@ package playlistsyncfox.android.db
 import kotlinx.coroutines.flow.Flow
 import playlistsyncfox.android.sync.SyncValues
 
-/** X6-1 の「アクセスの単位」。同期の手順と MediaWriter はここを通して T1〜T7 を読み書きする。 */
+/** X6-1 の「アクセスの単位」。同期の手順と MediaWriter はここを通して T1〜T9 を読み書きする。 */
 interface SyncStore {
     suspend fun placedTracks(deviceId: String): List<PlacedTrack>
 

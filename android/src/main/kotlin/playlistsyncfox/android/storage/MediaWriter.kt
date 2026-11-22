@@ -15,6 +15,7 @@ import playlistsyncfox.shared.manifest.ManifestPlaylist
 import playlistsyncfox.shared.manifest.ManifestTrack
 import playlistsyncfox.shared.path.mimeTypeOf
 import playlistsyncfox.shared.result.WriteStep
+import java.io.IOException
 import kotlin.coroutines.CoroutineContext
 
 /** 取得元の入力。切断は [SourceDisconnectedException] で知らせる。 */
@@ -241,7 +242,7 @@ class MediaWriter(
                 it.write(bytes, bytes.size)
                 it.flush()
             }
-        } catch (_: java.io.IOException) {
+        } catch (_: IOException) {
             if (uri == null) runCatching { files.delete(target) }
             return@withContext PlaylistWriteResult.Failed
         }
@@ -363,7 +364,7 @@ class MediaWriter(
         } catch (_: OutOfSpaceException) {
             if (discardOnFailure) withContext(NonCancellable) { discardPending(track.persistentId, uri) }
             return TrackWriteResult.OutOfSpace(maxOf(0L, track.size - written))
-        } catch (_: java.io.IOException) {
+        } catch (_: IOException) {
             return failed(track, uri, discardOnFailure, WriteStep.TempFileWrite)
         }
 
@@ -418,9 +419,5 @@ class MediaWriter(
         if (existing == expected) return true
         val stem = expected.removeSuffix(M3U8_EXTENSION)
         return Regex("${Regex.escape(stem)} \\(\\d+\\)${Regex.escape(M3U8_EXTENSION)}").matches(existing)
-    }
-
-    private companion object {
-        const val M3U8_EXTENSION = ".m3u8"
     }
 }

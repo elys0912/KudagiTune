@@ -5,10 +5,12 @@ import playlistsyncfox.android.db.SyncRun
 import playlistsyncfox.android.db.SyncStore
 import playlistsyncfox.android.db.decodeResult
 import playlistsyncfox.android.log.LogEntry
+import playlistsyncfox.android.sync.ERROR_KIND_E2
 import playlistsyncfox.android.sync.SyncProgress
 import playlistsyncfox.android.sync.SyncStage
 import playlistsyncfox.android.sync.TrackRow
 import playlistsyncfox.android.sync.TrackState
+import playlistsyncfox.android.sync.errorKindText
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -80,7 +82,7 @@ fun trackRowUi(row: TrackRow): TrackRowUi = TrackRowUi(
     dimmed = row.state == TrackState.Done,
     sizeText = if (row.state == TrackState.Transferring) "${formatBytes(row.receivedBytes)} / ${formatBytes(row.size)}" else formatBytes(row.size),
     fraction = fraction(row.receivedBytes, row.size).takeIf { row.state == TrackState.Transferring },
-    reason = row.errorNumber.takeIf { row.state == TrackState.Failed }?.let { errorWord("E$it") },
+    reason = row.errorNumber.takeIf { row.state == TrackState.Failed }?.let { errorWord(errorKindText(it)) },
 )
 
 /** 棒の割合。全体が 0 なら 0、超えても 1 で切る。 */
@@ -93,7 +95,7 @@ fun logTime(entry: LogEntry, zone: ZoneId = ZoneId.systemDefault()): String =
     logTimeFormat.format(Instant.ofEpochMilli(entry.at).atZone(zone))
 
 /** ログの欄のメッセージ。E の番号があれば添える。 */
-fun logMessage(entry: LogEntry): String = entry.errorNumber?.let { "${entry.message}（E$it）" } ?: entry.message
+fun logMessage(entry: LogEntry): String = entry.errorNumber?.let { "${entry.message}（${errorKindText(it)}）" } ?: entry.message
 
 fun stageHeading(stage: SyncStage): String = when (stage) {
     SyncStage.Connecting -> "PC に接続しています"
@@ -156,7 +158,7 @@ private fun issueList(lines: List<IssueLine>) = IssueList(lines.take(ISSUE_LIMIT
 fun resultUi(run: SyncRun, issues: List<RunIssue>): ResultUiState {
     val stored = run.resultJson?.takeIf { it.isNotEmpty() }?.let { runCatching { decodeResult(it) }.getOrNull() }
     // E2 は原因欄も詳細も `error_detail` の語で出す（S3 と同じ関数）。`error_detail` が無い行は E の番号の語
-    val e2Notice = stored?.errorDetail.takeIf { run.errorKind == "E2" }?.let(::noticeOf)
+    val e2Notice = stored?.errorDetail.takeIf { run.errorKind == ERROR_KIND_E2 }?.let(::noticeOf)
     return ResultUiState(
         runId = run.runId,
         word = resultWord(if (run.endedAt == null) SyncRun.RESULT_INTERRUPTED else run.result),
@@ -201,4 +203,3 @@ suspend fun loadResult(store: SyncStore, runId: Long?, syncing: Boolean): Result
         past = runs.mapNotNull { run -> run.endedAt?.let { PastRun(run.runId, resultWord(run.result), it) } },
     )
 }
-
